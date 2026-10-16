@@ -9,12 +9,13 @@ punya peran komplementer → Hold Reorder. Nilai PO yang tidak jadi dibelanjakan
 import duckdb
 
 from engine import config
+from engine.format import rupiah
 
 # Syarat yang sama untuk kedua SKU: sudah dijual sejak awal tahun, punya basis volume, data bisa dipercaya.
-_DASAR = """
+_DASAR = f"""
     s.status_stok = 'REORDER'
     and s.hari_aktif = 366
-    and s.beli_jan_sep >= 90  -- basis minimal 10 unit/bulan agar tren tidak berasal dari angka kecil
+    and s.beli_jan_sep >= {config.TREN_BASIS_MIN}
     and s.data_confidence >= 0.95
 """
 
@@ -68,16 +69,12 @@ def build(con: duckdb.DuckDBPyConnection) -> None:
     """)
 
 
-def _rp(x: float | None) -> str:
-    return "-" if x is None else f"Rp{x:,.0f}".replace(",", ".")
-
-
 def print_summary(con: duckdb.DuckDBPyConnection) -> None:
     print(f"\nStatus stok per {config.AS_OF}")
     for status, n, nilai in con.execute("""
         select status_stok, count(*), sum(nilai_stok_idr) from sku_metrics group by 1 order by 2 desc
     """).fetchall():
-        print(f"  {status:<12} {n:>8,} SKU-toko   nilai stok {_rp(nilai)} (simulasi)")
+        print(f"  {status:<12} {n:>8,} SKU-toko   nilai stok {rupiah(nilai)} (simulasi)")
 
     print("\nPeran komplementer per jenis (Instacart, lift terhadap order alkohol):")
     for jenis, punya, mitra, lift in con.execute("""
@@ -95,7 +92,7 @@ def print_summary(con: duckdb.DuckDBPyConnection) -> None:
         print(f"\n  Toko {r['store']} ({r['kota']})")
         print(f"    SKU A {r['sku_a']}: {r['deskripsi_a']} [{r['jenis_a']}] -> draf PO")
         print(f"      tren beli {r['tren_a']}x, laku {r['permintaan_a']}/hari, stok {r['stok_a']} <= ROP {r['rop_a']}, "
-              f"perkiraan habis {r['habis_a']}, saran PO {r['qty_po_a']} unit = {_rp(r['nilai_po_a_idr'])}")
+              f"perkiraan habis {r['habis_a']}, saran PO {r['qty_po_a']} unit = {rupiah(r['nilai_po_a_idr'])}")
         print(f"    SKU B {r['sku_b']}: {r['deskripsi_b']} [{r['jenis_b']}, {r['status_komplementer_b']}] -> Hold Reorder")
         print(f"      tren beli {r['tren_b']}x, stok {r['stok_b']} <= ROP {r['rop_b']}, PO yang ditahan "
-              f"{r['qty_po_b']} unit = {_rp(r['modal_diselamatkan_b_idr'])}, cukup untuk PO A: {r['modal_b_cukup']}")
+              f"{r['qty_po_b']} unit = {rupiah(r['modal_diselamatkan_b_idr'])}, cukup untuk PO A: {r['modal_b_cukup']}")

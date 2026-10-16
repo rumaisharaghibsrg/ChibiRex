@@ -25,6 +25,9 @@ MIN_ACTIVE_DAYS = 30  # batas bawah hari aktif agar SKU yang baru masuk tidak me
 # Tren velocity: rata-rata pembelian per bulan Okt–Des dibanding Jan–Sep. Di Januari, median rasio
 # penjualan/pembelian per toko adalah 1,02, jadi pola pembelian mengikuti pola penjualan.
 Q4_START = "2016-10-01"
+# Tren baru dianggap bermakna kalau pembelian Jan–Sep minimal 90 unit (±10 unit/bulan). Tanpa ini,
+# produk baru atau yang sangat jarang dibeli bisa terlihat "naik 200x" dari basis beberapa unit.
+TREN_BASIS_MIN = 90
 
 KURS_USD_IDR = 16_000  # kurs simulasi tetap; semua nilai Rupiah diberi label "simulasi"
 Z_SERVICE = 1.65  # service level 95%

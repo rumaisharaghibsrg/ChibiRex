@@ -17,7 +17,7 @@
 | 1 | Setup repo & lingkungan | ✅ Selesai | 9/9 |
 | 2 | Data & mesin hitung (Bibitor) | ✅ Selesai | 13/13 |
 | 3 | Logika substitusi / Market Basket (Instacart) | ✅ Selesai | 8/8 |
-| 4 | Tools API + guardrail | ⬜ Belum | 0/12 |
+| 4 | Tools API + guardrail | ✅ Selesai | 13/13 |
 | 5 | Agent layer (Strands + Bedrock) | ⬜ Belum | 0/6 |
 | 6 | Mock API SAP | ⬜ Belum | 0/5 |
 | 7 | Dashboard (Streamlit) | ⬜ Belum | 0/7 |
@@ -25,10 +25,10 @@
 | 9 | Paket Kuat (Backorders + Online Retail II) | ⬜ Belum | 0/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/7 |
 | 11 | Demo & pitch | ⬜ Belum | 0/9 |
-| | **Total** | | **38/98 (±39%)** |
+| | **Total** | | **51/99 (±52%)** |
 
-**Posisi sekarang:** Tahap 4 (tools API + guardrail).
-**Target terdekat:** FastAPI yang membungkus mesin hitung menjadi tools tervalidasi (`get_sku_metrics`, `check_substitution`, `draft_purchase_order`, `hold_reorder`, `suggest_reallocation`) beserta guardrail di kode.
+**Posisi sekarang:** Tahap 5 (agent layer: Strands Agents + Amazon Bedrock).
+**Target terdekat:** agent yang memanggil tools API Tahap 4 untuk menjalankan alur demo toko 74 (hold Ciroc Apple Vodka → realokasi → draf PO Bacardi Gold Rum) dan menulis alasan keputusannya.
 
 Legenda: ✅ selesai · 🟡 berjalan · ⬜ belum mulai
 
@@ -226,22 +226,35 @@ Kode: `engine/basket.py` (aturan asosiasi & peran komplementer) dan `engine/jeni
 - **Pola yang terlihat:** spirits selain vodka dibeli berbarengan (seperti menyetok bar), sedangkan wine, vodka, dan beer dibeli sendiri-sendiri.
 - **SKU B demo direvisi** sesuai proposal Bagian 3 ("Stok habis & Vs turun → cek substitusi → Hold Reorder"). Patron Reposado diganti, karena Patron berstatus OVERSTOCK (bukan stok hampir habis) dan tequila punya peran komplementer. Penggantinya Ciroc Apple Vodka (lihat Tahap 2).
 
-### Tahap 4 — Tools API + guardrail ⬜
+### Tahap 4 — Tools API + guardrail ✅
 
 Guardrail ditaruh **di kode, bukan di prompt**.
 
-- [ ] Setup FastAPI + Pydantic di `api/`
-- [ ] Tool `get_sku_metrics`: membaca dari `sku_metrics`
-- [ ] Tool `check_substitution`: membungkus `engine.basket.cek_peran_komplementer`
-- [ ] Tool `draft_purchase_order`
-- [ ] Tool `hold_reorder` (exploration budget kuartalan tetap dialokasikan)
-- [ ] Tool `suggest_reallocation`: modal yang ditahan dari SKU B dialihkan ke SKU A, dalam Rupiah
-- [ ] Guardrail: batas nominal PO harian
-- [ ] Guardrail: filter outlier >3σ
-- [ ] Guardrail: circuit breaker
-- [ ] Guardrail: idempotency key
-- [ ] Guardrail: status default PO = *Draft*
-- [ ] Uji semua endpoint (Postman/Bruno) dan tulis unit test
+**Cara menjalankan** (dengan `.venv` aktif): `uvicorn api.main:app --reload`, lalu buka http://127.0.0.1:8000/docs (Swagger UI, bisa dipakai untuk mencoba semua endpoint). Hentikan API sebelum menjalankan `python -m engine.pipeline`, karena DuckDB tidak bisa ditulis selama API membukanya. State transaksi (PO, hold, audit) disimpan di `data/processed/state.sqlite`, terpisah dari `chibirex.duckdb` supaya tidak terhapus saat pipeline dijalankan ulang.
+
+- [x] Setup FastAPI + Pydantic di `api/` (`main.py`, `schemas.py`, `guardrails.py`, `state.py`, `settings.py`). Request menolak field di luar skema, jadi agent tidak bisa menyelipkan misalnya `"status": "APPROVED"`.
+- [x] Tool `get_sku_metrics`: `GET /sku/{inventory_id}`, plus `list_sku`: `GET /sku?store=&status_stok=` untuk mencari SKU yang perlu ditangani
+- [x] Tool `check_substitution`: `GET /sku/{inventory_id}/substitution`, membungkus `engine.basket.cek_peran_komplementer`
+- [x] Tool `draft_purchase_order`: `POST /purchase-orders`. Qty default = `saran_qty_po`, nilai dihitung di server (bukan oleh agent).
+- [x] Tool `hold_reorder`: `POST /holds`. Hanya diizinkan kalau stok ≤ ROP, Vs turun (dengan basis Jan–Sep ≥ 90 unit), jenisnya tidak komplementer, dan Data Confidence ≥ 0,8. **Exploration budget:** 10% PO tetap dibeli sebagai stok uji, dan hold ditinjau ulang tiap kuartal.
+- [x] Tool `suggest_reallocation`: `GET /stores/{store}/reallocation`. Modal dari hold aktif dialokasikan ke SKU yang perlu reorder dengan penjualan naik ≥ 1,2×, dan pesannya mengikuti format contoh di proposal.
+- [x] Guardrail: batas nominal PO harian (default Rp100 juta per toko per hari, `api/settings.py`)
+- [x] Guardrail: filter outlier >3σ. Qty PO > target stok + 3σ permintaan selama (lead time + review) − stok ditahan untuk review manusia.
+- [x] Guardrail: circuit breaker. Terbuka otomatis kalau 3 PO ditahan guardrail dalam 60 menit; semua PO baru ditahan sampai manajer mereset lewat `POST /guardrails/circuit-breaker/reset`.
+- [x] Guardrail: idempotency key. Header `Idempotency-Key` wajib; request ulang mengembalikan data yang sama (tidak membuat ganda), kunci sama dengan isi berbeda → 409.
+- [x] Guardrail: status default PO = *Draft*. Hanya manajer yang bisa mengubahnya lewat approve/reject.
+- [x] Uji endpoint dan unit test: 21 test API (`tests/test_api.py`, total 39 test) + uji langsung dengan uvicorn pada data asli toko 74 (lihat di bawah). Postman/Bruno tidak diperlukan karena Swagger UI di `/docs` sudah interaktif.
+- [x] Endpoint 1-Click Approval (`POST /purchase-orders/{po_id}/approve` dan `/reject`), audit log (`GET /audit-log`), status guardrail (`GET /guardrails/status`). Guardrail tambahan dari proposal: Data Confidence < 0,8 → PO ditahan dengan rekomendasi audit fisik.
+
+**Hasil uji langsung (data asli, toko 74):**
+1. `check_substitution` Ciroc Apple Vodka → TIDAK_KOMPLEMENTER
+2. `hold_reorder` Ciroc → 101 unit ditahan, 11 unit stok uji, **modal diselamatkan Rp28,6 juta**, review 31 Mar 2017
+3. `suggest_reallocation` → *"Menahan reorder Ciroc Apple Vodka menghemat modal Rp28.555.200. Alokasikan dana ini ke Bacardi Gold Rum (penjualan naik 32,8x, ...)"*
+4. `draft_purchase_order` Bacardi Gold Rum 107 unit (Rp13,7 juta) → DRAFT, lalu approve → APPROVED
+5. Draf PO Bacardi 380 unit (mengikuti laju Q4) → **DITAHAN_GUARDRAIL** (OUTLIER_3SIGMA, batas wajar 217 unit). Ini skenario Runaway PO untuk demo.
+6. `hold_reorder` Patron Reposado → **ditolak** (stok masih di atas ROP, tequila komplementer)
+
+**Temuan saat uji langsung:** `suggest_reallocation` awalnya mengarahkan dana ke Ciroc Mango Vodka ("naik 209,5x") yang ternyata produk baru dengan basis 12 unit. Sekarang tren hanya dipakai kalau pembelian Jan–Sep ≥ 90 unit (`config.TREN_BASIS_MIN`), berlaku di demo, realokasi, dan guardrail hold.
 
 ### Tahap 5 — Agent layer (Strands Agents + Amazon Bedrock) ⬜
 
@@ -404,3 +417,4 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 17 Okt 2026 | Repo `ChibiRex` sudah ada di GitHub (initial commit). `progress.md` dan `.gitignore` dibuat. Proposal dan PDF rencana dataset disimpan di `docs/`. Virtualenv `.venv` (Python 3.14.5) dan `requirements.txt` dengan versi terkunci dibuat. Login Kaggle CLI berhasil. Akses file Bibitor dan M5 terkonfirmasi. Data Instacart dialihkan ke mirror `psparks` karena file kompetisinya tidak tersedia lewat API. Akun AWS siap dan panitia sudah ditanya soal kredit. **Tahap 1 selesai.** |
 | 17 Okt 2026 | **Tahap 2 selesai.** Mesin hitung `engine/` (ingest, rekonstruksi stok Januari, vendor_metrics, sku_metrics, kandidat demo) dan 6 unit test. Ditemukan bahwa penjualan Bibitor hanya lengkap untuk Januari, jadi metode disesuaikan (lihat Tahap 2). Kandidat demo: toko 74, Bacardi Gold Rum (A) vs Patron Reposado Tequila (B). |
 | 17 Okt 2026 | **Tahap 3 selesai.** `engine/basket.py` dan `engine/jenis.py`: aturan asosiasi Instacart di level jenis minuman, lift_alk, tabel `peran_komplementer` dan `brand_jenis`, fungsi `cek_peran_komplementer`, dan 12 unit test baru (total 18). SKU B demo direvisi sesuai proposal Bagian 3 menjadi **Ciroc Apple Vodka** (Hold Reorder menyelamatkan Rp32 juta untuk PO Bacardi Gold Rum Rp13,7 juta). |
+| 17 Okt 2026 | **Tahap 4 selesai.** FastAPI di `api/` dengan 6 tools agent, endpoint approval, audit log, dan 6 guardrail di kode (batas harian, 3σ, circuit breaker, idempotency key, status default Draft, Data Confidence). 21 test API baru (total 39) dan uji langsung alur demo toko 74. Syarat basis tren ≥ 90 unit ditambahkan setelah uji langsung menemukan tren palsu dari produk baru. |

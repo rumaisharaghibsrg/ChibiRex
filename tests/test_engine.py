@@ -112,6 +112,13 @@ def test_hari_aktif_sku_baru_mulai_dari_barang_pertama_diterima(con):
     assert sku(con, "1_KOTA_200")["hari_aktif"] == 363  # 4 Jan s.d. 31 Des
 
 
+def test_sku_metrics_memuat_semua_kolom_untuk_api(con):
+    from api.schemas import Sku
+
+    kolom = {d[0] for d in con.execute("select * from sku_metrics limit 0").description}
+    assert set(Sku.model_fields) - {"jenis", "status_komplementer"} <= kolom
+
+
 def test_status_stok(con):
     assert sku(con, "1_KOTA_100")["status_stok"] == "OVERSTOCK"
     s300 = sku(con, "1_KOTA_300")
