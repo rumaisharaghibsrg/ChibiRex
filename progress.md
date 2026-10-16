@@ -14,7 +14,7 @@
 | Tahap | Nama | Status | Checklist |
 |---|---|---|---|
 | 0 | Riset dataset & perencanaan | ✅ Selesai | 8/8 |
-| 1 | Setup repo & lingkungan | 🟡 Berjalan | 4/9 |
+| 1 | Setup repo & lingkungan | 🟡 Berjalan | 6/9 |
 | 2 | Data & mesin hitung (Bibitor) | ⬜ Belum | 0/12 |
 | 3 | Logika substitusi / Market Basket (Instacart) | ⬜ Belum | 0/7 |
 | 4 | Tools API + guardrail | ⬜ Belum | 0/12 |
@@ -25,7 +25,7 @@
 | 9 | Paket Kuat (Backorders + Online Retail II) | ⬜ Belum | 0/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/7 |
 | 11 | Demo & pitch | ⬜ Belum | 0/8 |
-| | **Total** | | **12/95 (±13%)** |
+| | **Total** | | **14/95 (±15%)** |
 
 **Posisi sekarang:** Tahap 1 (setup repo).
 **Target terdekat:** selesaikan Tahap 1–2 sampai tabel `sku_metrics` jadi. Ini target "minggu pertama" dari hasil pembahasan.
@@ -137,8 +137,8 @@ ChibiRex/
 - [x] Tambah `.gitignore` untuk `data/raw/`, `.env`, `kaggle.json`, `.venv/`, `__pycache__/`
 - [x] Simpan proposal dan *Rencana_Penggabungan_Dataset_Copilot.pdf* ke `docs/`
 - [x] Install Python 3.11+, buat virtualenv, isi `requirements.txt` (Python 3.14.5, `.venv/`, semua library lolos uji import)
-- [ ] Login Kaggle CLI: `kaggle auth login` (atau token di env `KAGGLE_API_TOKEN` / file `~/.kaggle/access_token`)
-- [ ] Terima aturan kompetisi Instacart di Kaggle (wajib sebelum bisa unduh)
+- [x] Login Kaggle CLI: `kaggle auth login` (atau token di env `KAGGLE_API_TOKEN` / file `~/.kaggle/access_token`)
+- [x] Cek akses data Instacart: file kompetisinya tidak tersedia lewat API (404), jadi dipakai mirror `psparks/instacart-market-basket-analysis` (isi file identik, tidak perlu menerima aturan kompetisi)
 - [ ] Siapkan akun AWS, lalu pasang alarm biaya di **AWS Budgets** sejak hari pertama
 - [ ] Tanyakan ke panitia apakah ada kredit AWS untuk peserta
 
@@ -177,7 +177,7 @@ Diabaikan: Description dan Size (kecuali untuk label dashboard), Volume, ExciseT
 
 ### Tahap 3 — Logika substitusi / Market Basket (paket Minimal: Instacart) ⬜
 
-- [ ] Unduh `order_products__prior.csv`, `order_products__train.csv`, `products.csv`, `aisles.csv`, dan `departments.csv` (`kaggle competitions download -c instacart-market-basket-analysis`). File `orders.csv` dan `sample_submission.csv` tidak perlu.
+- [ ] Unduh `order_products__prior.csv`, `order_products__train.csv`, `products.csv`, `aisles.csv`, dan `departments.csv` (`kaggle datasets download -d psparks/instacart-market-basket-analysis`). File `orders.csv` tidak perlu. File terbesar, `order_products__prior.csv`, berukuran ±578 MB.
 - [ ] Ubah setiap order menjadi kumpulan aisle (`order_id`, `product_id` → `aisle_id`, `department_id`)
 - [ ] Hitung support, confidence, dan lift antar-aisle dengan mlxtend
 - [ ] Simpan aturan yang melibatkan aisle alkohol (red wines, white wines, dll.), karena Bibitor hanya menjual wine dan spirits
@@ -306,6 +306,7 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 
 - **Lisensi Bibitor:** di Kaggle tertulis Apache 2.0, tetapi materi aslinya milik HUB of Analytics Education untuk keperluan pendidikan. Aman untuk hackathon non-komersial dengan atribusi; **jangan dipakai untuk pilot komersial**.
 - **Keterbatasan Bibitor:** stok hanya berupa snapshot awal dan akhir periode, tidak ada ID keranjang, dan periodenya hanya 12 bulan (2016). Deskripsi di halaman Kaggle-nya menyebut perusahaan manufaktur; abaikan, isinya tetap data Bibitor.
+- **Instacart:** file kompetisi aslinya tidak bisa diunduh lewat API Kaggle, jadi dipakai mirror. Mirror tersebut berlabel CC0, tetapi data aslinya dirilis Instacart dengan syarat non-komersial. Cantumkan Instacart sebagai sumber.
 - **Product Backorders:** kelasnya sangat tidak seimbang, domainnya suku cadang (bukan ritel), dan lisensinya belum terverifikasi.
 - **Montgomery County:** data tidak dipecah per toko (penjualan ritel adalah gabungan semua toko, stok adalah total per item) dan lisensinya tidak dicantumkan.
 - **Jangan menggabungkan baris antar-dataset** seolah-olah satu perusahaan. Periodenya berbeda (Bibitor 2016, Online Retail II 2009–2011), begitu juga negara dan mata uangnya.
@@ -322,7 +323,9 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | Dataset | Paket | Link |
 |---|---|---|
 | Inventory Analysis Case Study (Bibitor) | Minimal | https://www.kaggle.com/datasets/bhanupratapbiswas/inventory-analysis-case-study |
-| Instacart Market Basket Analysis | Minimal | https://www.kaggle.com/competitions/instacart-market-basket-analysis |
+| Instacart Market Basket Analysis (mirror, dipakai) | Minimal | https://www.kaggle.com/datasets/psparks/instacart-market-basket-analysis |
+| Instacart: mirror cadangan (isi sama) | Minimal | https://www.kaggle.com/datasets/yasserh/instacart-online-grocery-basket-analysis-dataset |
+| Instacart: halaman kompetisi asli (untuk atribusi) | Minimal | https://www.kaggle.com/competitions/instacart-market-basket-analysis |
 | Can You Predict Product Backorders? | Kuat | https://www.kaggle.com/c/untadta |
 | Online Retail II UCI | Kuat | https://www.kaggle.com/datasets/mashlyn/online-retail-ii-uci |
 | Montgomery County: Warehouse and Retail Sales | Maksimal | https://data.montgomerycountymd.gov/d/v76h-r7br |
@@ -355,4 +358,4 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | Tanggal | Progres |
 |---|---|
 | 16 Okt 2026 | Riset dataset Kaggle, tier list S–D, penetapan paket Minimal/Kuat/Maksimal, strategi penggabungan per modul, PDF rencana penggabungan dataset, rincian kolom per file, serta daftar langkah pertama dan software (di claude.ai) |
-| 17 Okt 2026 | Repo `ChibiRex` sudah ada di GitHub (initial commit). `progress.md` dan `.gitignore` dibuat. Proposal dan PDF rencana dataset disimpan di `docs/`. Virtualenv `.venv` (Python 3.14.5) dan `requirements.txt` dengan versi terkunci dibuat. |
+| 17 Okt 2026 | Repo `ChibiRex` sudah ada di GitHub (initial commit). `progress.md` dan `.gitignore` dibuat. Proposal dan PDF rencana dataset disimpan di `docs/`. Virtualenv `.venv` (Python 3.14.5) dan `requirements.txt` dengan versi terkunci dibuat. Login Kaggle CLI berhasil. Akses file Bibitor dan M5 terkonfirmasi. Data Instacart dialihkan ke mirror `psparks` karena file kompetisinya tidak tersedia lewat API. |
