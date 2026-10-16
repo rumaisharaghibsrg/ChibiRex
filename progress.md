@@ -18,17 +18,17 @@
 | 2 | Data & mesin hitung (Bibitor) | ✅ Selesai | 13/13 |
 | 3 | Logika substitusi / Market Basket (Instacart) | ✅ Selesai | 8/8 |
 | 4 | Tools API + guardrail | ✅ Selesai | 13/13 |
-| 5 | Agent layer (Strands + Bedrock) | ⬜ Belum | 0/6 |
+| 5 | Agent layer (Strands + Bedrock) | 🟡 Berjalan | 1/12 |
 | 6 | Mock API SAP | ⬜ Belum | 0/5 |
 | 7 | Dashboard (Streamlit) | ⬜ Belum | 0/7 |
 | 8 | Deploy ke AWS | ⬜ Belum | 0/5 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ⬜ Belum | 0/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/7 |
 | 11 | Demo & pitch | ⬜ Belum | 0/9 |
-| | **Total** | | **51/99 (±52%)** |
+| | **Total** | | **52/105 (±50%)** |
 
-**Posisi sekarang:** Tahap 5 (agent layer: Strands Agents + Amazon Bedrock).
-**Target terdekat:** agent yang memanggil tools API Tahap 4 untuk menjalankan alur demo toko 74 (hold Ciroc Apple Vodka → realokasi → draf PO Bacardi Gold Rum) dan menulis alasan keputusannya.
+**Posisi sekarang:** Tahap 5 (agent layer: Strands Agents + Amazon Bedrock), bagian persiapan AWS.
+**Target terdekat:** selesaikan 7 langkah persiapan Tahap 5 sampai `python -m agent.cek_bedrock` lulus. Setelah itu agent dibangun untuk menjalankan alur demo toko 74 (hold Ciroc Apple Vodka → realokasi → draf PO Bacardi Gold Rum).
 
 Legenda: ✅ selesai · 🟡 berjalan · ⬜ belum mulai
 
@@ -256,10 +256,30 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 
 **Temuan saat uji langsung:** `suggest_reallocation` awalnya mengarahkan dana ke Ciroc Mango Vodka ("naik 209,5x") yang ternyata produk baru dengan basis 12 unit. Sekarang tren hanya dipakai kalau pembelian Jan–Sep ≥ 90 unit (`config.TREN_BASIS_MIN`), berlaku di demo, realokasi, dan guardrail hold.
 
-### Tahap 5 — Agent layer (Strands Agents + Amazon Bedrock) ⬜
+### Tahap 5 — Agent layer (Strands Agents + Amazon Bedrock) 🟡
 
-- [ ] Aktifkan akses model di Amazon Bedrock dan pilih region (AgentCore tersedia di Singapura)
-- [ ] Install Strands Agents SDK, lalu bungkus tools Tahap 4 dengan dekorator `@tool` (docstring dan type hints menjadi deskripsi tool)
+**Model:** Claude Opus 5.5 lewat Converse API (API yang dipakai Strands).
+
+**Akun AWS tim memakai "pengalaman baru" AWS (berbasis proyek).** Akun jenis ini berbeda dari akun AWS klasik:
+- Tidak ada akun root. Proyek "Do the Thing" dimiliki oleh AWS Builder ID.
+- Region proyek ditetapkan otomatis dari negara kontak. Untuk Indonesia, region-nya **Asia Pacific (Sydney) `ap-southeast-2`** dan tidak bisa diganti.
+- Bedrock, AgentCore, Lambda, ECS, S3, RDS, dan API Gateway termasuk Free Tier. AWS Marketplace diizinkan khusus untuk Bedrock.
+- Panggilan Bedrock yang tidak membuat resource boleh dilakukan di semua region komersial. Tapi aturan akun juga menyebut "fitur multi-region atau cross-region tidak didukung", sehingga inference profile yang jalan harus dicoba langsung. Skrip cek di langkah 7 mencoba 4 kombinasi secara otomatis (`agent/config.py`): `au.` dan `global.` di Sydney, lalu `global.` dan `us.` di N. Virginia.
+- Kredensial CLI memakai `aws login` (tanpa user IAM dan tanpa access key).
+
+**Persiapan (dikerjakan manual oleh tim, berurutan):**
+
+- [ ] **1. Aktifkan MFA.** Kalau login AWS lewat Google, GitHub, Apple, atau Amazon, aktifkan verifikasi 2 langkah di akun penyedia tersebut. Kalau login dengan email, buka https://settings.aws.com → **Manage security and sign-in** → halaman **Security** → **Register device** → **Authenticator app**, lalu pindai QR-nya dengan Google atau Microsoft Authenticator.
+- [x] **2. Cek region proyek.** Buka https://settings.aws.com → **Project** → bagian **Overview** → **Additional Info** → lihat **Region**. Hasil: **Asia Pacific (Sydney) `ap-southeast-2`** (terkonfirmasi 17 Okt 2026). Di halaman yang sama juga ada AWS account ID proyek.
+- [ ] **3. Aktifkan akses Claude di Bedrock.** Di konsol AWS, cari **Bedrock** di kolom Cari → **Katalog model** (*Model catalog*) → pilih **Claude Opus 5.5** → isi formulir use case Anthropic (cukup sekali, biasanya langsung disetujui). Contoh isian: organisasi "tim lomba Agentic AI Hackathon 2026", use case "prototipe agent analisis stok dan arus kas ritel". Lalu coba kirim pesan singkat di **Playground**. Kalau dijawab, akses sudah aktif.
+- [ ] **4. Install AWS CLI v2 (versi terbaru, karena perintah `aws login` butuh versi baru).** Di PowerShell: `winget install -e --id Amazon.AWSCLI`, lalu **tutup dan buka terminal baru**. Cek dengan `aws --version` dan `aws login help`; perintah kedua harus menampilkan bantuan, bukan error. Kalau winget tidak tersedia, unduh installer dari https://awscli.amazonaws.com/AWSCLIV2.msi.
+- [ ] **5. Login CLI ke proyek.** Jalankan `aws login`. Kalau ditanya region, isi `ap-southeast-2`. Browser akan terbuka; login, lalu pilih proyek **Do the Thing**. Kredensial berlaku 12 jam dan disimpan di `C:\Users\<nama>\.aws\`, di luar repo. Kalau sudah lewat 12 jam, jalankan `aws login` lagi (bisa diperpanjang tanpa izin ulang sampai 90 hari).
+- [ ] **6. Cek biaya.** Akun berada di paket gratis dengan kredit $100 (terlihat di menu nama akun, pojok kanan atas). Pemakaian Bedrock ditagih per token (https://aws.amazon.com/bedrock/pricing/). Belum ada sumber resmi yang memastikan kredit ini menanggung Claude, jadi setelah langkah 7, cek **Penagihan** apakah biayanya terpotong dari kredit. Kalau paket gratis ternyata menolak Claude, upgrade ke Paid Plan di AWS Settings lalu pasang **spend limit** (misalnya $20/bulan). Spend limit adalah fitur khusus akun jenis ini.
+- [ ] **7. Jalankan skrip cek.** Dengan `.venv` aktif: `python -m agent.cek_bedrock`. Skrip ini mengecek kredensial, lalu mencoba kombinasi region + model satu per satu dengan satu panggilan kecil ke Claude. Kombinasi pertama yang berhasil disimpan otomatis ke `.env` (tidak ikut di-commit). Hasil yang diharapkan: *"Semua cek lulus. Bedrock siap untuk Tahap 5."* Kalau semua kombinasi gagal, kirim pesan error-nya untuk dianalisis.
+
+**Pembangunan agent (setelah persiapan lulus):**
+
+- [ ] Bungkus tools API Tahap 4 sebagai tools Strands dengan dekorator `@tool` (docstring dan type hints menjadi deskripsi tool). Agent hanya memanggil REST API, tidak pernah menyentuh database langsung, sesuai proposal (*"seluruh aksi wajib melalui REST API tervalidasi"*).
 - [ ] Tulis system prompt: peran agent, kapan memakai tiap tool, dan kewajiban menulis alasan keputusan
 - [ ] Uji skenario SKU A → agent membuat draf PO
 - [ ] Uji skenario SKU B → agent memutuskan Hold Reorder lalu menyarankan Capital Reallocation
@@ -368,6 +388,7 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 - **Jangan menggabungkan baris antar-dataset** seolah-olah satu perusahaan. Periodenya berbeda (Bibitor 2016, Online Retail II 2009–2011), begitu juga negara dan mata uangnya.
 - **SAP:** sandbox api.sap.com hanya untuk membaca data, jadi pembuatan PO memakai mock. SAP BTP trial berlaku 90 hari dan akun harus login minimal sekali setiap 30 hari.
 - **Biaya AWS:** pasang AWS Budgets sejak awal.
+- **Akun AWS "pengalaman baru" (proyek):** region tetap Asia Pacific (Sydney) `ap-southeast-2`, tidak ada akun root, akses konsol hanya lewat AWS Builder ID, kredensial CLI lewat `aws login`, dan fitur cross-region dibatasi. Hal ini berpengaruh ke Tahap 5 (pilihan inference profile Claude) dan Tahap 8 (semua resource deploy berada di Sydney). Kalau suatu saat butuh fitur yang tidak tersedia, bisa memakai "Activate advanced AWS features".
 - **Data Indonesia:** tidak ada dataset ritel Indonesia di Kaggle yang memuat stok dan supplier. Data riil dari cabang menjadi bagian dari Fase 2.
 
 ---
@@ -418,3 +439,5 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 17 Okt 2026 | **Tahap 2 selesai.** Mesin hitung `engine/` (ingest, rekonstruksi stok Januari, vendor_metrics, sku_metrics, kandidat demo) dan 6 unit test. Ditemukan bahwa penjualan Bibitor hanya lengkap untuk Januari, jadi metode disesuaikan (lihat Tahap 2). Kandidat demo: toko 74, Bacardi Gold Rum (A) vs Patron Reposado Tequila (B). |
 | 17 Okt 2026 | **Tahap 3 selesai.** `engine/basket.py` dan `engine/jenis.py`: aturan asosiasi Instacart di level jenis minuman, lift_alk, tabel `peran_komplementer` dan `brand_jenis`, fungsi `cek_peran_komplementer`, dan 12 unit test baru (total 18). SKU B demo direvisi sesuai proposal Bagian 3 menjadi **Ciroc Apple Vodka** (Hold Reorder menyelamatkan Rp32 juta untuk PO Bacardi Gold Rum Rp13,7 juta). |
 | 17 Okt 2026 | **Tahap 4 selesai.** FastAPI di `api/` dengan 6 tools agent, endpoint approval, audit log, dan 6 guardrail di kode (batas harian, 3σ, circuit breaker, idempotency key, status default Draft, Data Confidence). 21 test API baru (total 39) dan uji langsung alur demo toko 74. Syarat basis tren ≥ 90 unit ditambahkan setelah uji langsung menemukan tren palsu dari produk baru. |
+| 17 Okt 2026 | Langkah persiapan Tahap 5 ditulis (akses Claude di Bedrock, user IAM, AWS CLI, kredensial, biaya) beserta skrip cek `python -m agent.cek_bedrock`. Model dipilih: Claude Opus 5.5 (`global.anthropic.claude-opus-5-5`) di `us-east-1`. |
+| 17 Okt 2026 | Langkah persiapan Tahap 5 direvisi: akun AWS tim ternyata memakai "pengalaman baru" AWS (proyek "Do the Thing", region Sydney, tanpa root/user IAM konsol, paket gratis dengan kredit $100). Kredensial memakai `aws login`; skrip cek sekarang mencoba 4 kombinasi region + inference profile dan menyimpan yang berhasil ke `.env`. |
