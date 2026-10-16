@@ -14,7 +14,7 @@
 | Tahap | Nama | Status | Checklist |
 |---|---|---|---|
 | 0 | Riset dataset & perencanaan | ✅ Selesai | 8/8 |
-| 1 | Setup repo & lingkungan | 🟡 Berjalan | 3/9 |
+| 1 | Setup repo & lingkungan | 🟡 Berjalan | 4/9 |
 | 2 | Data & mesin hitung (Bibitor) | ⬜ Belum | 0/12 |
 | 3 | Logika substitusi / Market Basket (Instacart) | ⬜ Belum | 0/7 |
 | 4 | Tools API + guardrail | ⬜ Belum | 0/12 |
@@ -25,7 +25,7 @@
 | 9 | Paket Kuat (Backorders + Online Retail II) | ⬜ Belum | 0/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/7 |
 | 11 | Demo & pitch | ⬜ Belum | 0/8 |
-| | **Total** | | **11/95 (±12%)** |
+| | **Total** | | **12/95 (±13%)** |
 
 **Posisi sekarang:** Tahap 1 (setup repo).
 **Target terdekat:** selesaikan Tahap 1–2 sampai tabel `sku_metrics` jadi. Ini target "minggu pertama" dari hasil pembahasan.
@@ -90,7 +90,7 @@ Fitur dari proposal yang dibahas:
 
 | Kategori | Software | Untuk apa | Dipakai mulai |
 |---|---|---|---|
-| Dasar | Python 3.11+, VS Code, Git + GitHub | Semua kode | Tahap 1 |
+| Dasar | Python 3.11+ (tim memakai 3.14.5), VS Code, Git + GitHub | Semua kode | Tahap 1 |
 | Data | Kaggle CLI / Kaggle Notebook, DuckDB, pandas atau Polars | Unduh & olah file besar Bibitor | Tahap 2 |
 | Analitik | mlxtend, scikit-learn + LightGBM, statsforecast | Aturan asosiasi, model risiko stok habis, demand forecast | Tahap 3, 9 |
 | API | FastAPI + Pydantic | Tools tervalidasi dan mock API SAP | Tahap 4, 6 |
@@ -136,8 +136,8 @@ ChibiRex/
 - [ ] Buat folder `data/`, `engine/`, `api/`, `agent/`, `dashboard/`, `docs/`
 - [x] Tambah `.gitignore` untuk `data/raw/`, `.env`, `kaggle.json`, `.venv/`, `__pycache__/`
 - [x] Simpan proposal dan *Rencana_Penggabungan_Dataset_Copilot.pdf* ke `docs/`
-- [ ] Install Python 3.11+, buat virtualenv, isi `requirements.txt`
-- [ ] Install Kaggle CLI dan pasang API token (`kaggle.json`)
+- [x] Install Python 3.11+, buat virtualenv, isi `requirements.txt` (Python 3.14.5, `.venv/`, semua library lolos uji import)
+- [ ] Login Kaggle CLI: `kaggle auth login` (atau token di env `KAGGLE_API_TOKEN` / file `~/.kaggle/access_token`)
 - [ ] Terima aturan kompetisi Instacart di Kaggle (wajib sebelum bisa unduh)
 - [ ] Siapkan akun AWS, lalu pasang alarm biaya di **AWS Budgets** sejak hari pertama
 - [ ] Tanyakan ke panitia apakah ada kredit AWS untuk peserta
@@ -355,4 +355,4 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | Tanggal | Progres |
 |---|---|
 | 16 Okt 2026 | Riset dataset Kaggle, tier list S–D, penetapan paket Minimal/Kuat/Maksimal, strategi penggabungan per modul, PDF rencana penggabungan dataset, rincian kolom per file, serta daftar langkah pertama dan software (di claude.ai) |
-| 17 Okt 2026 | Repo `ChibiRex` sudah ada di GitHub (initial commit). `progress.md` dan `.gitignore` dibuat. Proposal dan PDF rencana dataset disimpan di `docs/`. |
+| 17 Okt 2026 | Repo `ChibiRex` sudah ada di GitHub (initial commit). `progress.md` dan `.gitignore` dibuat. Proposal dan PDF rencana dataset disimpan di `docs/`. Virtualenv `.venv` (Python 3.14.5) dan `requirements.txt` dengan versi terkunci dibuat. |
