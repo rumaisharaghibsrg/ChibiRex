@@ -14,8 +14,8 @@
 | Tahap | Nama | Status | Checklist |
 |---|---|---|---|
 | 0 | Riset dataset & perencanaan | ✅ Selesai | 8/8 |
-| 1 | Setup repo & lingkungan | 🟡 Berjalan | 6/9 |
-| 2 | Data & mesin hitung (Bibitor) | ⬜ Belum | 0/12 |
+| 1 | Setup repo & lingkungan | ✅ Selesai | 9/9 |
+| 2 | Data & mesin hitung (Bibitor) | ✅ Selesai | 13/13 |
 | 3 | Logika substitusi / Market Basket (Instacart) | ⬜ Belum | 0/7 |
 | 4 | Tools API + guardrail | ⬜ Belum | 0/12 |
 | 5 | Agent layer (Strands + Bedrock) | ⬜ Belum | 0/6 |
@@ -24,11 +24,11 @@
 | 8 | Deploy ke AWS | ⬜ Belum | 0/5 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ⬜ Belum | 0/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/7 |
-| 11 | Demo & pitch | ⬜ Belum | 0/8 |
-| | **Total** | | **14/95 (±15%)** |
+| 11 | Demo & pitch | ⬜ Belum | 0/9 |
+| | **Total** | | **30/97 (±31%)** |
 
-**Posisi sekarang:** Tahap 1 (setup repo).
-**Target terdekat:** selesaikan Tahap 1–2 sampai tabel `sku_metrics` jadi. Ini target "minggu pertama" dari hasil pembahasan.
+**Posisi sekarang:** Tahap 3 (logika substitusi / Market Basket dengan Instacart).
+**Target terdekat:** aturan asosiasi antar-aisle alkohol Instacart dan pemetaannya ke kategori Bibitor (spirits/wine), sebagai dasar keputusan Hold Reorder untuk SKU B.
 
 Legenda: ✅ selesai · 🟡 berjalan · ⬜ belum mulai
 
@@ -64,6 +64,7 @@ Fitur dari proposal yang dibahas:
 5. **SAP memakai mock API** yang mengikuti format payload API Purchase Order SAP, karena sandbox api.sap.com hanya untuk membaca data.
 6. **Agent:** Strands Agents SDK + Amazon Bedrock. Bedrock AgentCore bersifat opsional, untuk demo yang lebih "production".
 7. **Mata uang:** USD dikonversi ke Rupiah dengan satu kurs tetap yang dicantumkan, dan diberi label "simulasi".
+8. **Metode Tahap 2** (menyesuaikan kondisi data Bibitor, lihat Tahap 2): laju permintaan = penjualan setahun dari neraca stok (stok awal + pembelian − stok akhir) ÷ hari SKU aktif; metrik harian dari Januari 2016; tren naik/turun dari pembelian bulanan.
 
 ### Paket dataset
 
@@ -111,6 +112,7 @@ ChibiRex/
 ├── agent/         # Strands Agents + Bedrock
 ├── dashboard/     # Streamlit
 ├── docs/          # proposal, PDF rencana penggabungan dataset
+├── tests/         # unit test (pytest)
 ├── progress.md
 └── README.md
 ```
@@ -130,34 +132,47 @@ ChibiRex/
 - [x] Koreksi data Montgomery County: datanya **tidak dipecah per toko** (PDF sudah diperbaiki)
 - [x] Tentukan langkah pertama dan daftar software
 
-### Tahap 1 — Setup repo & lingkungan 🟡
+### Tahap 1 — Setup repo & lingkungan ✅
 
 - [x] Buat repo GitHub `ChibiRex`
-- [ ] Buat folder `data/`, `engine/`, `api/`, `agent/`, `dashboard/`, `docs/`
+- [x] Buat folder `data/`, `engine/`, `api/`, `agent/`, `dashboard/`, `docs/`
 - [x] Tambah `.gitignore` untuk `data/raw/`, `.env`, `kaggle.json`, `.venv/`, `__pycache__/`
 - [x] Simpan proposal dan *Rencana_Penggabungan_Dataset_Copilot.pdf* ke `docs/`
 - [x] Install Python 3.11+, buat virtualenv, isi `requirements.txt` (Python 3.14.5, `.venv/`, semua library lolos uji import)
 - [x] Login Kaggle CLI: `kaggle auth login` (atau token di env `KAGGLE_API_TOKEN` / file `~/.kaggle/access_token`)
 - [x] Cek akses data Instacart: file kompetisinya tidak tersedia lewat API (404), jadi dipakai mirror `psparks/instacart-market-basket-analysis` (isi file identik, tidak perlu menerima aturan kompetisi)
-- [ ] Siapkan akun AWS, lalu pasang alarm biaya di **AWS Budgets** sejak hari pertama
-- [ ] Tanyakan ke panitia apakah ada kredit AWS untuk peserta
+- [x] Siapkan akun AWS, lalu pasang alarm biaya di **AWS Budgets** sejak hari pertama
+- [x] Tanyakan ke panitia apakah ada kredit AWS untuk peserta
 
-### Tahap 2 — Data & mesin hitung (paket Minimal: Bibitor) ⬜
+### Tahap 2 — Data & mesin hitung (paket Minimal: Bibitor) ✅
 
 Target: **satu tabel `sku_metrics`** yang dibaca oleh semua modul berikutnya.
 
-- [ ] Unduh 6 file Bibitor: `kaggle datasets download -d bhanupratapbiswas/inventory-analysis-case-study`
-- [ ] Muat ke DuckDB, jangan diolah di Excel (Purchases ±400 MB, Sales ±128 MB). Kunci join antar-file: `InventoryId` (contoh `1_HARDERSFIELD_1004`)
-- [ ] Rekonstruksi stok harian per SKU per cabang: stok awal (`BegInvFINAL`) + pembelian (`ReceivingDate`) − penjualan (`SalesFINAL`)
-- [ ] Hitung **Data Confidence Score**: selisih stok hasil rekonstruksi vs stok akhir tercatat (`EndInvFINAL`)
-- [ ] Hitung **Vs = ΣSt ÷ (n × Iavg)** per SKU per cabang (Iavg = rata-rata stok harian hasil rekonstruksi)
-- [ ] Hitung **lead time per vendor** = `ReceivingDate − PODate` (rata-rata dan variasinya)
-- [ ] Hitung reorder point, safety stock, dan perkiraan tanggal stok habis
-- [ ] Hitung margin per unit dari `2017PurchasePricesDec` (Price − PurchasePrice) dan waktu kas keluar dari `PayDate`
-- [ ] Tandai hari-hari stok kosong (bahan fitur Death Spiral)
-- [ ] Konversi USD → Rupiah dengan satu kurs tetap dan label "simulasi"
-- [ ] Simpan hasilnya sebagai tabel `sku_metrics`
-- [ ] Pilih kandidat **SKU A** (Vs naik tajam, misalnya brand yang penjualannya naik di Desember) dan **SKU B** (Vs turun, stok akhir tinggi) di cabang yang sama
+**Cara menjalankan** (dengan `.venv` aktif): `python -m engine.pipeline` (±10 detik, data diunduh otomatis kalau belum ada) dan `pytest` untuk unit test. Hasilnya tersimpan di `data/processed/chibirex.duckdb`.
+
+- [x] Unduh 6 file Bibitor: `kaggle datasets download -d bhanupratapbiswas/inventory-analysis-case-study` (`engine/ingest.py`)
+- [x] Muat ke DuckDB, jangan diolah di Excel (Purchases ±400 MB, Sales ±128 MB). Kunci join antar-file: `InventoryId` (contoh `1_HARDERSFIELD_1004`)
+- [x] Rekonstruksi stok harian per SKU per cabang: stok awal + pembelian (`ReceivingDate`) − penjualan. **Hanya Januari 2016** (79 toko × 31 hari, 6,5 juta baris), karena hanya bulan itu yang data penjualannya lengkap (`engine/stock.py`)
+- [x] Hitung **Data Confidence Score**: porsi arus barang yang tidak bisa dijelaskan data (stok rekonstruksi negatif atau stok akhir > stok awal + pembelian). Hasilnya 1,0 untuk semua SKU karena data Bibitor konsisten sempurna (lihat temuan di bawah)
+- [x] Hitung **Vs = ΣSt ÷ (n × Iavg)** per SKU per cabang: `vs_jan` (stok harian Januari) dan `vs_tahun` (penjualan setahun, Iavg = rata-rata stok awal dan akhir)
+- [x] Hitung **lead time per vendor** = `ReceivingDate − PODate`: rata-rata 3–14 hari (median ±8), plus konsistensi vendor (1 − koefisien variasi) di tabel `vendor_metrics`
+- [x] Hitung reorder point, safety stock (service level 95%), target stok, dan perkiraan tanggal stok habis
+- [x] Hitung margin per unit dari `2017PurchasePricesDec` dan waktu kas keluar (rata-rata dibayar ±44 hari setelah barang diterima)
+- [x] Tandai hari-hari stok kosong di Januari (`hari_stok_kosong_jan`, bahan fitur Death Spiral)
+- [x] Konversi USD → Rupiah dengan kurs tetap Rp16.000 (`engine/config.py`), label "simulasi"
+- [x] Simpan hasilnya sebagai tabel `sku_metrics` (276.389 SKU-toko, per 31 Des 2016) plus `stok_harian_jan`, `vendor_metrics`, `beli_bulanan`
+- [x] Pilih kandidat **SKU A** dan **SKU B** di cabang yang sama (`engine/demo.py`, tabel `kandidat_demo`). Terpilih: **toko 74 (PAENTMARWY)**
+  - **SKU A, Bacardi Gold Rum:** pembelian melonjak dari 142 unit (Jan–Sep) menjadi 1.553 unit (Okt–Des), stok 43 ≤ ROP 83, saran PO 107 unit (Rp13,7 juta)
+  - **SKU B, Patron Reposado Tequila:** OVERSTOCK, stok cukup ±400 hari, tanpa pembelian di Q4, modal berlebih Rp45,5 juta (cukup untuk membiayai PO SKU A)
+- [x] Unit test rumus inti dengan data sintetis: 6 test lulus (`tests/test_engine.py`)
+
+**Temuan data Bibitor (penting untuk pitch):**
+- **File penjualan terpotong di 1.048.575 baris** (batas Excel). Penjualan hanya ada untuk Januari 2016 (lengkap) dan sebagian Februari (11 dari 79 toko). Data pembelian dan snapshot stok tetap lengkap setahun. Tidak ada unggahan Bibitor lain di Kaggle dengan penjualan setahun penuh.
+- **Data konsisten sempurna:** tidak pernah ada barang terjual melebihi stok. Karena itu penjualan setahun = stok awal + pembelian − stok akhir bisa dipakai sebagai penjualan sebenarnya, dan menjadi dasar laju permintaan (÷ hari SKU aktif).
+- **Pembelian mengikuti penjualan:** di Januari, median rasio penjualan/pembelian per toko 1,02. Karena itu tren pembelian bulanan dipakai sebagai indikator Vs naik/turun (`tren_beli` = rata-rata per bulan Okt–Des ÷ Jan–Sep).
+- **Pola approval** cocok dengan narasi 1-Click Approval: 374 PO besar (rata-rata $485 ribu) disetujui satu orang, 5.169 PO lainnya tanpa approver.
+- **Status stok per 31 Des 2016:** AMAN 138.263 · REORDER 77.674 · OVERSTOCK 51.615 · DEADSTOCK 5.788 · TIDAK_AKTIF 3.049 SKU-toko.
+- **Reorder point memakai laju rata-rata setahun.** Untuk SKU yang sedang melonjak (seperti SKU A), `tren_beli` menjadi sinyal tambahan bagi agent untuk menaikkan jumlah PO.
 
 <details>
 <summary>Kolom yang diambil dari tiap file Bibitor</summary>
@@ -293,6 +308,7 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 
 - [ ] Siapkan data dan skenario untuk langkah 1–5 (paket Minimal)
 - [ ] Siapkan skenario untuk langkah 6–7 (jika paket Kuat/Maksimal selesai)
+- [ ] Siapkan skenario injeksi selisih stok (label "simulasi") supaya Data Confidence Score turun dan fitur mitigasi inakurasi data bisa didemokan, karena data Bibitor asli konsisten sempurna
 - [ ] Gladi demo end-to-end
 - [ ] Slide arsitektur: S3, RDS, Lambda/ECS, Bedrock, Strands Agents, AgentCore, mock SAP
 - [ ] Slide "Sumber data per modul"; transparansi seperti ini menambah kredibilitas di depan juri
@@ -305,7 +321,7 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 ## Catatan & Risiko
 
 - **Lisensi Bibitor:** di Kaggle tertulis Apache 2.0, tetapi materi aslinya milik HUB of Analytics Education untuk keperluan pendidikan. Aman untuk hackathon non-komersial dengan atribusi; **jangan dipakai untuk pilot komersial**.
-- **Keterbatasan Bibitor:** stok hanya berupa snapshot awal dan akhir periode, tidak ada ID keranjang, dan periodenya hanya 12 bulan (2016). Deskripsi di halaman Kaggle-nya menyebut perusahaan manufaktur; abaikan, isinya tetap data Bibitor.
+- **Keterbatasan Bibitor:** stok hanya berupa snapshot awal dan akhir periode, tidak ada ID keranjang, dan periodenya hanya 12 bulan (2016). **Penjualan harian hanya lengkap untuk Januari 2016** (file terpotong di batas baris Excel), dan datanya terlalu konsisten sehingga terlihat sintetis. Sampaikan ini dengan jujur di slide "Sumber data per modul". Deskripsi di halaman Kaggle-nya menyebut perusahaan manufaktur; abaikan, isinya tetap data Bibitor.
 - **Instacart:** file kompetisi aslinya tidak bisa diunduh lewat API Kaggle, jadi dipakai mirror. Mirror tersebut berlabel CC0, tetapi data aslinya dirilis Instacart dengan syarat non-komersial. Cantumkan Instacart sebagai sumber.
 - **Product Backorders:** kelasnya sangat tidak seimbang, domainnya suku cadang (bukan ritel), dan lisensinya belum terverifikasi.
 - **Montgomery County:** data tidak dipecah per toko (penjualan ritel adalah gabungan semua toko, stok adalah total per item) dan lisensinya tidak dicantumkan.
@@ -358,4 +374,5 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | Tanggal | Progres |
 |---|---|
 | 16 Okt 2026 | Riset dataset Kaggle, tier list S–D, penetapan paket Minimal/Kuat/Maksimal, strategi penggabungan per modul, PDF rencana penggabungan dataset, rincian kolom per file, serta daftar langkah pertama dan software (di claude.ai) |
-| 17 Okt 2026 | Repo `ChibiRex` sudah ada di GitHub (initial commit). `progress.md` dan `.gitignore` dibuat. Proposal dan PDF rencana dataset disimpan di `docs/`. Virtualenv `.venv` (Python 3.14.5) dan `requirements.txt` dengan versi terkunci dibuat. Login Kaggle CLI berhasil. Akses file Bibitor dan M5 terkonfirmasi. Data Instacart dialihkan ke mirror `psparks` karena file kompetisinya tidak tersedia lewat API. |
+| 17 Okt 2026 | Repo `ChibiRex` sudah ada di GitHub (initial commit). `progress.md` dan `.gitignore` dibuat. Proposal dan PDF rencana dataset disimpan di `docs/`. Virtualenv `.venv` (Python 3.14.5) dan `requirements.txt` dengan versi terkunci dibuat. Login Kaggle CLI berhasil. Akses file Bibitor dan M5 terkonfirmasi. Data Instacart dialihkan ke mirror `psparks` karena file kompetisinya tidak tersedia lewat API. Akun AWS siap dan panitia sudah ditanya soal kredit. **Tahap 1 selesai.** |
+| 17 Okt 2026 | **Tahap 2 selesai.** Mesin hitung `engine/` (ingest, rekonstruksi stok Januari, vendor_metrics, sku_metrics, kandidat demo) dan 6 unit test. Ditemukan bahwa penjualan Bibitor hanya lengkap untuk Januari, jadi metode disesuaikan (lihat Tahap 2). Kandidat demo: toko 74, Bacardi Gold Rum (A) vs Patron Reposado Tequila (B). |
