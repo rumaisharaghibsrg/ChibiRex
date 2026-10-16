@@ -1,0 +1,51 @@
+# ===== Data =====
+# Dataset mentah dan hasil olahan tidak di-commit: ukurannya besar (Bibitor ±500 MB)
+# dan lisensinya (Bibitor, kompetisi Kaggle Instacart/M5) tidak mengizinkan distribusi ulang.
+# File kecil langsung di data/ (misalnya tabel mapping aisle → kategori) tetap bisa di-commit.
+data/raw/
+data/processed/
+*.zip
+*.duckdb
+*.duckdb.wal
+
+# Model hasil training
+models/
+*.pkl
+*.joblib
+
+# ===== Kredensial & rahasia =====
+.env
+.env.*
+!.env.example
+kaggle.json
+.kaggle/
+.aws/
+.streamlit/secrets.toml
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# ===== Log =====
+*.log
+logs/
+
+# ===== Editor & OS =====
+.vscode/
+.idea/
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
+desktop.ini
