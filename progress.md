@@ -16,7 +16,7 @@
 | 0 | Riset dataset & perencanaan | ✅ Selesai | 8/8 |
 | 1 | Setup repo & lingkungan | ✅ Selesai | 9/9 |
 | 2 | Data & mesin hitung (Bibitor) | ✅ Selesai | 13/13 |
-| 3 | Logika substitusi / Market Basket (Instacart) | ⬜ Belum | 0/7 |
+| 3 | Logika substitusi / Market Basket (Instacart) | ✅ Selesai | 8/8 |
 | 4 | Tools API + guardrail | ⬜ Belum | 0/12 |
 | 5 | Agent layer (Strands + Bedrock) | ⬜ Belum | 0/6 |
 | 6 | Mock API SAP | ⬜ Belum | 0/5 |
@@ -25,10 +25,10 @@
 | 9 | Paket Kuat (Backorders + Online Retail II) | ⬜ Belum | 0/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/7 |
 | 11 | Demo & pitch | ⬜ Belum | 0/9 |
-| | **Total** | | **30/97 (±31%)** |
+| | **Total** | | **38/98 (±39%)** |
 
-**Posisi sekarang:** Tahap 3 (logika substitusi / Market Basket dengan Instacart).
-**Target terdekat:** aturan asosiasi antar-aisle alkohol Instacart dan pemetaannya ke kategori Bibitor (spirits/wine), sebagai dasar keputusan Hold Reorder untuk SKU B.
+**Posisi sekarang:** Tahap 4 (tools API + guardrail).
+**Target terdekat:** FastAPI yang membungkus mesin hitung menjadi tools tervalidasi (`get_sku_metrics`, `check_substitution`, `draft_purchase_order`, `hold_reorder`, `suggest_reallocation`) beserta guardrail di kode.
 
 Legenda: ✅ selesai · 🟡 berjalan · ⬜ belum mulai
 
@@ -65,6 +65,8 @@ Fitur dari proposal yang dibahas:
 6. **Agent:** Strands Agents SDK + Amazon Bedrock. Bedrock AgentCore bersifat opsional, untuk demo yang lebih "production".
 7. **Mata uang:** USD dikonversi ke Rupiah dengan satu kurs tetap yang dicantumkan, dan diberi label "simulasi".
 8. **Metode Tahap 2** (menyesuaikan kondisi data Bibitor, lihat Tahap 2): laju permintaan = penjualan setahun dari neraca stok (stok awal + pembelian − stok akhir) ÷ hari SKU aktif; metrik harian dari Januari 2016; tren naik/turun dari pembelian bulanan.
+9. **Metode Tahap 3:** jembatan Bibitor ↔ Instacart di level **jenis minuman** (bukan hanya spirits/wine), karena SKU A dan SKU B bisa sama-sama spirits. Peran komplementer diukur dengan lift terhadap sesama order alkohol.
+10. **SKU B demo mengikuti proposal Bagian 3:** stok sudah di bawah ROP (sistem statis akan reorder), Vs turun, dan jenisnya tidak komplementer. Modal yang diselamatkan = nilai PO yang ditahan.
 
 ### Paket dataset
 
@@ -93,7 +95,7 @@ Fitur dari proposal yang dibahas:
 |---|---|---|---|
 | Dasar | Python 3.11+ (tim memakai 3.14.5), VS Code, Git + GitHub | Semua kode | Tahap 1 |
 | Data | Kaggle CLI / Kaggle Notebook, DuckDB, pandas atau Polars | Unduh & olah file besar Bibitor | Tahap 2 |
-| Analitik | mlxtend, scikit-learn + LightGBM, statsforecast | Aturan asosiasi, model risiko stok habis, demand forecast | Tahap 3, 9 |
+| Analitik | SQL DuckDB (aturan asosiasi), scikit-learn + LightGBM, statsforecast | Aturan asosiasi, model risiko stok habis, demand forecast | Tahap 3, 9 |
 | API | FastAPI + Pydantic | Tools tervalidasi dan mock API SAP | Tahap 4, 6 |
 | Agent | Strands Agents SDK (alternatif: LangGraph) | Loop agent & pemanggilan tools | Tahap 5 |
 | LLM | Amazon Bedrock | Penalaran agent | Tahap 5 |
@@ -163,7 +165,7 @@ Target: **satu tabel `sku_metrics`** yang dibaca oleh semua modul berikutnya.
 - [x] Simpan hasilnya sebagai tabel `sku_metrics` (276.389 SKU-toko, per 31 Des 2016) plus `stok_harian_jan`, `vendor_metrics`, `beli_bulanan`
 - [x] Pilih kandidat **SKU A** dan **SKU B** di cabang yang sama (`engine/demo.py`, tabel `kandidat_demo`). Terpilih: **toko 74 (PAENTMARWY)**
   - **SKU A, Bacardi Gold Rum:** pembelian melonjak dari 142 unit (Jan–Sep) menjadi 1.553 unit (Okt–Des), stok 43 ≤ ROP 83, saran PO 107 unit (Rp13,7 juta)
-  - **SKU B, Patron Reposado Tequila:** OVERSTOCK, stok cukup ±400 hari, tanpa pembelian di Q4, modal berlebih Rp45,5 juta (cukup untuk membiayai PO SKU A)
+  - **SKU B, Ciroc Apple Vodka** (direvisi di Tahap 3, sebelumnya Patron Reposado Tequila): laku di musim panas (Jun–Jul ±1.580 unit) lalu melambat (tren 0,37×), stok 107 ≤ ROP 117 sehingga sistem statis akan me-reorder 101 unit (Rp32 juta). Vodka tidak punya peran komplementer → Hold Reorder, dan Rp32 juta itu cukup untuk membiayai PO SKU A
 - [x] Unit test rumus inti dengan data sintetis: 6 test lulus (`tests/test_engine.py`)
 
 **Temuan data Bibitor (penting untuk pitch):**
@@ -190,15 +192,39 @@ Diabaikan: Description dan Size (kecuali untuk label dashboard), Volume, ExciseT
 
 </details>
 
-### Tahap 3 — Logika substitusi / Market Basket (paket Minimal: Instacart) ⬜
+### Tahap 3 — Logika substitusi / Market Basket (paket Minimal: Instacart) ✅
 
-- [ ] Unduh `order_products__prior.csv`, `order_products__train.csv`, `products.csv`, `aisles.csv`, dan `departments.csv` (`kaggle datasets download -d psparks/instacart-market-basket-analysis`). File `orders.csv` tidak perlu. File terbesar, `order_products__prior.csv`, berukuran ±578 MB.
-- [ ] Ubah setiap order menjadi kumpulan aisle (`order_id`, `product_id` → `aisle_id`, `department_id`)
-- [ ] Hitung support, confidence, dan lift antar-aisle dengan mlxtend
-- [ ] Simpan aturan yang melibatkan aisle alkohol (red wines, white wines, dll.), karena Bibitor hanya menjual wine dan spirits
-- [ ] Verifikasi isi kolom `Classification` Bibitor (dugaan: 1 = spirits, 2 = wine)
-- [ ] Buat tabel mapping manual aisle Instacart → kategori Bibitor
-- [ ] Buat fungsi "apakah kategori SKU ini punya peran komplementer?" sebagai dasar keputusan Hold Reorder
+Kode: `engine/basket.py` (aturan asosiasi & peran komplementer) dan `engine/jenis.py` (tabel mapping). Ikut berjalan di `python -m engine.pipeline` (±2 detik tambahan).
+
+- [x] Unduh `order_products__prior.csv`, `order_products__train.csv`, `products.csv`, `aisles.csv`, dan `departments.csv` dari mirror `psparks/instacart-market-basket-analysis` (otomatis lewat pipeline). 3.346.083 order, 87.794 di antaranya (2,6%) berisi alkohol.
+- [x] Ubah setiap order menjadi kumpulan item: **jenis minuman** untuk produk alkohol (tequila, rum, vodka, whiskey, gin, liqueur, brandy, wine_red, wine_white, wine_sparkling, beer) dan nama aisle untuk produk lainnya (24,3 juta baris order-item)
+- [x] Hitung support, confidence, lift, dan **lift_alk** (lift dibanding sesama order alkohol). Dihitung langsung dengan SQL DuckDB, bukan mlxtend, karena lebih cepat untuk 3,3 juta order dan hanya pasangan yang melibatkan alkohol yang dibutuhkan.
+- [x] Simpan aturan yang antecedent-nya jenis alkohol: tabel `aturan_asosiasi` (consequent mencakup jenis alkohol lain dan aisle non-alkohol)
+- [x] Verifikasi isi kolom `Classification` Bibitor: **1 = spirits, 2 = wine** (terkonfirmasi di Tahap 2)
+- [x] Buat tabel mapping manual nama produk → jenis (kata kunci jenis + merek besar) untuk Instacart dan Bibitor. Cakupan Bibitor: **spirits 93%, wine 82% dari volume penjualan**. Yang tidak terpetakan diberi status `TIDAK_DIKETAHUI`. Hasilnya di tabel `brand_jenis`.
+- [x] Buat fungsi `engine.basket.cek_peran_komplementer(con, inventory_id)` yang mengembalikan jenis, status (`KOMPLEMENTER` / `TIDAK_KOMPLEMENTER` / `TIDAK_DIKETAHUI`), dan 3 mitra terkuat beserta lift-nya. Ringkasan per jenis ada di tabel `peran_komplementer`.
+- [x] Unit test pemetaan jenis dan perhitungan lift dengan data sintetis: 12 test lulus (`tests/test_basket.py`), total 18 test
+
+**Aturan keputusan:** sebuah jenis punya peran komplementer kalau ada jenis alkohol lain yang dibeli bersamanya **≥ 1,5× lebih sering** dibanding order alkohol pada umumnya, dengan **≥ 30 order bersama** (`config.BASKET_MIN_LIFT`, `BASKET_MIN_ORDERS`). Ambang ditetapkan sebelum melihat hasil untuk SKU demo.
+
+**Hasil per jenis:**
+
+| Jenis | Peran komplementer | Mitra terkuat (lift_alk) |
+|---|---|---|
+| tequila | ya | liqueur 3,24× |
+| liqueur | ya | tequila 3,24× |
+| gin | ya | tequila 2,73× |
+| brandy | ya | liqueur 2,62× |
+| whiskey | ya | gin 2,57× |
+| rum | ya | gin 2,42× |
+| vodka | tidak (paling tinggi gin 1,46×, di bawah ambang) | – |
+| wine_red, wine_white, wine_sparkling | tidak (red ↔ white hanya 1,03×) | – |
+| beer | tidak | – |
+
+**Temuan penting:**
+- **Lift terhadap semua order menyesatkan.** Hasilnya 20–245× untuk semua pasangan alkohol, karena pembeli alkohol memang membeli banyak alkohol. Karena itu dipakai lift_alk.
+- **Pola yang terlihat:** spirits selain vodka dibeli berbarengan (seperti menyetok bar), sedangkan wine, vodka, dan beer dibeli sendiri-sendiri.
+- **SKU B demo direvisi** sesuai proposal Bagian 3 ("Stok habis & Vs turun → cek substitusi → Hold Reorder"). Patron Reposado diganti, karena Patron berstatus OVERSTOCK (bukan stok hampir habis) dan tequila punya peran komplementer. Penggantinya Ciroc Apple Vodka (lihat Tahap 2).
 
 ### Tahap 4 — Tools API + guardrail ⬜
 
@@ -206,7 +232,7 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 
 - [ ] Setup FastAPI + Pydantic di `api/`
 - [ ] Tool `get_sku_metrics`: membaca dari `sku_metrics`
-- [ ] Tool `check_substitution`: memakai hasil Tahap 3
+- [ ] Tool `check_substitution`: membungkus `engine.basket.cek_peran_komplementer`
 - [ ] Tool `draft_purchase_order`
 - [ ] Tool `hold_reorder` (exploration budget kuartalan tetap dialokasikan)
 - [ ] Tool `suggest_reallocation`: modal yang ditahan dari SKU B dialihkan ke SKU A, dalam Rupiah
@@ -323,6 +349,7 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 - **Lisensi Bibitor:** di Kaggle tertulis Apache 2.0, tetapi materi aslinya milik HUB of Analytics Education untuk keperluan pendidikan. Aman untuk hackathon non-komersial dengan atribusi; **jangan dipakai untuk pilot komersial**.
 - **Keterbatasan Bibitor:** stok hanya berupa snapshot awal dan akhir periode, tidak ada ID keranjang, dan periodenya hanya 12 bulan (2016). **Penjualan harian hanya lengkap untuk Januari 2016** (file terpotong di batas baris Excel), dan datanya terlalu konsisten sehingga terlihat sintetis. Sampaikan ini dengan jujur di slide "Sumber data per modul". Deskripsi di halaman Kaggle-nya menyebut perusahaan manufaktur; abaikan, isinya tetap data Bibitor.
 - **Instacart:** file kompetisi aslinya tidak bisa diunduh lewat API Kaggle, jadi dipakai mirror. Mirror tersebut berlabel CC0, tetapi data aslinya dirilis Instacart dengan syarat non-komersial. Cantumkan Instacart sebagai sumber.
+- **Mapping jenis Bibitor ↔ Instacart** berbasis kata kunci, sehingga sebagian SKU (7% volume spirits, 18% volume wine) tidak terpetakan dan berstatus `TIDAK_DIKETAHUI`. Agent tidak boleh hold otomatis untuk SKU tersebut. Vodka berada di dekat ambang (1,46× vs 1,5×), jadi kalau ditanya juri, jelaskan bahwa ambangnya ditetapkan di awal dan bisa dikalibrasi ulang dengan data cabang riil.
 - **Product Backorders:** kelasnya sangat tidak seimbang, domainnya suku cadang (bukan ritel), dan lisensinya belum terverifikasi.
 - **Montgomery County:** data tidak dipecah per toko (penjualan ritel adalah gabungan semua toko, stok adalah total per item) dan lisensinya tidak dicantumkan.
 - **Jangan menggabungkan baris antar-dataset** seolah-olah satu perusahaan. Periodenya berbeda (Bibitor 2016, Online Retail II 2009–2011), begitu juga negara dan mata uangnya.
@@ -376,3 +403,4 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 16 Okt 2026 | Riset dataset Kaggle, tier list S–D, penetapan paket Minimal/Kuat/Maksimal, strategi penggabungan per modul, PDF rencana penggabungan dataset, rincian kolom per file, serta daftar langkah pertama dan software (di claude.ai) |
 | 17 Okt 2026 | Repo `ChibiRex` sudah ada di GitHub (initial commit). `progress.md` dan `.gitignore` dibuat. Proposal dan PDF rencana dataset disimpan di `docs/`. Virtualenv `.venv` (Python 3.14.5) dan `requirements.txt` dengan versi terkunci dibuat. Login Kaggle CLI berhasil. Akses file Bibitor dan M5 terkonfirmasi. Data Instacart dialihkan ke mirror `psparks` karena file kompetisinya tidak tersedia lewat API. Akun AWS siap dan panitia sudah ditanya soal kredit. **Tahap 1 selesai.** |
 | 17 Okt 2026 | **Tahap 2 selesai.** Mesin hitung `engine/` (ingest, rekonstruksi stok Januari, vendor_metrics, sku_metrics, kandidat demo) dan 6 unit test. Ditemukan bahwa penjualan Bibitor hanya lengkap untuk Januari, jadi metode disesuaikan (lihat Tahap 2). Kandidat demo: toko 74, Bacardi Gold Rum (A) vs Patron Reposado Tequila (B). |
+| 17 Okt 2026 | **Tahap 3 selesai.** `engine/basket.py` dan `engine/jenis.py`: aturan asosiasi Instacart di level jenis minuman, lift_alk, tabel `peran_komplementer` dan `brand_jenis`, fungsi `cek_peran_komplementer`, dan 12 unit test baru (total 18). SKU B demo direvisi sesuai proposal Bagian 3 menjadi **Ciroc Apple Vodka** (Hold Reorder menyelamatkan Rp32 juta untuk PO Bacardi Gold Rum Rp13,7 juta). |

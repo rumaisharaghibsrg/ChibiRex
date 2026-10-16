@@ -30,14 +30,15 @@ def _kaggle_exe() -> str:
     return found
 
 
-def download(raw_dir: Path = config.RAW_BIBITOR) -> None:
-    if all((raw_dir / f).exists() for f in FILES.values()):
+def download_dataset(ref: str, raw_dir: Path, filenames) -> None:
+    if all((raw_dir / f).exists() for f in filenames):
         return
     raw_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [_kaggle_exe(), "datasets", "download", "-d", config.KAGGLE_BIBITOR, "-p", str(raw_dir), "--unzip"],
-        check=True,
-    )
+    subprocess.run([_kaggle_exe(), "datasets", "download", "-d", ref, "-p", str(raw_dir), "--unzip"], check=True)
+
+
+def download(raw_dir: Path = config.RAW_BIBITOR) -> None:
+    download_dataset(config.KAGGLE_BIBITOR, raw_dir, FILES.values())
 
 
 def load(con: duckdb.DuckDBPyConnection, raw_dir: Path = config.RAW_BIBITOR) -> None:

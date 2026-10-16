@@ -4,6 +4,9 @@ ROOT = Path(__file__).resolve().parent.parent
 RAW_BIBITOR = ROOT / "data" / "raw" / "bibitor"
 DB_PATH = ROOT / "data" / "processed" / "chibirex.duckdb"
 KAGGLE_BIBITOR = "bhanupratapbiswas/inventory-analysis-case-study"
+RAW_INSTACART = ROOT / "data" / "raw" / "instacart"
+# File kompetisi Instacart tidak tersedia lewat API Kaggle; mirror ini berisi file yang identik.
+KAGGLE_INSTACART = "psparks/instacart-market-basket-analysis"
 
 # "Hari ini" untuk demo = tanggal snapshot stok akhir Bibitor.
 AS_OF = "2016-12-31"
@@ -27,3 +30,8 @@ KURS_USD_IDR = 16_000  # kurs simulasi tetap; semua nilai Rupiah diberi label "s
 Z_SERVICE = 1.65  # service level 95%
 REVIEW_DAYS = 14  # periode review untuk target stok (order-up-to)
 OVERSTOCK_DAYS = 180  # stok cukup > 180 hari dianggap berlebih
+
+# Market Basket: sebuah jenis punya peran komplementer kalau ada jenis lain yang dibeli bersamanya
+# minimal 1,5× lebih sering dibanding order alkohol pada umumnya, dengan minimal 30 order bersama.
+BASKET_MIN_LIFT = 1.5
+BASKET_MIN_ORDERS = 30
