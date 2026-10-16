@@ -18,14 +18,14 @@
 | 2 | Data & mesin hitung (Bibitor) | ✅ Selesai | 13/13 |
 | 3 | Logika substitusi / Market Basket (Instacart) | ✅ Selesai | 8/8 |
 | 4 | Tools API + guardrail | ✅ Selesai | 13/13 |
-| 5 | Agent layer (Strands + Bedrock) | 🟡 Berjalan | 1/12 |
+| 5 | Agent layer (Strands + Bedrock) | 🟡 Berjalan | 3/12 |
 | 6 | Mock API SAP | ⬜ Belum | 0/5 |
 | 7 | Dashboard (Streamlit) | ⬜ Belum | 0/7 |
 | 8 | Deploy ke AWS | ⬜ Belum | 0/5 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ⬜ Belum | 0/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/7 |
 | 11 | Demo & pitch | ⬜ Belum | 0/9 |
-| | **Total** | | **52/105 (±50%)** |
+| | **Total** | | **54/105 (±51%)** |
 
 **Posisi sekarang:** Tahap 5 (agent layer: Strands Agents + Amazon Bedrock), bagian persiapan AWS.
 **Target terdekat:** selesaikan 7 langkah persiapan Tahap 5 sampai `python -m agent.cek_bedrock` lulus. Setelah itu agent dibangun untuk menjalankan alur demo toko 74 (hold Ciroc Apple Vodka → realokasi → draf PO Bacardi Gold Rum).
@@ -67,6 +67,7 @@ Fitur dari proposal yang dibahas:
 8. **Metode Tahap 2** (menyesuaikan kondisi data Bibitor, lihat Tahap 2): laju permintaan = penjualan setahun dari neraca stok (stok awal + pembelian − stok akhir) ÷ hari SKU aktif; metrik harian dari Januari 2016; tren naik/turun dari pembelian bulanan.
 9. **Metode Tahap 3:** jembatan Bibitor ↔ Instacart di level **jenis minuman** (bukan hanya spirits/wine), karena SKU A dan SKU B bisa sama-sama spirits. Peran komplementer diukur dengan lift terhadap sesama order alkohol.
 10. **SKU B demo mengikuti proposal Bagian 3:** stok sudah di bawah ROP (sistem statis akan reorder), Vs turun, dan jenisnya tidak komplementer. Modal yang diselamatkan = nilai PO yang ditahan.
+11. **LLM agent: Amazon Nova 2 Lite di Bedrock (paket gratis AWS).** Claude di Bedrock butuh Paid Plan karena dijual lewat AWS Marketplace. Tim memilih tetap gratis dan tetap di AWS; pindah ke Claude nanti cukup lewat `.env`.
 
 ### Paket dataset
 
@@ -98,7 +99,7 @@ Fitur dari proposal yang dibahas:
 | Analitik | SQL DuckDB (aturan asosiasi), scikit-learn + LightGBM, statsforecast | Aturan asosiasi, model risiko stok habis, demand forecast | Tahap 3, 9 |
 | API | FastAPI + Pydantic | Tools tervalidasi dan mock API SAP | Tahap 4, 6 |
 | Agent | Strands Agents SDK (alternatif: LangGraph) | Loop agent & pemanggilan tools | Tahap 5 |
-| LLM | Amazon Bedrock | Penalaran agent | Tahap 5 |
+| LLM | Amazon Bedrock: Amazon Nova 2 Lite (Claude kalau upgrade ke Paid Plan) | Penalaran agent | Tahap 5 |
 | Dashboard | Streamlit | Health Score, notifikasi, 1-Click Approval | Tahap 7 |
 | Cloud | Amazon S3, Lambda atau ECS, RDS PostgreSQL | Arsitektur sesuai proposal | Tahap 8 |
 | SAP | SAP Business Accelerator Hub (api.sap.com), SAP BTP trial | Spesifikasi API PO & narasi integrasi | Tahap 6 |
@@ -258,24 +259,27 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 
 ### Tahap 5 — Agent layer (Strands Agents + Amazon Bedrock) 🟡
 
-**Model:** Claude Opus 5.5 lewat Converse API (API yang dipakai Strands).
+**Model: Amazon Nova 2 Lite** (`global.amazon.nova-2-lite-v1:0`) lewat Converse API, yaitu API yang dipakai Strands. Model card resmi AWS mencatat model ini mendukung pemanggilan tools, streaming, penalaran (*reasoning*) yang bisa dinyalakan, dan konteks 1 juta token, serta bisa dipanggil dari Sydney.
+
+**Kenapa bukan Claude:** Claude di Bedrock dijual lewat AWS Marketplace, dan paket gratis AWS tidak mengizinkan penawaran Marketplace yang berbayar. Hal ini muncul sebagai halaman *"Complete your account setup / Free account plan access limitations"* saat mencoba membuka Claude. Tim memilih tetap di paket gratis (opsi A), sehingga tidak perlu kartu dan sesuai proposal ("LLM di Amazon Bedrock"). Kalau nanti upgrade ke Paid Plan atau panitia menyediakan akun AWS, pindah ke Claude cukup dengan `python -m agent.cek_bedrock --claude`, tanpa mengubah kode agent.
 
 **Akun AWS tim memakai "pengalaman baru" AWS (berbasis proyek).** Akun jenis ini berbeda dari akun AWS klasik:
 - Tidak ada akun root. Proyek "Do the Thing" dimiliki oleh AWS Builder ID.
 - Region proyek ditetapkan otomatis dari negara kontak. Untuk Indonesia, region-nya **Asia Pacific (Sydney) `ap-southeast-2`** dan tidak bisa diganti.
 - Bedrock, AgentCore, Lambda, ECS, S3, RDS, dan API Gateway termasuk Free Tier. AWS Marketplace diizinkan khusus untuk Bedrock.
-- Panggilan Bedrock yang tidak membuat resource boleh dilakukan di semua region komersial. Tapi aturan akun juga menyebut "fitur multi-region atau cross-region tidak didukung", sehingga inference profile yang jalan harus dicoba langsung. Skrip cek di langkah 7 mencoba 4 kombinasi secara otomatis (`agent/config.py`): `au.` dan `global.` di Sydney, lalu `global.` dan `us.` di N. Virginia.
+- Panggilan Bedrock yang tidak membuat resource boleh dilakukan di semua region komersial. Tapi aturan akun juga menyebut "fitur multi-region atau cross-region tidak didukung", sehingga inference profile yang jalan harus dicoba langsung. Skrip cek di langkah 7 mencoba 4 kombinasi secara otomatis (`agent/config.py`): Nova 2 Lite `global.` dan Nova Pro `apac.` di Sydney, lalu Nova 2 Lite `us.` dan Nova Pro tanpa inference profile di N. Virginia. Kandidat terakhir ini adalah cadangan kalau semua profile cross-region diblokir.
 - Kredensial CLI memakai `aws login` (tanpa user IAM dan tanpa access key).
 
 **Persiapan (dikerjakan manual oleh tim, berurutan):**
 
 - [ ] **1. Aktifkan MFA.** Kalau login AWS lewat Google, GitHub, Apple, atau Amazon, aktifkan verifikasi 2 langkah di akun penyedia tersebut. Kalau login dengan email, buka https://settings.aws.com → **Manage security and sign-in** → halaman **Security** → **Register device** → **Authenticator app**, lalu pindai QR-nya dengan Google atau Microsoft Authenticator.
 - [x] **2. Cek region proyek.** Buka https://settings.aws.com → **Project** → bagian **Overview** → **Additional Info** → lihat **Region**. Hasil: **Asia Pacific (Sydney) `ap-southeast-2`** (terkonfirmasi 17 Okt 2026). Di halaman yang sama juga ada AWS account ID proyek.
-- [ ] **3. Aktifkan akses Claude di Bedrock.** Di konsol AWS, cari **Bedrock** di kolom Cari → **Katalog model** (*Model catalog*) → pilih **Claude Opus 5.5** → isi formulir use case Anthropic (cukup sekali, biasanya langsung disetujui). Contoh isian: organisasi "tim lomba Agentic AI Hackathon 2026", use case "prototipe agent analisis stok dan arus kas ritel". Lalu coba kirim pesan singkat di **Playground**. Kalau dijawab, akses sudah aktif.
-- [ ] **4. Install AWS CLI v2 (versi terbaru, karena perintah `aws login` butuh versi baru).** Di PowerShell: `winget install -e --id Amazon.AWSCLI`, lalu **tutup dan buka terminal baru**. Cek dengan `aws --version` dan `aws login help`; perintah kedua harus menampilkan bantuan, bukan error. Kalau winget tidak tersedia, unduh installer dari https://awscli.amazonaws.com/AWSCLIV2.msi.
-- [ ] **5. Login CLI ke proyek.** Jalankan `aws login`. Kalau ditanya region, isi `ap-southeast-2`. Browser akan terbuka; login, lalu pilih proyek **Do the Thing**. Kredensial berlaku 12 jam dan disimpan di `C:\Users\<nama>\.aws\`, di luar repo. Kalau sudah lewat 12 jam, jalankan `aws login` lagi (bisa diperpanjang tanpa izin ulang sampai 90 hari).
-- [ ] **6. Cek biaya.** Akun berada di paket gratis dengan kredit $100 (terlihat di menu nama akun, pojok kanan atas). Pemakaian Bedrock ditagih per token (https://aws.amazon.com/bedrock/pricing/). Belum ada sumber resmi yang memastikan kredit ini menanggung Claude, jadi setelah langkah 7, cek **Penagihan** apakah biayanya terpotong dari kredit. Kalau paket gratis ternyata menolak Claude, upgrade ke Paid Plan di AWS Settings lalu pasang **spend limit** (misalnya $20/bulan). Spend limit adalah fitur khusus akun jenis ini.
-- [ ] **7. Jalankan skrip cek.** Dengan `.venv` aktif: `python -m agent.cek_bedrock`. Skrip ini mengecek kredensial, lalu mencoba kombinasi region + model satu per satu dengan satu panggilan kecil ke Claude. Kombinasi pertama yang berhasil disimpan otomatis ke `.env` (tidak ikut di-commit). Hasil yang diharapkan: *"Semua cek lulus. Bedrock siap untuk Tahap 5."* Kalau semua kombinasi gagal, kirim pesan error-nya untuk dianalisis.
+- [ ] **3. Coba Amazon Nova di Playground (opsional, tapi membantu).** Di konsol AWS, cari **Bedrock** di kolom Cari → **Playground** (*Chat*) → pilih **Amazon Nova 2 Lite** → kirim "halo". Model buatan Amazon tidak butuh formulir use case. Kalau Playground menjawab, akses sudah aktif. Kalau muncul halaman *"Complete your account setup"* lagi, kirim screenshot-nya.
+- [x] **4. Install AWS CLI v2 (versi terbaru, karena perintah `aws login` butuh versi baru).** Terpasang: aws-cli 2.38.1. Kalau terminal belum mengenali `aws`, buka ulang VS Code atau jalankan `$env:Path += ";C:\Program Files\Amazon\AWSCLIV2"`. Di PowerShell: `winget install -e --id Amazon.AWSCLI`, lalu **tutup dan buka terminal baru**. Cek dengan `aws --version` dan `aws login help`; perintah kedua harus menampilkan bantuan, bukan error. Kalau winget tidak tersedia, unduh installer dari https://awscli.amazonaws.com/AWSCLIV2.msi.
+- [x] **5. Login CLI ke proyek.** Berhasil 17 Okt 2026 (profile `default`, role `AccountFullAccessRole`). Paket Python `awscrt` (dari `botocore[crt]`) wajib terpasang supaya boto3 bisa membaca kredensial ini; sudah ada di `requirements.txt`. Pertanyaan "Configure AWS skills and the AWS MCP server" dijawab `never`. Jalankan `aws login`. Kalau ditanya region, isi `ap-southeast-2`. Browser akan terbuka; login, lalu pilih proyek **Do the Thing**. Kredensial berlaku 12 jam dan disimpan di `C:\Users\<nama>\.aws\`, di luar repo. Kalau sudah lewat 12 jam, jalankan `aws login` lagi (bisa diperpanjang tanpa izin ulang sampai 90 hari).
+- [ ] **6. Cek biaya.** Akun berada di paket gratis dengan kredit $100 dan sisa 183 hari (terlihat di menu nama akun, pojok kanan atas). Paket gratis tidak menimbulkan tagihan; pemakaian Nova dipotong dari kredit (harga per token ada di https://aws.amazon.com/bedrock/pricing/). Setelah langkah 7, cek **Penagihan** untuk melihat kredit yang terpakai. Perlu diingat: paket gratis **otomatis ditutup** kalau kredit habis atau setelah 6 bulan, jadi pastikan tanggal lomba masih di dalam periode itu.
+- [ ] **7. Jalankan skrip cek.** Dengan `.venv` aktif: `python -m agent.cek_bedrock`. Skrip ini mengecek kredensial, lalu mencoba kombinasi region + model Nova satu per satu dengan satu panggilan kecil. Kombinasi pertama yang berhasil disimpan otomatis ke `.env` (tidak ikut di-commit). Hasil yang diharapkan: *"Semua cek lulus. Bedrock siap untuk Tahap 5."* Kalau semua kombinasi gagal, kirim pesan error-nya untuk dianalisis.
+  - **Hasil percobaan pertama (17 Okt 2026): belum lulus.** Di N. Virginia muncul *"Your account is currently being verified. Verification normally takes less than 2 hours"*, dan di Sydney muncul *"ValidationException: Operation not allowed"*. Akun AWS masih dalam verifikasi, dan hal yang sama menyebabkan halaman *"Complete your account setup"* saat membuka konsol Bedrock. **Tindakan:** cek email dari AWS (termasuk folder spam), tunggu verifikasi selesai, lalu jalankan skrip ini lagi. Kalau lebih dari 2 jam belum selesai, kirim email ke aws-verification@amazon.com dengan menyebutkan account ID proyek (ada di AWS Settings → Project → Info tambahan). Setelah terverifikasi, cek apakah Sydney masih "Operation not allowed"; kalau ya, kandidat N. Virginia tetap bisa dipakai.
 
 **Pembangunan agent (setelah persiapan lulus):**
 
@@ -388,7 +392,8 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 - **Jangan menggabungkan baris antar-dataset** seolah-olah satu perusahaan. Periodenya berbeda (Bibitor 2016, Online Retail II 2009–2011), begitu juga negara dan mata uangnya.
 - **SAP:** sandbox api.sap.com hanya untuk membaca data, jadi pembuatan PO memakai mock. SAP BTP trial berlaku 90 hari dan akun harus login minimal sekali setiap 30 hari.
 - **Biaya AWS:** pasang AWS Budgets sejak awal.
-- **Akun AWS "pengalaman baru" (proyek):** region tetap Asia Pacific (Sydney) `ap-southeast-2`, tidak ada akun root, akses konsol hanya lewat AWS Builder ID, kredensial CLI lewat `aws login`, dan fitur cross-region dibatasi. Hal ini berpengaruh ke Tahap 5 (pilihan inference profile Claude) dan Tahap 8 (semua resource deploy berada di Sydney). Kalau suatu saat butuh fitur yang tidak tersedia, bisa memakai "Activate advanced AWS features".
+- **Akun AWS "pengalaman baru" (proyek):** region tetap Asia Pacific (Sydney) `ap-southeast-2`, tidak ada akun root, akses konsol hanya lewat AWS Builder ID, kredensial CLI lewat `aws login`, dan fitur cross-region dibatasi. Hal ini berpengaruh ke Tahap 5 (pilihan model dan inference profile) dan Tahap 8 (semua resource deploy berada di Sydney). Kalau suatu saat butuh fitur yang tidak tersedia, bisa memakai "Activate advanced AWS features".
+- **Paket gratis AWS:** tidak bisa memakai Claude (Marketplace) dan tidak bisa menukar kredit promosi lain, termasuk kalau panitia memberi kode kredit AWS. Akun **otomatis ditutup** saat kredit $100 habis atau setelah 6 bulan (per 17 Okt 2026 sisa 183 hari, sekitar pertengahan April 2027). Data dan resource disimpan 90 hari setelah itu, dan masih bisa diselamatkan dengan upgrade ke Paid Plan.
 - **Data Indonesia:** tidak ada dataset ritel Indonesia di Kaggle yang memuat stok dan supplier. Data riil dari cabang menjadi bagian dari Fase 2.
 
 ---
@@ -441,3 +446,5 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 17 Okt 2026 | **Tahap 4 selesai.** FastAPI di `api/` dengan 6 tools agent, endpoint approval, audit log, dan 6 guardrail di kode (batas harian, 3σ, circuit breaker, idempotency key, status default Draft, Data Confidence). 21 test API baru (total 39) dan uji langsung alur demo toko 74. Syarat basis tren ≥ 90 unit ditambahkan setelah uji langsung menemukan tren palsu dari produk baru. |
 | 17 Okt 2026 | Langkah persiapan Tahap 5 ditulis (akses Claude di Bedrock, user IAM, AWS CLI, kredensial, biaya) beserta skrip cek `python -m agent.cek_bedrock`. Model dipilih: Claude Opus 5.5 (`global.anthropic.claude-opus-5-5`) di `us-east-1`. |
 | 17 Okt 2026 | Langkah persiapan Tahap 5 direvisi: akun AWS tim ternyata memakai "pengalaman baru" AWS (proyek "Do the Thing", region Sydney, tanpa root/user IAM konsol, paket gratis dengan kredit $100). Kredensial memakai `aws login`; skrip cek sekarang mencoba 4 kombinasi region + inference profile dan menyimpan yang berhasil ke `.env`. |
+| 17 Okt 2026 | Claude di Bedrock ternyata diblokir paket gratis (halaman *"Free account plan access limitations"*). Tim memilih **opsi A: Amazon Nova 2 Lite** di Bedrock, tetap gratis dan tetap di AWS. Skrip cek dan `agent/config.py` diubah ke kandidat Nova; Claude tetap bisa dites lewat `--claude`. |
+| 17 Okt 2026 | AWS CLI 2.38.1 terpasang dan `aws login` berhasil (ditambah `awscrt` di requirements). Tes Bedrock belum lulus karena **akun AWS masih dalam verifikasi** ("Your account is currently being verified"); ini juga penyebab halaman "Complete your account setup" di konsol Bedrock. Menunggu verifikasi lalu tes ulang. |

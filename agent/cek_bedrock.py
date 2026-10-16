@@ -1,18 +1,17 @@
-"""Cek kesiapan Amazon Bedrock untuk Tahap 5: `python -m agent.cek_bedrock`.
+"""Cek kesiapan Amazon Bedrock untuk Tahap 5: `python -m agent.cek_bedrock` (tambahkan `--claude` untuk Claude).
 
-Memeriksa kredensial AWS (dari `aws login`), lalu mencoba kombinasi region + inference profile
-Claude Opus 5.5 secara berurutan dengan satu panggilan Converse kecil. Kombinasi pertama yang
-berhasil disimpan ke .env, sehingga agent otomatis memakainya.
+Memeriksa kredensial AWS (dari `aws login`), lalu mencoba kombinasi region + model secara berurutan
+dengan satu panggilan Converse kecil. Kombinasi pertama yang berhasil disimpan ke .env, sehingga
+agent otomatis memakainya.
 """
 
-import os
 import sys
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from dotenv import set_key
 
-from agent.config import ENV_FILE, KANDIDAT_BEDROCK
+from agent.config import ENV_FILE, KANDIDAT_BEDROCK, KANDIDAT_CLAUDE
 
 
 def coba_converse(region: str, model_id: str) -> str:
@@ -28,20 +27,15 @@ def coba_converse(region: str, model_id: str) -> str:
 
 
 def main() -> None:
+    kandidat = KANDIDAT_CLAUDE if "--claude" in sys.argv else KANDIDAT_BEDROCK
     try:
-        identitas = boto3.client("sts", region_name=KANDIDAT_BEDROCK[0][0]).get_caller_identity()
+        identitas = boto3.client("sts", region_name=kandidat[0][0]).get_caller_identity()
     except (BotoCoreError, ClientError) as e:
         print(f"[GAGAL] Kredensial AWS tidak bisa dipakai: {e}\n"
               "Jalankan `aws login` lalu pilih proyek kalian di browser (langkah 5 di progress.md). "
               "Kredensial berlaku 12 jam; kalau sudah lewat, jalankan `aws login` lagi.")
         sys.exit(1)
     print(f"[ok] Kredensial AWS: {identitas['Arn']}\n")
-
-    kandidat = KANDIDAT_BEDROCK
-    if os.environ.get("CHIBIREX_BEDROCK_REGION") and os.environ.get("CHIBIREX_BEDROCK_MODEL_ID"):
-        kandidat = [(os.environ["CHIBIREX_BEDROCK_REGION"], os.environ["CHIBIREX_BEDROCK_MODEL_ID"])] + [
-            k for k in KANDIDAT_BEDROCK
-            if k != (os.environ["CHIBIREX_BEDROCK_REGION"], os.environ["CHIBIREX_BEDROCK_MODEL_ID"])]
 
     for region, model_id in kandidat:
         print(f"Mencoba {model_id} di {region} ...")
@@ -53,7 +47,7 @@ def main() -> None:
         except BotoCoreError as e:
             print(f"  [x] {e}")
             continue
-        print(f"  [ok] Claude menjawab: {jawaban}")
+        print(f"  [ok] Model menjawab: {jawaban}")
         set_key(str(ENV_FILE), "CHIBIREX_BEDROCK_REGION", region)
         set_key(str(ENV_FILE), "CHIBIREX_BEDROCK_MODEL_ID", model_id)
         print(f"\nTersimpan di {ENV_FILE.name}: region {region}, model {model_id}.")
@@ -61,11 +55,15 @@ def main() -> None:
         return
 
     print("\n[GAGAL] Tidak ada kombinasi yang berhasil. Penyebab yang umum:\n"
-          "  - AccessDeniedException 'don't have access to the model': formulir use case Anthropic belum diisi "
-          "di konsol Bedrock (langkah 3).\n"
+          "  - AccessDeniedException 'account is currently being verified': akun AWS masih diverifikasi "
+          "(biasanya < 2 jam). Cek email dari AWS (termasuk folder spam); kalau lebih dari 2 jam, kirim email "
+          "ke aws-verification@amazon.com. Setelah terverifikasi, jalankan skrip ini lagi.\n"
           "  - AccessDeniedException yang menyebut 'service control policy': akun proyek membatasi fitur "
-          "cross-region; kirim pesan error di atas supaya bisa dicarikan jalan lain.\n"
-          "  - ValidationException 'model identifier is invalid': model belum tersedia di region tersebut.")
+          "tersebut (misalnya cross-region).\n"
+          "  - Pesan soal Marketplace, subscription, atau paket gratis: model pihak ketiga seperti Claude "
+          "butuh Paid Plan.\n"
+          "  - ValidationException 'model identifier is invalid': model belum tersedia di region tersebut.\n"
+          "Kirim seluruh pesan di atas supaya bisa dicarikan jalan lain.")
     sys.exit(1)
 
 

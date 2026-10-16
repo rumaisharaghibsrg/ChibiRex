@@ -19,6 +19,7 @@ pydantic==2.14.1
 # Agent + AWS (Tahap 5, 8)
 strands-agents==1.61.1
 boto3==1.43.114
+awscrt==0.36.0  # botocore[crt]: wajib untuk kredensial dari `aws login`
 
 # Dashboard (Tahap 7)
 streamlit==1.66.0

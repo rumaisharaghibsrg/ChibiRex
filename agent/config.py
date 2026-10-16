@@ -7,10 +7,21 @@ from engine.config import ROOT
 ENV_FILE = ROOT / ".env"
 load_dotenv(ENV_FILE)
 
-# Kombinasi region + inference profile Claude Opus 5.5 yang dicoba `python -m agent.cek_bedrock`, berurutan.
-# Akun "pengalaman baru" AWS dari Indonesia berada di Asia Pacific (Sydney), jadi Sydney dicoba lebih dulu.
-# Hasil yang berhasil disimpan ke .env sebagai CHIBIREX_BEDROCK_REGION dan CHIBIREX_BEDROCK_MODEL_ID.
+# Model Amazon Nova (buatan Amazon, bukan lewat AWS Marketplace) bisa dipakai di paket gratis AWS.
+# Kombinasi region + model ini dicoba `python -m agent.cek_bedrock` secara berurutan; yang pertama
+# berhasil disimpan ke .env. Proyek AWS tim berada di Sydney, jadi Sydney dicoba lebih dulu.
+# Kandidat terakhir memanggil model langsung di region (tanpa inference profile), sebagai cadangan
+# kalau akun "pengalaman baru" memblokir fitur cross-region.
 KANDIDAT_BEDROCK = [
+    ("ap-southeast-2", "global.amazon.nova-2-lite-v1:0"),
+    ("ap-southeast-2", "apac.amazon.nova-pro-v1:0"),
+    ("us-east-1", "us.amazon.nova-2-lite-v1:0"),
+    ("us-east-1", "amazon.nova-pro-v1:0"),
+]
+
+# Claude di Bedrock dijual lewat AWS Marketplace, jadi butuh Paid Plan.
+# Dicoba dengan `python -m agent.cek_bedrock --claude` kalau suatu saat akun di-upgrade.
+KANDIDAT_CLAUDE = [
     ("ap-southeast-2", "au.anthropic.claude-opus-5-5"),
     ("ap-southeast-2", "global.anthropic.claude-opus-5-5"),
     ("us-east-1", "global.anthropic.claude-opus-5-5"),
