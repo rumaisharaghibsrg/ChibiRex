@@ -20,7 +20,7 @@
 | 4 | Tools API + guardrail | ✅ Selesai | 13/13 |
 | 5 | Agent layer (Strands + Ollama) | ✅ Selesai | 9/9 |
 | 6 | Mock API SAP | 🟡 Inti selesai (sisa opsional) | 4/6 |
-| 7 | Dashboard (Streamlit) | ⬜ Belum | 0/7 |
+| 7 | Dashboard (Streamlit) | ⏸️ Ditunda (menunggu desain UI/UX) | 0/7 |
 | 8 | Deploy ke AWS (wajib untuk final) | 🟡 Berjalan | 3/12 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ⬜ Belum | 0/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/7 |
@@ -28,7 +28,7 @@
 | | **Total** | | **67/112 (±60%)** |
 
 **Posisi sekarang:** Tahap 6 inti selesai: agent membuat draf PO, manajer approve, PO terbentuk di tiruan SAP (nomor 45xxxxxxxx).
-**Target terdekat:** kirim pertanyaan mentoring sebelum **Senin 19 Okt 2026, 16.00 WIB** (Tahap 11), lalu Tahap 7 (dashboard Streamlit: Health Score, draf PO dengan tombol 1-Click Approval dan nomor PO SAP, hold, realokasi, serta jejak keputusan agent).
+**Target terdekat:** kirim pertanyaan mentoring sebelum **Senin 19 Okt 2026, 16.00 WIB** (Tahap 11). Tahap 7 (dashboard) ditunda sampai desain UI/UX siap; sambil menunggu, kerjakan Tahap 9 (model risiko stok habis + Confidence Score untuk Predictive Stockout Alert, dan skenario uji 3σ dari Online Retail II).
 
 Legenda: ✅ selesai · 🟡 berjalan · ⬜ belum mulai
 
@@ -324,7 +324,9 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 - [ ] (Opsional) Daftar akun SAP Community dan ambil API key gratis di api.sap.com, untuk membandingkan format dengan sandbox SAP (sandbox hanya bisa membaca data contoh)
 - [ ] (Opsional) Daftar SAP BTP trial **mendekati jadwal hackathon**, karena trial hanya 90 hari lalu akun dan isinya dihapus. Integrasi lewat SAP BTP/Integration Suite memberi poin tambahan dari panitia.
 
-### Tahap 7 — Dashboard (Streamlit) ⬜
+### Tahap 7 — Dashboard (Streamlit) ⏸️
+
+**Ditunda sampai desain UI/UX tim siap** (keputusan 18 Okt 2026). Tidak bisa dilewati sepenuhnya: panitia meminta demo yang berjalan di final. Sementara itu demo bisa lewat terminal (`python -m agent.run --store 74`) dan approve PO lewat Swagger (`/docs`). Semua data untuk dashboard sudah tersedia di API Tahap 4–6.
 
 - [ ] Setup Streamlit di `dashboard/`
 - [ ] Tampilkan Health Score per SKU per cabang
