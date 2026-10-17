@@ -13,18 +13,22 @@ from datetime import date, timedelta
 from uuid import uuid4
 
 import duckdb
+import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, Response
 
-from api import guardrails, state
-from api.schemas import (INVENTORY_ID, AuditEntry, DraftPORequest, Hold, HoldRequest, Keputusan, PurchaseOrder,
-                         Realokasi, Sku, StatusGuardrail, StatusPO, StatusStok, Substitusi)
+from api import guardrails, sap, state
+from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AuditEntry, DraftPORequest, Hold, HoldRequest,
+                         Keputusan, Prioritas, PurchaseOrder, Realokasi, Sku, StatusGuardrail, StatusPO, StatusStok,
+                         Substitusi)
 from api.settings import Settings
 from engine import basket, config
 from engine.format import angka, rupiah
+from sap_mock.app import create_sap_mock
 
 TOOLS = "Tools agent"
 APPROVAL = "Approval manusia"
 GUARDRAIL = "Guardrail & audit"
+AGENT = "Jejak agent"
 
 SKU_SQL = """
     select s.*, bj.jenis, bj.status_komplementer
@@ -61,7 +65,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     _routes(app)
+    # Tiruan SAP ikut berjalan di server yang sama (/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV).
+    app.mount("/sap", settings.sap_mock_app or create_sap_mock(settings.sap_mock_db))
     return app
+
+
+def _sap_client(s: Settings) -> httpx.Client:
+    return s.sap_client() if s.sap_client else httpx.Client(base_url=s.sap_base_url, timeout=15)
 
 
 def _settings(request: Request) -> Settings:
@@ -82,6 +92,11 @@ def _ambil_sku(cur, inventory_id: str) -> dict:
     if row is None:
         raise galat(404, "SKU_TIDAK_ADA", f"SKU {inventory_id} tidak ditemukan.")
     return dict(zip([d[0] for d in rel.description], row))
+
+
+def _dengan_arah(sku: dict, s: Settings) -> dict:
+    sku["arah_tren"] = guardrails.arah_tren(sku, s)
+    return sku
 
 
 def _hash(body) -> str:
@@ -124,7 +139,7 @@ def _routes(app: FastAPI) -> None:
     # ---------------------------------------------------------------- tools baca
 
     @app.get("/sku", response_model=list[Sku], tags=[TOOLS], operation_id="list_sku")
-    def list_sku(store: int | None = None, status_stok: StatusStok | None = None,
+    def list_sku(request: Request, store: int | None = None, status_stok: StatusStok | None = None,
                  limit: int = Query(20, ge=1, le=200), cur=Depends(_duck)):
         """Daftar SKU, bisa difilter per toko dan status stok. Diurutkan dari nilai PO yang disarankan terbesar."""
         where, params = [], []
@@ -137,12 +152,32 @@ def _routes(app: FastAPI) -> None:
         sql = SKU_SQL + (" where " + " and ".join(where) if where else "")
         rel = cur.execute(sql + " order by s.nilai_saran_po_idr desc nulls last, s.inventory_id limit ?", params + [limit])
         cols = [d[0] for d in rel.description]
-        return [dict(zip(cols, row)) for row in rel.fetchall()]
+        s = _settings(request)
+        return [_dengan_arah(dict(zip(cols, row)), s) for row in rel.fetchall()]
 
     @app.get("/sku/{inventory_id}", response_model=Sku, tags=[TOOLS], operation_id="get_sku_metrics")
-    def get_sku_metrics(inventory_id: str = InventoryIdPath, cur=Depends(_duck)):
+    def get_sku_metrics(request: Request, inventory_id: str = InventoryIdPath, cur=Depends(_duck)):
         """Metrik satu SKU di satu toko: stok, Vs, tren, lead time, reorder point, saran PO, dan Data Confidence Score."""
-        return _ambil_sku(cur, inventory_id)
+        return _dengan_arah(_ambil_sku(cur, inventory_id), _settings(request))
+
+    @app.get("/stores/{store}/prioritas", response_model=Prioritas, tags=[TOOLS], operation_id="list_prioritas")
+    def list_prioritas(store: int, request: Request, limit_naik: int = Query(2, ge=0, le=10),
+                       limit_turun: int = Query(3, ge=0, le=10), cur=Depends(_duck)):
+        """SKU yang perlu reorder di sebuah toko, dikelompokkan oleh kode: `naik` (penjualan naik, kandidat draf PO,
+        urut dari tren × laju penjualan) dan `turun` (penjualan turun, kandidat Hold Reorder, urut dari nilai PO)."""
+        s = _settings(request)
+        dasar = (SKU_SQL + " where s.store = ? and s.perlu_reorder and s.beli_jan_sep >= ?"
+                 " and s.data_confidence >= ? and s.nilai_saran_po_idr > 0")
+        params = [store, config.TREN_BASIS_MIN, s.data_confidence_min]
+
+        def ambil(syarat: str, urutan: str, nilai: float, limit: int) -> list[dict]:
+            rel = cur.execute(f"{dasar} and {syarat} order by {urutan} limit ?", params + [nilai, limit])
+            cols = [d[0] for d in rel.description]
+            return [_dengan_arah(dict(zip(cols, row)), s) for row in rel.fetchall()]
+
+        return {"store": store,
+                "naik": ambil("s.tren_beli >= ?", "s.tren_beli * s.permintaan_harian desc", s.tren_naik_min, limit_naik),
+                "turun": ambil("s.tren_beli < ?", "s.nilai_saran_po_idr desc", 1, limit_turun)}
 
     @app.get("/sku/{inventory_id}/substitution", response_model=Substitusi, tags=[TOOLS],
              operation_id="check_substitution")
@@ -177,6 +212,13 @@ def _routes(app: FastAPI) -> None:
                 response.status_code = 200
                 response.headers["Idempotent-Replay"] = "true"
                 return _po(con, lama)
+            # Satu SKU hanya boleh punya satu draf yang menunggu keputusan manajer (mencegah PO ganda antar-sesi).
+            draf = con.execute("select po_id from purchase_orders where inventory_id = ? and status = 'DRAFT'",
+                               (body.inventory_id,)).fetchone()
+            if draf:
+                response.status_code = 200
+                response.headers["Existing-Draft"] = "true"
+                return _po(con, draf[0])
 
             langgar = guardrails.cek_po(con, s, sku, qty, nilai, sekarang)
             status = "DITAHAN_GUARDRAIL" if langgar else "DRAFT"
@@ -217,6 +259,15 @@ def _routes(app: FastAPI) -> None:
         with state.baca(_settings(request).state_db) as con:
             return _po(con, po_id)
 
+    @app.get("/purchase-orders/{po_id}/sap-payload", tags=[APPROVAL])
+    def sap_payload(po_id: str, request: Request):
+        """Pratinjau payload SAP (API_PURCHASEORDER_PROCESS_SRV) yang akan dikirim saat PO disetujui."""
+        s = _settings(request)
+        with state.baca(s.state_db) as con:
+            po = _po(con, po_id)
+        return {"po_id": po_id, "tujuan": f"POST {s.sap_base_url}/A_PurchaseOrder",
+                "payload": sap.payload_po(po, s.clock())}
+
     def _putuskan(po_id: str, body: Keputusan, request: Request, status_baru: str) -> dict:
         s = _settings(request)
         sekarang = s.clock()
@@ -225,16 +276,27 @@ def _routes(app: FastAPI) -> None:
             if po["status"] != "DRAFT":
                 raise galat(409, "STATUS_TIDAK_VALID",
                             f"PO {po_id} berstatus {po['status']}; hanya PO DRAFT yang bisa diputuskan.")
+            sap_po = None
+            if status_baru == "APPROVED":
+                # Persetujuan baru berlaku kalau PO berhasil dibuat di SAP; kalau gagal, PO tetap DRAFT.
+                try:
+                    with _sap_client(s) as klien:
+                        sap_po = sap.kirim_po(klien, sap.payload_po(po, sekarang))["PurchaseOrder"]
+                except sap.SapError as e:
+                    raise galat(502, "SAP_GAGAL", f"PO belum disetujui karena gagal dikirim ke SAP. {e}")
             con.execute(
                 """update purchase_orders set status = ?, diputuskan_oleh = ?, diputuskan_pada = ?,
-                   catatan_keputusan = ? where po_id = ?""",
-                (status_baru, body.oleh, sekarang.isoformat(timespec="seconds"), body.catatan, po_id))
-            state.audit(con, sekarang, body.oleh, f"po_{status_baru.lower()}", po_id, {"catatan": body.catatan})
+                   catatan_keputusan = ?, sap_po_number = ?, sap_dikirim_pada = ? where po_id = ?""",
+                (status_baru, body.oleh, sekarang.isoformat(timespec="seconds"), body.catatan, sap_po,
+                 sekarang.isoformat(timespec="seconds") if sap_po else None, po_id))
+            state.audit(con, sekarang, body.oleh, f"po_{status_baru.lower()}", po_id,
+                        {"catatan": body.catatan, "sap_po_number": sap_po})
             return _po(con, po_id)
 
     @app.post("/purchase-orders/{po_id}/approve", response_model=PurchaseOrder, tags=[APPROVAL])
     def approve_purchase_order(po_id: str, body: Keputusan, request: Request):
-        """1-Click Approval oleh manajer. Hanya PO berstatus DRAFT yang bisa disetujui."""
+        """1-Click Approval oleh manajer: PO dibuat di SAP (API_PURCHASEORDER_PROCESS_SRV) dan nomor PO SAP disimpan.
+        Hanya PO berstatus DRAFT yang bisa disetujui; kalau SAP gagal, persetujuan dibatalkan dan PO tetap DRAFT."""
         return _putuskan(po_id, body, request, "APPROVED")
 
     @app.post("/purchase-orders/{po_id}/reject", response_model=PurchaseOrder, tags=[APPROVAL])
@@ -361,6 +423,25 @@ def _routes(app: FastAPI) -> None:
                         (f"direset oleh {body.oleh}", sekarang.isoformat(timespec="seconds")))
             state.audit(con, sekarang, body.oleh, "circuit_breaker_reset", None, {"catatan": body.catatan})
         return guardrail_status(request)
+
+    @app.post("/agent-runs", response_model=AgentRun, status_code=201, tags=[AGENT])
+    def simpan_agent_run(body: AgentRunIn, request: Request):
+        """Simpan jejak satu kali jalannya agent (tools yang dipanggil dan alasannya) untuk dashboard."""
+        s = _settings(request)
+        waktu = s.clock().isoformat(timespec="seconds")
+        with state.transaksi(s.state_db) as con:
+            con.execute(
+                "insert or replace into agent_runs values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (body.run_id, waktu, body.tugas, body.store, body.model, body.jawaban,
+                 json.dumps([l.model_dump() for l in body.langkah], ensure_ascii=False, default=str),
+                 body.durasi_dtk, body.token_input, body.token_output, int(body.berhasil)))
+        return {**body.model_dump(), "waktu": waktu}
+
+    @app.get("/agent-runs", response_model=list[AgentRun], tags=[AGENT])
+    def list_agent_runs(request: Request, limit: int = Query(20, ge=1, le=200)):
+        with state.baca(_settings(request).state_db) as con:
+            rows = con.execute("select * from agent_runs order by waktu desc limit ?", (limit,)).fetchall()
+        return [{**dict(r), "langkah": json.loads(r["langkah"]), "berhasil": bool(r["berhasil"])} for r in rows]
 
     @app.get("/audit-log", response_model=list[AuditEntry], tags=[GUARDRAIL])
     def audit_log(request: Request, limit: int = Query(50, ge=1, le=500)):

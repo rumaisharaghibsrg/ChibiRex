@@ -77,22 +77,32 @@ def perbarui_circuit_breaker(con: sqlite3.Connection, s: Settings, sekarang: dat
     return True
 
 
+def arah_tren(sku: dict, s: Settings) -> str:
+    """Label tren velocity yang dipakai guardrail, realokasi, dan agent (agar model tidak membandingkan angka)."""
+    tren = sku["tren_beli"]
+    if tren is None or sku["beli_jan_sep"] < config.TREN_BASIS_MIN:
+        return "TIDAK_ANDAL"
+    if tren >= s.tren_naik_min:
+        return "NAIK"
+    return "TURUN" if tren < 1 else "STABIL"
+
+
 def cek_hold(s: Settings, sku: dict, substitusi: dict) -> list[dict]:
     """Syarat Hold Reorder dari proposal: stok sudah di titik reorder, Vs turun, dan tidak komplementer."""
     hasil = []
     if not sku["perlu_reorder"]:
         hasil.append(pelanggaran(
             "TIDAK_PERLU_REORDER", "Stok masih di atas reorder point, jadi tidak ada reorder yang perlu ditahan."))
-    tren = sku["tren_beli"]
-    if sku["beli_jan_sep"] < config.TREN_BASIS_MIN:
+    arah = arah_tren(sku, s)
+    if arah == "TIDAK_ANDAL":
         hasil.append(pelanggaran(
             "TREN_TIDAK_ANDAL",
-            f"Pembelian Jan–Sep hanya {sku['beli_jan_sep']} unit (< {config.TREN_BASIS_MIN}), jadi penurunan Vs "
-            "belum bisa dipercaya. Perlu review manusia."))
-    elif tren is None or tren >= 1:
+            f"Pembelian Jan–Sep hanya {sku['beli_jan_sep']} unit (minimal {config.TREN_BASIS_MIN}) atau tren tidak "
+            "diketahui, jadi penurunan Vs belum bisa dipercaya. Perlu review manusia."))
+    elif arah != "TURUN":
         hasil.append(pelanggaran(
             "VS_TIDAK_TURUN",
-            f"Hold hanya untuk SKU yang Vs-nya turun; tren beli SKU ini {'tidak diketahui' if tren is None else angka(tren, 2) + 'x'}."))
+            f"Hold hanya untuk SKU yang Vs-nya turun; tren beli SKU ini {angka(sku['tren_beli'], 2)}x ({arah})."))
     if substitusi["status"] == "KOMPLEMENTER":
         m = substitusi["mitra"][0]
         hasil.append(pelanggaran(

@@ -47,10 +47,31 @@ class Sku(BaseModel):
     vs_jan: float | None
     vs_tahun: float | None
     tren_beli: float | None
+    arah_tren: Literal["NAIK", "TURUN", "STABIL", "TIDAK_ANDAL"] | None = None
     beli_jan_sep: int
     beli_q4: int
     hari_stok_kosong_jan: int | None
     data_confidence: float
+
+
+class SkuRingkas(BaseModel):
+    inventory_id: str
+    deskripsi: str | None
+    jenis: str | None
+    arah_tren: str
+    tren_beli: float | None
+    perlu_reorder: bool
+    status_stok: StatusStok
+    stok_akhir: int
+    reorder_point: float
+    saran_qty_po: int
+    nilai_saran_po_idr: float | None
+
+
+class Prioritas(BaseModel):
+    store: int
+    naik: list[SkuRingkas] = Field(description="Penjualan naik dan perlu reorder: kandidat draf PO")
+    turun: list[SkuRingkas] = Field(description="Penjualan turun dan perlu reorder: kandidat Hold Reorder")
 
 
 class Mitra(BaseModel):
@@ -97,6 +118,8 @@ class PurchaseOrder(BaseModel):
     diputuskan_oleh: str | None
     diputuskan_pada: str | None
     catatan_keputusan: str | None
+    sap_po_number: str | None = Field(default=None, description="Nomor PO di SAP setelah disetujui")
+    sap_dikirim_pada: str | None = None
 
 
 class Keputusan(Request):
@@ -152,6 +175,30 @@ class StatusGuardrail(BaseModel):
     total_po_hari_ini_idr: float | None
     data_confidence_min: float
     outlier_sigma: float
+
+
+class LangkahAgent(BaseModel):
+    tool: str
+    input: dict
+    output: dict | list | str | None
+    detik: float
+
+
+class AgentRunIn(Request):
+    run_id: str = Field(min_length=8, max_length=64)
+    tugas: str = Field(min_length=1, max_length=2000)
+    store: int | None = None
+    model: str = Field(max_length=200)
+    jawaban: str = Field(max_length=20000)
+    langkah: list[LangkahAgent]
+    durasi_dtk: float
+    token_input: int
+    token_output: int
+    berhasil: bool
+
+
+class AgentRun(AgentRunIn):
+    waktu: str
 
 
 class AuditEntry(BaseModel):

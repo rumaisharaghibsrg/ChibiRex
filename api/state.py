@@ -24,7 +24,9 @@ create table if not exists purchase_orders (
     dibuat_pada text not null,
     diputuskan_oleh text,
     diputuskan_pada text,
-    catatan_keputusan text
+    catatan_keputusan text,
+    sap_po_number text,           -- nomor PO di SAP setelah disetujui dan terkirim
+    sap_dikirim_pada text
 );
 
 create table if not exists holds (
@@ -61,6 +63,20 @@ create table if not exists circuit_breaker (
 );
 insert or ignore into circuit_breaker values (1, 0, null, null);
 
+create table if not exists agent_runs (
+    run_id text primary key,
+    waktu text not null,
+    tugas text not null,
+    store integer,
+    model text not null,
+    jawaban text not null,
+    langkah text not null,        -- JSON: daftar pemanggilan tool beserta input/output
+    durasi_dtk real not null,
+    token_input integer not null,
+    token_output integer not null,
+    berhasil integer not null
+);
+
 create table if not exists audit_log (
     id integer primary key autoincrement,
     waktu text not null,
@@ -78,11 +94,20 @@ def connect(path: Path) -> sqlite3.Connection:
     return con
 
 
+# Kolom yang ditambahkan setelah tabel pertama kali dibuat; ditambahkan otomatis ke database lama.
+KOLOM_TAMBAHAN = {"purchase_orders": [("sap_po_number", "text"), ("sap_dikirim_pada", "text")]}
+
+
 def init(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     con = connect(path)
     try:
         con.executescript(SCHEMA)
+        for tabel, kolom in KOLOM_TAMBAHAN.items():
+            ada = {r["name"] for r in con.execute(f"pragma table_info({tabel})")}
+            for nama, tipe in kolom:
+                if nama not in ada:
+                    con.execute(f"alter table {tabel} add column {nama} {tipe}")
     finally:
         con.close()
 
