@@ -5,6 +5,17 @@ RAW_BIBITOR = ROOT / "data" / "raw" / "bibitor"
 DB_PATH = ROOT / "data" / "processed" / "chibirex.duckdb"
 KAGGLE_BIBITOR = "bhanupratapbiswas/inventory-analysis-case-study"
 RAW_INSTACART = ROOT / "data" / "raw" / "instacart"
+# Mirror dataset Product Backorders lengkap (1,69 juta baris train); lisensi di Kaggle: unknown.
+RAW_BACKORDERS = ROOT / "data" / "raw" / "backorders"
+KAGGLE_BACKORDERS = "chandanareddy12/back-order-prediction"
+RAW_ONLINE_RETAIL = ROOT / "data" / "raw" / "online_retail"
+KAGGLE_ONLINE_RETAIL = "mashlyn/online-retail-ii-uci"
+MODEL_DIR = ROOT / "models"
+MODEL_RISIKO = MODEL_DIR / "risiko_stockout.txt"
+MODEL_RISIKO_METRIK = MODEL_DIR / "risiko_stockout_metrik.json"
+# Level risiko stok habis dari skor peringkat 0-100 (Confidence Score alert).
+RISIKO_TINGGI = 90
+RISIKO_SEDANG = 70
 # File kompetisi Instacart tidak tersedia lewat API Kaggle; mirror ini berisi file yang identik.
 KAGGLE_INSTACART = "psparks/instacart-market-basket-analysis"
 

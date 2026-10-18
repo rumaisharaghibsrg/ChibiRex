@@ -54,11 +54,16 @@ def buat_analytics_db(path) -> None:
         {"antecedent": "tequila", "consequent": "liqueur", "consequent_alkohol": True, "n_xy": 160, "lift_alk": 3.2},
         {"antecedent": "vodka", "consequent": "gin", "consequent_alkohol": True, "n_xy": 319, "lift_alk": 1.46},
     ])
+    risiko = pd.DataFrame([
+        {"inventory_id": sku_id(10), "risiko_stockout": 0.31, "skor_risiko": 96, "level_risiko": "TINGGI"},
+        {"inventory_id": sku_id(20), "risiko_stockout": 0.05, "skor_risiko": 60, "level_risiko": "RENDAH"},
+    ])
     sku_df, jenis_df = pd.DataFrame(rows), pd.DataFrame(jenis)
     con = duckdb.connect(str(path))
     con.execute("create table sku_metrics as select * from sku_df")
     con.execute("create table brand_jenis as select * from jenis_df")
     con.execute("create table aturan_asosiasi as select * from aturan")
+    con.execute("create table risiko_stockout as select * from risiko")
     con.close()
 
 

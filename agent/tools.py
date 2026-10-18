@@ -13,9 +13,9 @@ MAKS_PANGGILAN = 15  # pengaman kalau model berputar-putar memanggil tool
 
 FIELD_SKU = ["inventory_id", "deskripsi", "jenis", "status_stok", "perlu_reorder", "arah_tren", "tren_beli",
              "stok_akhir", "reorder_point", "saran_qty_po", "nilai_saran_po_idr", "tgl_perkiraan_habis",
-             "status_komplementer", "data_confidence"]
+             "level_risiko", "skor_risiko", "status_komplementer", "data_confidence"]
 FIELD_PRIORITAS = ["inventory_id", "deskripsi", "jenis", "arah_tren", "perlu_reorder", "saran_qty_po",
-                   "nilai_saran_po_idr"]
+                   "nilai_saran_po_idr", "level_risiko", "skor_risiko"]
 FIELD_PO = ["po_id", "inventory_id", "deskripsi", "qty", "nilai_idr", "status"]
 FIELD_HOLD = ["hold_id", "inventory_id", "deskripsi", "qty_ditahan", "qty_uji", "modal_diselamatkan_idr",
               "review_pada", "status"]

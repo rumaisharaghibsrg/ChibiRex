@@ -3,7 +3,7 @@
 **Smart Inventory & Cash Flow Copilot** · Lomba Agentic AI Hackathon 2026
 
 > Disusun dari pembahasan di claude.ai ([link percakapan](https://claude.ai/share/459288bb-adfd-4d82-be55-6cf142bf8bc8)) dan PDF *Rencana_Penggabungan_Dataset_Copilot.pdf* yang dibuat di percakapan tersebut.
-> Terakhir diperbarui: **17 Oktober 2026**
+> Terakhir diperbarui: **18 Oktober 2026**
 
 **Cara pakai:** ubah `[ ]` menjadi `[x]` saat sebuah langkah selesai, lalu perbarui tabel ringkasan dan log progres di bagian bawah.
 
@@ -22,13 +22,13 @@
 | 6 | Mock API SAP | 🟡 Inti selesai (sisa opsional) | 4/6 |
 | 7 | Dashboard (Streamlit) | ⏸️ Ditunda (menunggu desain UI/UX) | 0/7 |
 | 8 | Deploy ke AWS (wajib untuk final) | 🟡 Berjalan | 3/12 |
-| 9 | Paket Kuat (Backorders + Online Retail II) | ⬜ Belum | 0/9 |
-| 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/7 |
+| 9 | Paket Kuat (Backorders + Online Retail II) | ✅ Selesai | 9/9 |
+| 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/8 |
 | 11 | Demo & pitch | ⬜ Belum | 0/11 |
-| | **Total** | | **67/112 (±60%)** |
+| | **Total** | | **76/113 (±67%)** |
 
-**Posisi sekarang:** Tahap 6 inti selesai: agent membuat draf PO, manajer approve, PO terbentuk di tiruan SAP (nomor 45xxxxxxxx).
-**Target terdekat:** kirim pertanyaan mentoring sebelum **Senin 19 Okt 2026, 16.00 WIB** (Tahap 11). Tahap 7 (dashboard) ditunda sampai desain UI/UX siap; sambil menunggu, kerjakan Tahap 9 (model risiko stok habis + Confidence Score untuk Predictive Stockout Alert, dan skenario uji 3σ dari Online Retail II).
+**Posisi sekarang:** Tahap 9 selesai: setiap SKU punya Confidence Score risiko stok habis (model LightGBM dari Product Backorders) yang tampil di API dan ringkasan agent, dan skenario uji Runaway PO dari pola borongan Online Retail II membuktikan guardrail 3σ + circuit breaker bekerja.
+**Target terdekat:** kirim pertanyaan mentoring sebelum **Senin 19 Okt 2026, 16.00 WIB** (Tahap 11). Tahap 7 (dashboard) ditunda sampai desain UI/UX siap; Tahap 8 menunggu verifikasi akun AWS. Pilihan berikutnya: Tahap 10 (validasi data riil Montgomery County + angka akurasi forecast M5) atau sisa opsional Tahap 6.
 
 Legenda: ✅ selesai · 🟡 berjalan · ⬜ belum mulai
 
@@ -72,7 +72,7 @@ Fitur dari proposal yang dibahas:
 1. **Dataset digabung per peran (per modul), bukan baris demi baris.** Sumber datanya berasal dari perusahaan, negara, periode, dan mata uang yang berbeda.
 2. **Paket dataset dikerjakan bertahap:** Minimal → Kuat → Maksimal. Paket Minimal dikerjakan dulu sampai demo jalan end-to-end.
 3. **Jembatan kategori Bibitor ↔ Instacart:** aturan asosiasi dari aisle alkohol Instacart dipetakan ke kolom `Classification` Bibitor.
-4. **Transfer model Backorders → Bibitor:** ditampilkan sebagai model pra-latih dengan skor indikatif, lalu dikalibrasi ulang saat pilot Fase 2.
+4. **Transfer model Backorders → Bibitor:** ditampilkan sebagai model pra-latih dengan skor indikatif, lalu dikalibrasi ulang saat pilot Fase 2. Model hanya memakai fitur rasio yang bebas skala (cover stok dalam bulan, tren penjualan), bukan angka mentah.
 5. **SAP memakai mock API** yang mengikuti format payload API Purchase Order SAP, karena sandbox api.sap.com hanya untuk membaca data.
 6. **Agent:** Strands Agents SDK + Amazon Bedrock. Bedrock AgentCore bersifat opsional, untuk demo yang lebih "production".
 7. **Mata uang:** USD dikonversi ke Rupiah dengan satu kurs tetap yang dicantumkan, dan diberi label "simulasi".
@@ -80,6 +80,7 @@ Fitur dari proposal yang dibahas:
 9. **Metode Tahap 3:** jembatan Bibitor ↔ Instacart di level **jenis minuman** (bukan hanya spirits/wine), karena SKU A dan SKU B bisa sama-sama spirits. Peran komplementer diukur dengan lift terhadap sesama order alkohol.
 10. **SKU B demo mengikuti proposal Bagian 3:** stok sudah di bawah ROP (sistem statis akan reorder), Vs turun, dan jenisnya tidak komplementer. Modal yang diselamatkan = nilai PO yang ditahan.
 11. **LLM agent: Ollama dengan Qwen3 14B di laptop** (keputusan tim 17 Okt 2026, diizinkan panitia untuk prototipe). Sebelumnya sempat dipilih Amazon Nova di Bedrock, tetapi akun AWS tertahan verifikasi. Penyedia model dipilih lewat `CHIBIREX_LLM_PROVIDER` (`ollama` / `bedrock`), sehingga build final bisa memakai Bedrock tanpa mengubah kode agent.
+12. **Confidence Score = peringkat risiko 0–100, bukan probabilitas mentah** (Tahap 9). Probabilitas dari model Backorders tidak terkalibrasi untuk minuman, tetapi urutannya bisa dipercaya. Level: TINGGI ≥ 90, SEDANG ≥ 70, sisanya RENDAH. Skor ini informasi untuk manajer; keputusan reorder tetap dari ROP dan guardrail.
 
 ### Paket dataset
 
@@ -365,33 +366,38 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 - [ ] LLM di AWS: Ollama di EC2 dengan GPU (ditagih per jam, nyalakan hanya saat dibutuhkan) atau Amazon Bedrock. (Opsional) Bedrock AgentCore untuk menjalankan agent.
 - [ ] Cek biaya di AWS Budgets setelah deploy
 
-### Tahap 9 — Paket Kuat (Product Backorders + Online Retail II) ⬜
+### Tahap 9 — Paket Kuat (Product Backorders + Online Retail II) ✅
 
-Dikerjakan jika waktu masih cukup setelah paket Minimal jalan end-to-end.
+**Cara menjalankan:** semua ikut di `python -m engine.pipeline` (data diunduh otomatis; model dilatih sekali lalu disimpan di `models/`, latih ulang dengan `python -m engine.risiko --latih`). Skenario uji: dengan API berjalan, `python -m agent.skenario_runaway --store 74` (circuit breaker direset otomatis di akhir; `--biarkan-terbuka` untuk menahannya).
 
-- [ ] **Backorders:** unduh file training dan test (`Kaggle_Training_Dataset_v2.csv` atau `Training_BOP.csv`). Ambil `national_inv`, `lead_time`, `in_transit_qty`, `forecast_3/6/9_month`, `sales_1/3/6/9_month`, `perf_6_month_avg`, `perf_12_month_avg`, dan target `went_on_backorder`.
-- [ ] **Backorders:** bersihkan data. Nilai -99 di kolom performa supplier berarti kosong, `lead_time` ada yang kosong, dan cek baris kosong di akhir file.
-- [ ] Latih classifier risiko stok habis dengan LightGBM. Kelasnya tidak seimbang, jadi pakai class weight atau undersampling, dan ukur dengan PR-AUC.
-- [ ] Buat model demand forecast (statsforecast) untuk mengisi fitur `forecast_3/6/9_month`
-- [ ] Hitung ulang fitur Backorders dari Bibitor (lihat tabel mapping di bawah), lalu beri skor risiko untuk tiap SKU per cabang
-- [ ] Tampilkan skor sebagai model pra-latih yang bersifat indikatif dan akan dikalibrasi ulang di pilot Fase 2
-- [ ] **Online Retail II:** ambil kolom Invoice, StockCode, Quantity, InvoiceDate, Price, Customer ID. Buang invoice berawalan "C", kuantitas ≤ 0, dan StockCode non-produk (POST, M).
-- [ ] Per StockCode, hitung kuantitas harian, rata-rata, dan σ. Ambil hari dengan kuantitas > rata-rata + 3σ sebagai pola pesanan borongan.
-- [ ] Skenario uji: suntikkan pola borongan dalam bentuk **rasio** ke satu SKU Bibitor. Hasil yang diharapkan: filter >3σ menahan draf PO dan circuit breaker aktif.
+- [x] **Backorders:** dataset lengkap dari mirror `chandanareddy12/back-order-prediction` (versi kompetisi `untadta` hanya ±1 MB): **1.687.860 baris train, 242.075 baris test**, porsi backorder 0,67% / 1,11%. Lisensi di Kaggle: *unknown*, jadi cantumkan sebagai sumber edukasi.
+- [x] **Backorders:** bersihkan data. Kedua file diakhiri baris penutup `(1687860 rows)` sisa ekspor database, jadi baris itu dibuang saat dibaca. `lead_time` yang kosong dan nilai -99 dibiarkan sebagai data kosong (LightGBM menanganinya).
+- [x] Latih classifier risiko stok habis dengan LightGBM (`engine/risiko.py`), tanpa pembobotan kelas supaya probabilitas tetap terkalibrasi. Di data test: **PR-AUC 0,227** (aturan sederhana "stok paling sedikit dulu" 0,078) dan **ROC-AUC 0,927** (aturan 0,839). Model ±2,9× lebih tepat menemukan SKU yang akan kehabisan stok.
+- [x] Hitung fitur yang sama dari Bibitor (lihat tabel di bawah), lalu beri skor risiko untuk setiap SKU per cabang (tabel `risiko_stockout`). Rata-rata risiko berurutan masuk akal: REORDER 0,095 > AMAN 0,032 > DEADSTOCK 0,015 > OVERSTOCK 0,011.
+- [x] Tampilkan skor sebagai model pra-latih yang indikatif. Probabilitas mentah **tidak terkalibrasi** untuk Bibitor (di 10% teratas data test, model memperkirakan 5,6% padahal aktualnya 8,8%; ditambah perbedaan industri), tetapi urutannya bisa dipercaya. Karena itu **Confidence Score = skor peringkat 0–100** di antara SKU yang masih laku: TINGGI ≥ 90, SEDANG ≥ 70, sisanya RENDAH. Skor ini tampil di API (`skor_risiko`, `level_risiko`) dan di ringkasan agent; kalibrasi ulang di pilot Fase 2.
+- [x] **Online Retail II** (`engine/borongan.py`, lisensi CC0): buang invoice pembatalan (berawalan "C"), kuantitas atau harga ≤ 0, dan kode non-produk (POST, M, BANK CHARGES, dll.; kode produk diawali 5 digit).
+- [x] Per produk, hitung penjualan harian (termasuk hari tanpa penjualan), rata-rata, dan σ; hari > rata-rata + 3σ dicatat sebagai pesanan borongan. Hasil: **4.549 dari 5.243 produk (87%) pernah mengalami lonjakan >3σ** (30.060 hari borongan), dengan **lonjakan tipikal 18,5× rata-rata harian** (p90: 56×). Di bisnis grosir, membaca satu hari borongan sebagai tren akan membuat PO membengkak belasan kali.
+- [x] Skenario uji Runaway PO (`agent/skenario_runaway.py`): sistem naif mengalikan PO dengan lonjakan 18,5×. Hasil dengan data asli toko 74: 3 PO (Bacardi Gold 1.980 unit vs normal 107, Smirnoff 80 Proof 7.863 vs 425, Bacardi Superior 5.680 vs 307) **ditahan** OUTLIER_3SIGMA (dua juga BATAS_HARIAN) → **circuit breaker terbuka** → PO normal Smirnoff Strawberry (146 unit) ikut ditahan CIRCUIT_BREAKER → manajer mereset.
+- [x] Test: 5 test baru (`tests/test_tahap9.py`, total 62 lulus), termasuk regresi bug fitur rasio (0/0 sempat menjadi nilai batas 24 karena `least()` di DuckDB mengabaikan NULL).
+
+**Uji agent dengan Confidence Score (data asli, toko 74):** keputusan tetap benar, dan ringkasan agent kini menyebut level risiko: Bacardi Gold Rum **TINGGI (skor 100)**, Smirnoff 80 Proof **TINGGI (skor 99)**. Percobaan model membuat PO untuk SKU di luar daftar 'naik' tetap diblokir. 37,7 dtk, 11 panggilan tool, konteks terbesar 3.044 token.
 
 <details>
-<summary>Mapping fitur Backorders → Bibitor</summary>
+<summary>Fitur model dan padanannya di Bibitor</summary>
 
-| Fitur Backorders | Cara menghitung dari Bibitor |
-|---|---|
-| `national_inv` | Stok hasil rekonstruksi pada tanggal t |
-| `lead_time` | Rata-rata (tanggal terima − tanggal PO) per vendor |
-| `in_transit_qty` | Jumlah barang dari PO dengan tanggal PO ≤ t < tanggal terima |
-| `sales_1/3/6/9_month` | Total penjualan pada jendela 1, 3, 6, dan 9 bulan sebelum t |
-| `forecast_3/6/9_month` | Output model demand forecast |
-| `perf_6/12_month_avg` | Proksi: konsistensi lead time vendor (misalnya 1 − koefisien variasi) |
+Model hanya memakai **fitur rasio yang tidak bergantung skala**, karena Backorders (suku cadang) dan Bibitor (minuman) berbeda satuan dan skala:
 
-Data Bibitor hanya 12 bulan, jadi jendela 9 bulan baru tersedia untuk tanggal di akhir periode.
+| Fitur | Rumus | Padanan di Bibitor (per 31 Des 2016) |
+|---|---|---|
+| `cover_forecast_bulan` | stok ÷ (ramalan 3 bulan / 3) | stok akhir ÷ (laju harian × 91 / 3) |
+| `cover_jual_bulan` | stok ÷ (penjualan 3 bulan / 3) | penjualan diproksikan dengan pembelian Okt–Des |
+| `stok_habis`, `ada_forecast` | stok ≤ 0; ramalan > 0 | sama |
+| `transit_per_forecast` | barang dalam perjalanan ÷ ramalan 3 bulan | 0 (semua PO sudah diterima per 31 Des) |
+| `tren_jual_1v3`, `tren_jual_3v9` | penjualan 1 vs 3 bulan, 3 vs 9 bulan | pembelian Des vs Okt–Des, Okt–Des vs Apr–Des |
+| `forecast_per_jual` | ramalan ÷ penjualan 3 bulan | sama dengan proksi di atas |
+| `lead_time_minggu` | lead time (minggu) | lead time vendor (hari) ÷ 7 |
+
+Rasio dibatasi 24 dan penyebut nol menjadi data kosong. Fitur performa supplier (`perf_6/12_month_avg`) tidak dipakai karena Bibitor tidak punya data ketepatan waktu kirim yang setara. Ramalan memakai laju harian × horizon; model demand forecast (statsforecast) dipindah ke Tahap 10 bersama benchmark M5.
 
 </details>
 
@@ -402,6 +408,7 @@ Data Bibitor hanya 12 bulan, jadi jendela 9 bulan baru tersedia untuk tanggal di
 - [ ] Hitung Vs bulanan per item, pisahkan slow vs fast-moving, bandingkan ritel vs grosir, dan hitung berapa hari stok cukup (stok ÷ kecepatan jual)
 - [ ] Mulai kumpulkan snapshot stok harian ABS selama beberapa hari, karena tabelnya hanya menyimpan kondisi saat diunduh
 - [ ] **M5:** unduh `sales_train_evaluation.csv`, `calendar.csv`, dan `sell_prices.csv`. Pakai subset (misalnya kategori FOODS di 1–2 toko).
+- [ ] Buat model demand forecast (statsforecast), lalu pakai untuk fitur ramalan model risiko (sekarang: laju harian × horizon). Dipindah dari Tahap 9.
 - [ ] Jadikan 28 hari terakhir sebagai data uji, lalu bandingkan model forecast dengan baseline sederhana. Hasilnya menjadi angka akurasi untuk Bagian 6 proposal.
 - [ ] Uji logika Death Spiral di M5 (penjualan nol karena stok habis vs karena tidak ada peminat)
 
@@ -439,7 +446,8 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 - **Keterbatasan Bibitor:** stok hanya berupa snapshot awal dan akhir periode, tidak ada ID keranjang, dan periodenya hanya 12 bulan (2016). **Penjualan harian hanya lengkap untuk Januari 2016** (file terpotong di batas baris Excel), dan datanya terlalu konsisten sehingga terlihat sintetis. Sampaikan ini dengan jujur di slide "Sumber data per modul". Deskripsi di halaman Kaggle-nya menyebut perusahaan manufaktur; abaikan, isinya tetap data Bibitor.
 - **Instacart:** file kompetisi aslinya tidak bisa diunduh lewat API Kaggle, jadi dipakai mirror. Mirror tersebut berlabel CC0, tetapi data aslinya dirilis Instacart dengan syarat non-komersial. Cantumkan Instacart sebagai sumber.
 - **Mapping jenis Bibitor ↔ Instacart** berbasis kata kunci, sehingga sebagian SKU (7% volume spirits, 18% volume wine) tidak terpetakan dan berstatus `TIDAK_DIKETAHUI`. Agent tidak boleh hold otomatis untuk SKU tersebut. Vodka berada di dekat ambang (1,46× vs 1,5×), jadi kalau ditanya juri, jelaskan bahwa ambangnya ditetapkan di awal dan bisa dikalibrasi ulang dengan data cabang riil.
-- **Product Backorders:** kelasnya sangat tidak seimbang, domainnya suku cadang (bukan ritel), dan lisensinya belum terverifikasi.
+- **Product Backorders:** kelasnya sangat tidak seimbang (0,67% backorder), domainnya suku cadang (bukan ritel), dan lisensi mirror yang dipakai tertulis *unknown*; cantumkan sebagai data edukasi. Model sudah divalidasi di data test Backorders (PR-AUC 0,227), **tetapi belum divalidasi di data minuman** karena Bibitor tidak punya catatan stok habis. Probabilitasnya juga di bawah nilai sebenarnya, jadi yang ditampilkan hanya skor peringkat. Kalau juri bertanya, jawab: "pra-latih, urutan risikonya masuk akal (REORDER 3× AMAN), kalibrasi di pilot Fase 2".
+- **Online Retail II:** periode 2009–2011 dan pelanggannya grosir di Inggris; yang dipakai hanya **rasio** lonjakan borongan (18,5×), bukan angka penjualannya.
 - **Montgomery County:** data tidak dipecah per toko (penjualan ritel adalah gabungan semua toko, stok adalah total per item) dan lisensinya tidak dicantumkan.
 - **Jangan menggabungkan baris antar-dataset** seolah-olah satu perusahaan. Periodenya berbeda (Bibitor 2016, Online Retail II 2009–2011), begitu juga negara dan mata uangnya.
 - **SAP:** sandbox api.sap.com hanya untuk membaca data, jadi pembuatan PO memakai mock. SAP BTP trial berlaku 90 hari dan akun harus login minimal sekali setiap 30 hari.
@@ -461,7 +469,8 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | Instacart Market Basket Analysis (mirror, dipakai) | Minimal | https://www.kaggle.com/datasets/psparks/instacart-market-basket-analysis |
 | Instacart: mirror cadangan (isi sama) | Minimal | https://www.kaggle.com/datasets/yasserh/instacart-online-grocery-basket-analysis-dataset |
 | Instacart: halaman kompetisi asli (untuk atribusi) | Minimal | https://www.kaggle.com/competitions/instacart-market-basket-analysis |
-| Can You Predict Product Backorders? | Kuat | https://www.kaggle.com/c/untadta |
+| Product Backorders (mirror lengkap, dipakai) | Kuat | https://www.kaggle.com/datasets/chandanareddy12/back-order-prediction |
+| Can You Predict Product Backorders? (kompetisi asli, untuk atribusi) | Kuat | https://www.kaggle.com/c/untadta |
 | Online Retail II UCI | Kuat | https://www.kaggle.com/datasets/mashlyn/online-retail-ii-uci |
 | Montgomery County: Warehouse and Retail Sales | Maksimal | https://data.montgomerycountymd.gov/d/v76h-r7br |
 | Montgomery County: Product Purchases by DLC | Maksimal | https://data.montgomerycountymd.gov/d/kpfd-c5d5 |
@@ -505,4 +514,5 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 17 Okt 2026 | **Persiapan Tahap 5 selesai.** Ollama 0.40.5 + `qwen3:14b` terpasang, `python -m agent.cek_llm` lulus (3,2 dtk). Uji model menemukan Qwen3 14B salah membandingkan angka sendiri (0/5), tetapi 5/5 benar kalau tool memberi keputusan jadi. Pengaturan: konteks 8K (100% GPU), *thinking* mati. Skrip cek sekarang memeriksa kebenaran kesimpulan model. |
 | 17 Okt 2026 | **Tahap 5 selesai.** Paket `agent/` (6 tools Strands, system prompt, `python -m agent.run`), endpoint API baru (`list_prioritas`, `agent-runs`, label `arah_tren`), guardrail satu draf PO per SKU, dan pembatasan tindakan agent ke daftar prioritas di kode. Uji langsung toko 74: semua keputusan benar dalam 29,7 detik; percobaan model membuat PO untuk SKU "turun" ditolak guardrail. Total 50 test lulus. |
 | 18 Okt 2026 | **Tahap 6 inti selesai.** Tiruan SAP `sap_mock/` (OData V2 `API_PURCHASEORDER_PROCESS_SRV`: path URL sama, token CSRF, validasi, nomor PO 45xxxxxxxx) ter-mount di API `/sap`; `api/sap.py` menyusun payload; approve membuat PO di SAP dan menyimpan `sap_po_number` (SAP gagal → PO tetap DRAFT); pratinjau payload `GET /purchase-orders/{id}/sap-payload`; migrasi kolom otomatis. 57 test lulus; uji langsung agent → approve → PO 4500000001. Catatan: V2 deprecated, pengganti OData V4 `CE_PURCHASEORDER_0001`. |
+| 18 Okt 2026 | **Tahap 9 selesai.** `engine/risiko.py`: model LightGBM risiko stok habis dari Product Backorders (mirror lengkap 1,69 juta baris), PR-AUC 0,227 vs aturan cover 0,078; skor untuk setiap SKU Bibitor di tabel `risiko_stockout` (TINGGI 11.671, SEDANG 69.847, RENDAH 194.871) dan tampil sebagai Confidence Score di API + ringkasan agent. `engine/borongan.py`: 87% produk Online Retail II pernah mengalami lonjakan >3σ, median 18,5×. Skenario `python -m agent.skenario_runaway`: 3 PO borongan ditahan → circuit breaker terbuka → PO normal ikut ditahan. Bug fitur rasio (`least()` mengabaikan NULL) ditemukan dan diperbaiki. 62 test lulus. Model forecast statsforecast dipindah ke Tahap 10. |
 | 17 Okt 2026 | AWS CLI 2.38.1 terpasang dan `aws login` berhasil (ditambah `awscrt` di requirements). Tes Bedrock belum lulus karena **akun AWS masih dalam verifikasi** ("Your account is currently being verified"); ini juga penyebab halaman "Complete your account setup" di konsol Bedrock. Menunggu verifikasi lalu tes ulang. |

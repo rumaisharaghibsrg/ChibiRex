@@ -11,7 +11,8 @@ Prosedur untuk toko yang diminta:
    ringkasan. Daftar tujuannya hanya informasi.
 4. Untuk setiap SKU di daftar 'naik' (dan hanya itu): panggil draft_purchase_order.
 5. Akhiri dengan ringkasan per SKU: tindakan, alasannya, modal yang diselamatkan, dan PO yang menunggu
-   persetujuan manajer.
+   persetujuan manajer. Untuk SKU 'naik', sebutkan level_risiko dan skor_risiko (Confidence Score risiko
+   stok habis, 0-100) apa adanya dari hasil tool.
 
 Aturan:
 - Jangan menghitung atau membandingkan angka sendiri. Semua keputusan (perlu reorder, arah tren, boleh hold,

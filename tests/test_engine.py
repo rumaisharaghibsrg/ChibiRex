@@ -116,7 +116,8 @@ def test_sku_metrics_memuat_semua_kolom_untuk_api(con):
     from api.schemas import Sku
 
     kolom = {d[0] for d in con.execute("select * from sku_metrics limit 0").description}
-    dihitung_api = {"jenis", "status_komplementer", "arah_tren"}  # dari brand_jenis / dihitung API
+    # dari brand_jenis, risiko_stockout, atau dihitung API
+    dihitung_api = {"jenis", "status_komplementer", "arah_tren", "risiko_stockout", "skor_risiko", "level_risiko"}
     assert set(Sku.model_fields) - dihitung_api <= kolom
 
 

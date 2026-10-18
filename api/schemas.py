@@ -52,6 +52,9 @@ class Sku(BaseModel):
     beli_q4: int
     hari_stok_kosong_jan: int | None
     data_confidence: float
+    risiko_stockout: float | None = Field(default=None, description="Probabilitas mentah model (indikatif)")
+    skor_risiko: int | None = Field(default=None, description="Confidence Score risiko stok habis, peringkat 0-100")
+    level_risiko: Literal["TINGGI", "SEDANG", "RENDAH"] | None = None
 
 
 class SkuRingkas(BaseModel):
@@ -66,6 +69,8 @@ class SkuRingkas(BaseModel):
     reorder_point: float
     saran_qty_po: int
     nilai_saran_po_idr: float | None
+    skor_risiko: int | None = None
+    level_risiko: str | None = None
 
 
 class Prioritas(BaseModel):

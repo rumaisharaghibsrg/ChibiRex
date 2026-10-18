@@ -31,9 +31,12 @@ GUARDRAIL = "Guardrail & audit"
 AGENT = "Jejak agent"
 
 SKU_SQL = """
-    select s.*, bj.jenis, bj.status_komplementer
-    from sku_metrics s left join brand_jenis bj using (brand)
+    select s.*, bj.jenis, bj.status_komplementer, r.risiko_stockout, r.skor_risiko, r.level_risiko
+    from sku_metrics s
+    left join brand_jenis bj using (brand)
+    left join risiko_stockout r using (inventory_id)
 """
+TABEL_WAJIB = ["sku_metrics", "brand_jenis", "aturan_asosiasi", "risiko_stockout"]
 
 IdempotencyKey = Header(alias="Idempotency-Key", min_length=8, max_length=100,
                         description="Kunci unik per aksi. Request ulang dengan kunci yang sama tidak membuat data ganda.")
@@ -52,6 +55,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not settings.analytics_db.exists():
             raise RuntimeError(f"{settings.analytics_db} belum ada. Jalankan `python -m engine.pipeline` dulu.")
         app.state.duck = duckdb.connect(str(settings.analytics_db), read_only=True)
+        ada = {r[0] for r in app.state.duck.execute("select table_name from information_schema.tables").fetchall()}
+        if kurang := [t for t in TABEL_WAJIB if t not in ada]:
+            app.state.duck.close()
+            raise RuntimeError(f"Tabel {', '.join(kurang)} belum ada di {settings.analytics_db}. "
+                               "Hentikan API lalu jalankan `python -m engine.pipeline`.")
         state.init(settings.state_db)
         yield
         app.state.duck.close()

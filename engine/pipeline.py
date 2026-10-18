@@ -1,10 +1,10 @@
-"""Jalankan seluruh pipeline Tahap 2–3: `python -m engine.pipeline`."""
+"""Jalankan seluruh pipeline data: `python -m engine.pipeline` (hentikan API dulu karena DuckDB dikunci)."""
 
 import time
 
 import duckdb
 
-from engine import basket, config, demo, ingest, metrics, stock
+from engine import basket, borongan, config, demo, ingest, metrics, risiko, stock
 
 STEPS = [
     ("Muat CSV ke DuckDB", ingest.load),
@@ -12,6 +12,8 @@ STEPS = [
     ("Metrik vendor & sku_metrics", metrics.build),
     ("Market Basket Instacart & peran komplementer", basket.build),
     ("Pilih kandidat SKU A & B", demo.build),
+    ("Risiko stok habis (model Backorders)", risiko.build),
+    ("Pola pesanan borongan (Online Retail II)", borongan.build),
 ]
 
 
