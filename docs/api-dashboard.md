@@ -24,6 +24,18 @@ npm run dev
 - CORS sudah mengizinkan `http://localhost:5173` dan `http://127.0.0.1:5173`. Origin lain ditambahkan lewat env `CHIBIREX_CORS_ORIGINS` di backend.
 - Tombol "Jalankan agent" butuh Ollama yang sedang berjalan (`qwen3:14b`) dan API di port 8000.
 
+## Yang sudah tersambung (jangan dikerjakan ulang)
+
+Inti demo sudah tersambung ke API dan sudah diuji di browser dengan agent asli (20 Okt 2026):
+
+- **`src/lib/api.js`**: klien untuk semua endpoint di dokumen ini (`api.ringkasan(store)`, `api.daftarSku(...)`, `api.holds(store)`, dan seterusnya). Pakai klien ini untuk semua panggilan API; jangan memakai `fetch` langsung. Galat dilempar sebagai `ApiError` dengan `message` yang siap ditampilkan. Format Rupiah ada di `src/lib/format.js`.
+- **`AgentRunPanel`**: tombol "Jalankan Agent", empat fase Plan/Reason/Act/Review, langkah agent muncul selagi berjalan, ringkasan akhir, dan run terakhir dimuat ulang setelah refresh.
+- **`PendingPoCard`**: draf PO yang menunggu persetujuan dan PO yang sudah masuk SAP.
+- **`PoApprovalModal`**: menerima `poId`, menampilkan PO asli, alasan agent, hasil guardrail, dan payload SAP, lalu approve/reject lewat API. Nomor PO SAP diambil dari respons.
+- **Footer** `DashboardApp`: klaim arsitektur sudah disesuaikan.
+
+Saat menyambungkan `SmartReorderTable`, buka approval dengan `setSelectedPoId(po.po_id)` (sekarang `onSelectPo` masih menampilkan toast "data contoh"). Toko demo diatur oleh konstanta `DEMO_STORE` di `DashboardApp.jsx`, sampai pilihan cabang di `Header` tersambung ke `GET /stores`. Setelah ada aksi yang mengubah data, panggil `muatUlang()` supaya kartu lain ikut memuat ulang (lewat `refreshKey`).
+
 ## Aturan umum
 
 - **Data simulasi.** Data berasal dari Bibitor (studi kasus jaringan 80 toko minuman) per **31 Des 2016**, dengan nilai dalam Rupiah dari kurs tetap Rp16.000/USD. Tampilkan label "Data simulasi" dan keterangan sumber data (tabel di bawah). Produknya minuman (rum, vodka, wine), bukan kopi.
@@ -66,7 +78,7 @@ Status di kolom aksi:
 - Hold `AKTIF` → "Hold Reorder • cek alasan".
 - Selain itu → belum ditindak agent.
 
-## Menjalankan agent (panel baru, inti demo)
+## Menjalankan agent (sudah dipakai `AgentRunPanel`)
 
 Juri meminta loop agent terlihat jelas: **plan → reason → act → review**, dengan persetujuan manusia.
 
@@ -98,9 +110,8 @@ Belum ada endpoint khusus. Skenario ini cukup berupa urutan panggilan API yang s
 ## Yang perlu diubah dari desain sekarang
 
 - Ganti semua data di `mockData.js` dan `copilotKnowledge.js` dengan data API.
-- Hapus nomor PO acak dan idempotency key buatan di `PoApprovalModal`. Nomor PO datang dari SAP (`sap_po_number`), dan payload dari `/sap-payload`.
 - **KPI tanpa sumber data** (stockout 2,1% vs 11,4%, akurasi ML 91,8%, proses PO 2,3 menit, "Termasuk PPN", "Sinkronisasi Real-Time"): ganti dengan angka dari API, atau beri label "Target proposal" kalau tetap ingin ditampilkan.
-- **Sesuaikan klaim arsitektur:** kita tidak memakai SageMaker. Yang dipakai: Strands Agents + LLM (Ollama lokal sekarang, Amazon Bedrock di final), FastAPI, dan tiruan SAP S/4HANA (OData `API_PURCHASEORDER_PROCESS_SRV`), bukan SAP BTP.
+- **Sesuaikan klaim arsitektur** di komponen lain (`AgenticPipelineVisualizer`, `GuardrailsModal`, `Sidebar`, `LandingPage`): kita tidak memakai SageMaker. Yang dipakai: Strands Agents + LLM (Ollama lokal sekarang, Amazon Bedrock di final), FastAPI, dan tiruan SAP S/4HANA (OData `API_PURCHASEORDER_PROCESS_SRV`), bukan SAP BTP.
 - **Chatbot Copilot** belum punya endpoint LLM. Sementara ini, ubah jadi tombol pertanyaan cepat yang menjawab dari data API (misalnya "modal diselamatkan" dari ringkasan), atau tandai "segera hadir".
 - Tombol "Terapkan realokasi" tidak punya aksi di backend. Realokasi terjadi lewat persetujuan PO tujuan, jadi arahkan tombolnya ke PO terkait.
 

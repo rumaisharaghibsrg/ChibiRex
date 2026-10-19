@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import ScenarioBar from './ScenarioBar';
@@ -11,14 +11,19 @@ import PoApprovalModal from './PoApprovalModal';
 import SuppressionDetailModal from './SuppressionDetailModal';
 import GuardrailsModal from './GuardrailsModal';
 import AiCopilotWidget from './AiCopilotWidget';
-import { 
-  Bell, 
-  CheckCircle, 
-  AlertTriangle, 
+import AgentRunPanel from './AgentRunPanel';
+import PendingPoCard from './PendingPoCard';
+import {
+  Bell,
+  CheckCircle,
+  AlertTriangle,
   Info,
   ArrowRight
 } from 'lucide-react';
-import { initialInventory, initialKpis, sapAuditLogs } from '../data/mockData';
+import { initialInventory, initialKpis } from '../data/mockData';
+
+// Toko demo (Bibitor toko 74). Pilihan cabang di Header belum tersambung ke GET /stores.
+const DEMO_STORE = 74;
 
 export default function DashboardApp({ user, onLogout }) {
   const [inventoryList, setInventoryList] = useState(initialInventory);
@@ -29,7 +34,9 @@ export default function DashboardApp({ user, onLogout }) {
   const [currentBranch, setCurrentBranch] = useState('Hub Jakarta Pusat (Flagship)');
   const [autonomyLevel, setAutonomyLevel] = useState('Level 2 (Draf PO)');
 
-  const [selectedPoItem, setSelectedPoItem] = useState(null);
+  const [store] = useState(DEMO_STORE);
+  const [selectedPoId, setSelectedPoId] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0); // naik setiap ada aksi agent/manajer, memicu muat ulang data API
   const [selectedSuppressionItem, setSelectedSuppressionItem] = useState(null);
   const [isGuardrailsOpen, setIsGuardrailsOpen] = useState(false);
   const [toast, setToast] = useState(null);
@@ -114,33 +121,25 @@ export default function DashboardApp({ user, onLogout }) {
     applyScenario('REALLOCATION');
   };
 
-  const handleConfirmPoApproval = (skuId, sapPoNumber, idempotencyKey) => {
-    setInventoryList(prev => prev.map(item =>
-      item.id === skuId
-        ? { ...item, agentStatus: 'AUTO_EXECUTED', autoApprovedAt: 'Hari ini (1-Click Approved)' }
-        : item
-    ));
+  const muatUlang = useCallback(() => setRefreshKey(k => k + 1), []);
 
-    sapAuditLogs.unshift({
-      id: `LOG-${Math.floor(1000 + Math.random() * 9000)}`,
-      timestamp: 'Baru Saja',
-      skuId,
-      productName: inventoryList.find(i => i.id === skuId)?.name || 'SKU Item',
-      type: '1-Click Manager Approval',
-      status: 'CONFIRMED_SAP',
-      sapPoNumber,
-      amount: 'Terkirim ke SAP S/4HANA',
-      autonomyLevel: 'Level 2'
-    });
+  const handleAgentSelesai = useCallback((run) => {
+    muatUlang();
+    showToast(run.status === 'SELESAI'
+      ? { type: 'success', text: 'Agent selesai. Tinjau draf PO yang menunggu persetujuan.' }
+      : { type: 'warn', text: 'Agent gagal. Lihat pesan di panel agent.' });
+  }, [muatUlang]);
 
-    setKpis(p => ({ 
-      ...p, 
-      poProcessingTimeMinutes: 1.8, 
-      stockoutRate: Math.max(1.5, p.stockoutRate - 0.4) 
-    }));
+  const handlePoDiputuskan = (po) => {
+    muatUlang();
+    showToast(po.status === 'APPROVED'
+      ? { type: 'success', text: `PO SAP #${po.sap_po_number} dibuat untuk ${po.deskripsi}.` }
+      : { type: 'info', text: `Draf PO ${po.deskripsi} ditolak; tidak ada yang dikirim ke SAP.` });
+  };
 
-    setSelectedPoItem(null);
-    showToast({ type: 'success', text: `Purchase Order #${sapPoNumber} sukses diterbitkan ke SAP S/4HANA!` });
+  // Tabel Smart Reorder masih memakai data contoh (mockData), jadi belum punya PO asli untuk disetujui.
+  const handleSelectPoContoh = () => {
+    showToast({ type: 'info', text: 'Baris ini masih data contoh. Setujui PO asli dari kartu "PO Menunggu Persetujuan".' });
   };
 
   const urgentCount = inventoryList.filter(i => i.agentStatus === 'DRAFT_PO').length;
@@ -224,6 +223,16 @@ export default function DashboardApp({ user, onLogout }) {
           {/* ── TAB 1: DASHBOARD UTAMA ── */}
           {activeTab === 'dashboard' && (
             <div className="space-y-8">
+              {/* Row 0: Agent Rexa (data API) & draf PO yang menunggu 1-Click Approval */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+                <div className="lg:col-span-8 h-full">
+                  <AgentRunPanel store={store} onSelesai={handleAgentSelesai} onBukaPo={setSelectedPoId} />
+                </div>
+                <div className="lg:col-span-4 h-full">
+                  <PendingPoCard store={store} refreshKey={refreshKey} onBukaPo={setSelectedPoId} />
+                </div>
+              </div>
+
               {/* Row 1: Health Score (left) & Executive KPI Grid (right) */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
                 <div className="lg:col-span-5 h-full">
@@ -255,7 +264,7 @@ export default function DashboardApp({ user, onLogout }) {
               <div>
                 <SmartReorderTable
                   inventoryList={inventoryList}
-                  onSelectPo={item => setSelectedPoItem(item)}
+                  onSelectPo={handleSelectPoContoh}
                   onViewSuppression={item => setSelectedSuppressionItem(item)}
                 />
               </div>
@@ -265,9 +274,10 @@ export default function DashboardApp({ user, onLogout }) {
           {/* ── TAB 2: SMART REORDER & STOK ── */}
           {activeTab === 'reorder' && (
             <div className="space-y-8">
+              <PendingPoCard store={store} refreshKey={refreshKey} onBukaPo={setSelectedPoId} />
               <SmartReorderTable
                 inventoryList={inventoryList}
-                onSelectPo={item => setSelectedPoItem(item)}
+                onSelectPo={handleSelectPoContoh}
                 onViewSuppression={item => setSelectedSuppressionItem(item)}
               />
             </div>
@@ -301,9 +311,11 @@ export default function DashboardApp({ user, onLogout }) {
             <span>Agentic AI Hackathon 2026</span>
           </div>
           <div className="flex items-center gap-3 font-medium">
-            <span>Infrastruktur: AWS Bedrock &amp; SageMaker</span>
+            <span>Agent: Strands Agents + LLM (Ollama lokal / Amazon Bedrock)</span>
             <span className="text-slate-300">&bull;</span>
-            <span>Integrasi ERP: SAP BTP S/4HANA OData</span>
+            <span>ERP: tiruan SAP S/4HANA (OData)</span>
+            <span className="text-slate-300">&bull;</span>
+            <span>Data simulasi: Bibitor per 31 Des 2016</span>
           </div>
         </footer>
       </div>
@@ -313,9 +325,11 @@ export default function DashboardApp({ user, onLogout }) {
 
       {/* ── Modals ── */}
       <PoApprovalModal
-        skuItem={selectedPoItem}
-        onClose={() => setSelectedPoItem(null)}
-        onConfirmApproval={handleConfirmPoApproval}
+        key={selectedPoId}
+        poId={selectedPoId}
+        penyetuju={user?.name || 'Manajer toko'}
+        onClose={() => setSelectedPoId(null)}
+        onSelesai={handlePoDiputuskan}
       />
 
       <SuppressionDetailModal

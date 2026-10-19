@@ -1,0 +1,91 @@
+import React, { useEffect, useState } from 'react';
+import { ClipboardCheck, Send, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { api } from '../lib/api';
+import { rupiah } from '../lib/format';
+
+// Draf PO dari agent yang menunggu 1-Click Approval, plus PO terakhir yang sudah masuk SAP.
+export default function PendingPoCard({ store, refreshKey, onBukaPo }) {
+  const [draf, setDraf] = useState([]);
+  const [disetujui, setDisetujui] = useState([]);
+  const [galat, setGalat] = useState(null);
+
+  useEffect(() => {
+    let aktif = true;
+    Promise.all([
+      api.daftarPo({ store, status: 'DRAFT' }),
+      api.daftarPo({ store, status: 'APPROVED', limit: 3 }),
+    ])
+      .then(([d, a]) => {
+        if (!aktif) return;
+        setDraf(d);
+        setDisetujui(a);
+        setGalat(null);
+      })
+      .catch((e) => aktif && setGalat(e.message));
+    return () => {
+      aktif = false;
+    };
+  }, [store, refreshKey]);
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden h-full flex flex-col">
+      <div className="p-6 border-b border-slate-200/80 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+          <ClipboardCheck className="w-5 h-5 text-amber-700" />
+        </div>
+        <div>
+          <h3 className="text-base font-extrabold text-slate-900 tracking-tight leading-snug">PO Menunggu Persetujuan</h3>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">Level 2: agent menyusun draf, manajer yang memutuskan</p>
+        </div>
+      </div>
+
+      <div className="p-6 flex-1 space-y-3">
+        {galat && (
+          <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{galat}</span>
+          </div>
+        )}
+
+        {!galat && draf.length === 0 && (
+          <p className="text-xs text-slate-500">Belum ada draf PO. Jalankan agent untuk menyusun draf PO baru.</p>
+        )}
+
+        {draf.map((po) => (
+          <div key={po.po_id} className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/60">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-extrabold text-slate-900 text-[13px] leading-snug">{po.deskripsi}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  {po.qty} unit &bull; {rupiah(po.nilai_idr)} &bull; {po.vendor_name}
+                </div>
+              </div>
+              <button
+                onClick={() => onBukaPo(po.po_id)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[11px] bg-[#1b4d3e] hover:bg-[#143d31] text-white shadow-sm transition-all active:scale-95 whitespace-nowrap"
+              >
+                <Send className="w-3.5 h-3.5 text-[#a2d2bf]" />
+                1-Click Approval
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {disetujui.length > 0 && (
+          <div className="pt-2">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Sudah masuk SAP</div>
+            {disetujui.map((po) => (
+              <div key={po.po_id} className="flex items-center justify-between gap-2 text-xs py-1.5">
+                <span className="flex items-center gap-1.5 text-slate-700 min-w-0">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate">{po.deskripsi}</span>
+                </span>
+                <span className="font-mono text-[11px] font-bold text-emerald-700 shrink-0">SAP {po.sap_po_number}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
