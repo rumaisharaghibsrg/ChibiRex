@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #1b4d3e;
+  --color-brand-primary-hover: #143d31;
+  --color-brand-secondary: #4e8a6e;
+  --color-brand-accent: #8fbc8f;
+  --color-brand-highlight: #a2d2bf;
+  --color-brand-tint: #eaf4ef;
+  --color-brand-subtle: #f0f7f4;
+  --color-surface-bg: #f8fafc;
+  --color-surface-card: #ffffff;
+  --color-surface-border: #e2e8f0;
+
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+:root {
+  --primary: #1b4d3e;
+  --primary-hover: #143d31;
+  --secondary: #4e8a6e;
+  --accent: #8fbc8f;
+  --accent-light: #a2d2bf;
+  --bg-app: #f8fafc;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  color: #0f172a;
+  background-color: #f8fafc;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f8fafc;
+  color: #0f172a;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ─── Premium Card — Borderless, Soft Shadow (Vercel / Stripe aesthetic) ─── */
+.enterprise-card {
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border-radius: 16px;
+  transition: box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.enterprise-card:hover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.enterprise-card-active {
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 4px 20px rgba(27, 77, 62, 0.1);
+  border-radius: 16px;
+}
+
+/* Subtle Glassmorphism */
+.enterprise-glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: none;
+}
