@@ -20,12 +20,12 @@
 | 4 | Tools API + guardrail | ✅ Selesai | 13/13 |
 | 5 | Agent layer (Strands + Ollama) | ✅ Selesai | 9/9 |
 | 6 | Mock API SAP | 🟡 Inti selesai (sisa opsional) | 4/6 |
-| 7 | Dashboard Rexa (React) | 🟡 Desain siap, disambungkan ke API lewat Kiro | 2/8 |
+| 7 | Dashboard Rexa (React) | 🟡 Desain siap, disambungkan ke API lewat Kiro | 3/8 |
 | 8 | Deploy ke AWS (wajib untuk final) | 🟡 Berjalan (pindah ke akun baru) | 1/14 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ✅ Selesai | 9/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/8 |
 | 11 | Demo & pitch | 🟡 Berjalan | 1/14 |
-| | **Total** | | **77/119 (±65%)** |
+| | **Total** | | **78/119 (±66%)** |
 
 **Posisi sekarang:** desain dashboard **Rexa** (React) sudah ada dan backend sudah menyediakan endpoint untuk dashboard (Health Score, daftar toko, menjalankan agent dari dashboard). Kontraknya ada di `docs/api-dashboard.md`; penyambungan dikerjakan teman tim lewat Kiro. Model risiko (Tahap 9) dan guardrail Runaway PO sudah teruji dengan data asli.
 **Target terdekat:** (1) sambungkan dashboard ke API lewat Kiro, terutama panel agent dan 1-Click Approval (Tahap 7); (2) buat **akun AWS standar baru** dengan email kampus (Tahap 8); (3) Zoom deep-dive dengan mentor AWS, diusulkan **Rabu 22 Okt 2026** siang/sore WIB; (4) **final Sabtu 31 Okt 2026** (tatap muka, 15 menit termasuk tanya jawab, berbahasa Inggris, demo live).
@@ -362,7 +362,7 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 
 - [x] Desain UI/UX dashboard Rexa (React) dari tim, mencakup semua fitur di proposal Bagian 3
 - [x] Endpoint backend untuk dashboard: CORS untuk Vite (`CHIBIREX_CORS_ORIGINS`), `GET /stores` (pilihan cabang), `GET /stores/{store}/ringkasan` (Inventory Health Score + KPI dari tindakan agent/manajer), `POST /agent-runs/mulai` + `GET /agent-runs/{run_id}` (agent berjalan di latar dan langkahnya bisa dipantau selagi berjalan, satu agent sekaligus). Nama agent di prompt, payload SAP, dan judul API diganti menjadi Rexa. 6 test baru (total 68 lulus). Health Score = rata-rata 3 komponen: ketersediaan stok (% SKU aktif di atas ROP), perputaran (% SKU aktif bukan OVERSTOCK/DEADSTOCK), dan stabilitas kas (% nilai stok yang tidak tertahan). Dengan data asli, skornya tersebar 52–82 antar toko; toko 74 = **69**.
-- [ ] Pindahkan front-end dari root repo ke `dashboard/` dan keluarkan `node_modules` dari git (commit desain sempat menyertakan 1.728 file `node_modules` yang tidak bisa dipakai karena folder `dist/` di dalamnya terabaikan `.gitignore`)
+- [x] Pindahkan front-end dari root repo ke `dashboard/` dan keluarkan `node_modules` dari git (commit desain sempat menyertakan 1.728 file `node_modules` yang tidak bisa dipakai karena folder `dist/` di dalamnya terabaikan `.gitignore`). Selesai 20 Okt; `node_modules/` kini ada di `.gitignore`, dan setiap anggota tim cukup menjalankan `npm install` di `dashboard/`.
 - [ ] Sambungkan dashboard ke API lewat **Kiro Spec** (spec + steering disimpan di `.kiro/`): Health Score, KPI, tabel Smart Reorder dengan Confidence Score, 1-Click Approval (nomor PO dari tiruan SAP), detail Hold, realokasi, status guardrail
 - [ ] **Panel agent:** tombol "Jalankan agent" dan tampilan langkah plan → reason → act → review selagi agent berjalan, ditutup ringkasan agent dan PO yang menunggu persetujuan manajer
 - [ ] Tombol skenario Runaway PO (urutan panggilan API seperti `agent/skenario_runaway.py`) dan tombol reset circuit breaker oleh manajer
