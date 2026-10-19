@@ -3,7 +3,7 @@
 **Smart Inventory & Cash Flow Copilot** · Lomba Agentic AI Hackathon 2026
 
 > Disusun dari pembahasan di claude.ai ([link percakapan](https://claude.ai/share/459288bb-adfd-4d82-be55-6cf142bf8bc8)) dan PDF *Rencana_Penggabungan_Dataset_Copilot.pdf* yang dibuat di percakapan tersebut.
-> Terakhir diperbarui: **18 Oktober 2026**
+> Terakhir diperbarui: **19 Oktober 2026**
 
 **Cara pakai:** ubah `[ ]` menjadi `[x]` saat sebuah langkah selesai, lalu perbarui tabel ringkasan dan log progres di bagian bawah.
 
@@ -21,28 +21,53 @@
 | 5 | Agent layer (Strands + Ollama) | ✅ Selesai | 9/9 |
 | 6 | Mock API SAP | 🟡 Inti selesai (sisa opsional) | 4/6 |
 | 7 | Dashboard (Streamlit) | ⏸️ Ditunda (menunggu desain UI/UX) | 0/7 |
-| 8 | Deploy ke AWS (wajib untuk final) | 🟡 Berjalan | 3/12 |
+| 8 | Deploy ke AWS (wajib untuk final) | 🟡 Berjalan (pindah ke akun baru) | 1/14 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ✅ Selesai | 9/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/8 |
-| 11 | Demo & pitch | ⬜ Belum | 0/11 |
-| | **Total** | | **76/113 (±67%)** |
+| 11 | Demo & pitch | 🟡 Berjalan | 1/14 |
+| | **Total** | | **75/118 (±64%)** |
 
 **Posisi sekarang:** Tahap 9 selesai: setiap SKU punya Confidence Score risiko stok habis (model LightGBM dari Product Backorders) yang tampil di API dan ringkasan agent, dan skenario uji Runaway PO dari pola borongan Online Retail II membuktikan guardrail 3σ + circuit breaker bekerja.
-**Target terdekat:** kirim pertanyaan mentoring sebelum **Senin 19 Okt 2026, 16.00 WIB** (Tahap 11). Tahap 7 (dashboard) ditunda sampai desain UI/UX siap; Tahap 8 menunggu verifikasi akun AWS. Pilihan berikutnya: Tahap 10 (validasi data riil Montgomery County + angka akurasi forecast M5) atau sisa opsional Tahap 6.
+**Target terdekat:** (1) buat **akun AWS standar baru** dengan email kampus (Tahap 8); (2) Zoom deep-dive dengan mentor AWS, diusulkan **Rabu 22 Okt 2026** siang/sore WIB; (3) **final Sabtu 31 Okt 2026** (tatap muka, 15 menit termasuk tanya jawab, berbahasa Inggris, demo live). Tahap 7 (dashboard) masih menunggu desain UI/UX.
 
 Legenda: ✅ selesai · 🟡 berjalan · ⬜ belum mulai
 
 ---
 
-## Ketentuan Lomba dari Panitia (email mentor AWS, 17 Okt 2026)
+## Ketentuan Lomba dari Panitia (email mentor AWS, 17 & 19 Okt 2026)
 
 - **Alternatif selain AWS boleh dipakai selama prototipe.** Ollama (LLM lokal) dan Gemini API diizinkan, terutama selama akun AWS bermasalah. AWS dan Kiro boleh dikombinasikan dengan alternatif tersebut.
 - **Solusi final harus berjalan di AWS.** Memakai layanan **AWS + SAP + Kiro** memberi **poin tambahan** dalam penilaian, jadi sebisa mungkin prioritaskan ketiganya di build final.
 - **Isi final:** demo yang berjalan (MVP sudah cukup) + deck singkat berisi: masalah pelanggan, solusi agentic AI dan arsitekturnya di AWS (dan SAP bila relevan), dampak, dan apa yang dibutuhkan untuk masuk produksi. Layanan yang direkomendasikan ada di lampiran *AWS AI Services Introduction* dari panitia.
 - **Verifikasi akun AWS:** akun paket gratis butuh kartu untuk verifikasi identitas sekali saja (ditahan ±USD 1, dikembalikan dalam 3–5 hari, tidak ditagih kecuali upgrade). Pakai **kartu kredit Visa/Mastercard** dengan transaksi online/internasional aktif, **bukan kartu debit** (kartu debit Indonesia sering menolak, dan ini penyebab paling umum verifikasi macet). Pakai **email kampus**, dengan nama sesuai kartu mahasiswa.
-- **Mentoring:** sesi 1:1 via Zoom (±30 menit per tim); undangan dikirim ke email kampus pada Senin 19 Okt 2026. Di luar sesi, mentor boleh dihubungi saat ada kendala teknis. **Batas kirim pertanyaan mentoring: Senin 19 Okt 2026, 16.00 WIB.**
+- **Mentoring:** sesi 1:1 via Zoom (±30 menit per tim); undangan dikirim ke email kampus pada Senin 19 Okt 2026. Di luar sesi, mentor boleh dihubungi saat ada kendala teknis. **Batas kirim pertanyaan mentoring: Senin 19 Okt 2026, 16.00 WIB.** Pertanyaan sudah dikirim 18 Okt dan dijawab 19 Okt (lihat di bawah).
 
-**Strategi yang mengikuti ketentuan ini:** agent memakai LLM lokal lewat Ollama (Tahap 5), dengan kode yang tidak terikat ke satu penyedia model. Untuk build final, aplikasi di-deploy ke AWS (Tahap 8), dan LLM-nya bisa tetap Ollama (dijalankan di EC2) atau dipindah ke Amazon Bedrock hanya dengan mengganti `.env`.
+### Jawaban pertanyaan mentoring (19 Okt 2026)
+
+**Final**
+- **Sabtu 31 Okt 2026, tatap muka. 15 menit per tim, sudah termasuk tanya jawab.** Presentasi **berbahasa Inggris**; demo dan slide diserahkan sebagai artefak pada hari itu.
+- **Demo live sangat diutamakan.** Sebagian boleh berjalan lokal kalau deploy AWS terbatas, asalkan demo jelas memperlihatkan loop agentic: **plan → reason → act/tool → review, dengan human-in-the-loop**.
+- Deck tanpa template dan tanpa batas halaman: ringkas, dibuka dengan diagram arsitektur yang rapi, alur cerita Problem → Solution → Impact.
+- Bobot penilaian yang disebut: Technical Execution & Use of AWS/SAP **20%**, Innovation & Originality **25%**, Presentation & Storytelling **10%** (dimensi lainnya belum disebut).
+
+**AWS**
+- **Tinggalkan akun "pengalaman baru".** Buat **akun standar baru** lewat *Sign up for AWS (advanced)* dengan email kampus. Akun lama tidak mendukung Kiro dan membatasi Marketplace serta cross-region.
+- Akun Free plan tidak bisa menukar kredit promosi, dan Claude tetap terblokir di Free plan karena dijual lewat Marketplace. Kredit mahasiswa lewat program **AWS Student Rewards (21 badge)**: ±US$10 di 7 badge, ±US$20 di 14 badge, dan di 21 badge 12 bulan Skill Builder Premium + voucher ujian sertifikasi US$100. Digabung dengan Free Tier di akun standar.
+- Aktifkan akses **Amazon Nova dan Anthropic Claude** di konsol Bedrock. Nova untuk iterasi cepat dan murah, Claude untuk penalaran yang lebih berat (logika keputusan/approval). Kode tetap provider-agnostic.
+- LLM final: **Amazon Bedrock lewat Strands**. Ollama hanya fallback lokal; **hindari Ollama di EC2**. **Bedrock AgentCore Runtime menambah poin** (memakai orkestrator agent mendapat poin tambahan, mendukung Technical Execution dan Innovation).
+- Deploy MVP: **Lambda di belakang API Gateway** untuk FastAPI tools dan agent, dengan database terkelola yang ringan; ECS Fargate kalau lebih suka container yang terus berjalan. Hindari EC2 kecuali butuh GPU. Hemat biaya: serverless (scale to zero), iterasi dengan Nova, manfaatkan Free Tier, matikan resource yang menganggur, pasang alarm AWS Budgets. Data sintetis/mock boleh.
+
+**SAP**
+- Tiruan SAP **diterima untuk penjurian** asalkan realistis dan relevan. Integrasi SAP riil tidak wajib, tetapi memperkuat dimensi "Use of AWS/SAP" (20%).
+- Kalau integrasi riil: targetkan OData V4 `CE_PURCHASEORDER_0001` (atau `API_PURCHASE_ORDER_SRV`, sesuai tulisan mentor). Catatan mentor: tidak semua API OData V2 deprecated.
+- Akses SAP untuk finalis tersedia **atas permintaan**: sub-account SAP dengan Joule, AI Core, AI Launchpad, dan Generative AI Hub (Joule Studio Agent Builder tidak tersedia; SAP Build Code dan AI Core tersedia). S/4HANA bisa dicoba lewat cal.sap.com di atas akun AWS sendiri. SAP Learning Hub Student Edition dan trial Generative AI Hub gratis dengan email kampus.
+
+**Kiro**
+- Bukan butir nilai tersendiri, tetapi mendukung Technical Execution dan Innovation. Lakukan keduanya: **simpan spec dan steering Kiro di repo**, dan tunjukkan Kiro sebentar di demo sebagai bukti percepatan build. Kiro gratis.
+
+**Mentoring lanjutan:** Zoom deep-dive teknis 30 menit dengan mentor AWS, diusulkan **Rabu 22 Okt 2026 siang/sore WIB** (jadwal diatur panitia). Mentoring opsional dan tidak memengaruhi nilai. Sambil menunggu, lanjut membangun secara lokal dengan Ollama.
+
+**Strategi yang mengikuti ketentuan ini (diperbarui 19 Okt):** selama pengembangan, agent memakai Ollama di laptop. Untuk final, agent pindah ke **Amazon Bedrock lewat Strands** (cukup ganti `.env`, kode sudah provider-agnostic) dan dijalankan di **Bedrock AgentCore Runtime**, sedangkan API tools berjalan di **Lambda + API Gateway**. Demo final dibuat live dan memperlihatkan loop agentic beserta persetujuan manajer.
 
 ---
 
@@ -73,14 +98,15 @@ Fitur dari proposal yang dibahas:
 2. **Paket dataset dikerjakan bertahap:** Minimal → Kuat → Maksimal. Paket Minimal dikerjakan dulu sampai demo jalan end-to-end.
 3. **Jembatan kategori Bibitor ↔ Instacart:** aturan asosiasi dari aisle alkohol Instacart dipetakan ke kolom `Classification` Bibitor.
 4. **Transfer model Backorders → Bibitor:** ditampilkan sebagai model pra-latih dengan skor indikatif, lalu dikalibrasi ulang saat pilot Fase 2. Model hanya memakai fitur rasio yang bebas skala (cover stok dalam bulan, tren penjualan), bukan angka mentah.
-5. **SAP memakai mock API** yang mengikuti format payload API Purchase Order SAP, karena sandbox api.sap.com hanya untuk membaca data.
-6. **Agent:** Strands Agents SDK + Amazon Bedrock. Bedrock AgentCore bersifat opsional, untuk demo yang lebih "production".
+5. **SAP memakai mock API** yang mengikuti format payload API Purchase Order SAP, karena sandbox api.sap.com hanya untuk membaca data. Dikonfirmasi mentor (19 Okt): tiruan diterima untuk penjurian; integrasi SAP riil (OData V4 `CE_PURCHASEORDER_0001`) opsional untuk poin tambahan.
+6. **Agent:** Strands Agents SDK. Untuk final: Amazon Bedrock (Nova untuk iterasi, Claude untuk penalaran keputusan) yang dijalankan di **Bedrock AgentCore Runtime**. Saran mentor 19 Okt: memakai orkestrator agent menambah poin.
 7. **Mata uang:** USD dikonversi ke Rupiah dengan satu kurs tetap yang dicantumkan, dan diberi label "simulasi".
 8. **Metode Tahap 2** (menyesuaikan kondisi data Bibitor, lihat Tahap 2): laju permintaan = penjualan setahun dari neraca stok (stok awal + pembelian − stok akhir) ÷ hari SKU aktif; metrik harian dari Januari 2016; tren naik/turun dari pembelian bulanan.
 9. **Metode Tahap 3:** jembatan Bibitor ↔ Instacart di level **jenis minuman** (bukan hanya spirits/wine), karena SKU A dan SKU B bisa sama-sama spirits. Peran komplementer diukur dengan lift terhadap sesama order alkohol.
 10. **SKU B demo mengikuti proposal Bagian 3:** stok sudah di bawah ROP (sistem statis akan reorder), Vs turun, dan jenisnya tidak komplementer. Modal yang diselamatkan = nilai PO yang ditahan.
-11. **LLM agent: Ollama dengan Qwen3 14B di laptop** (keputusan tim 17 Okt 2026, diizinkan panitia untuk prototipe). Sebelumnya sempat dipilih Amazon Nova di Bedrock, tetapi akun AWS tertahan verifikasi. Penyedia model dipilih lewat `CHIBIREX_LLM_PROVIDER` (`ollama` / `bedrock`), sehingga build final bisa memakai Bedrock tanpa mengubah kode agent.
+11. **LLM agent: Ollama dengan Qwen3 14B di laptop** (keputusan tim 17 Okt 2026, diizinkan panitia untuk prototipe). Sebelumnya sempat dipilih Amazon Nova di Bedrock, tetapi akun AWS tertahan verifikasi. Penyedia model dipilih lewat `CHIBIREX_LLM_PROVIDER` (`ollama` / `bedrock`), sehingga build final bisa memakai Bedrock tanpa mengubah kode agent. **Update 19 Okt:** mentor meminta Bedrock lewat Strands sebagai runtime final; Ollama tetap menjadi fallback lokal dan **tidak** dijalankan di EC2.
 12. **Confidence Score = peringkat risiko 0–100, bukan probabilitas mentah** (Tahap 9). Probabilitas dari model Backorders tidak terkalibrasi untuk minuman, tetapi urutannya bisa dipercaya. Level: TINGGI ≥ 90, SEDANG ≥ 70, sisanya RENDAH. Skor ini informasi untuk manajer; keputusan reorder tetap dari ROP dan guardrail.
+13. **Akun dan arsitektur AWS final (saran mentor, 19 Okt 2026):** akun "pengalaman baru" (proyek Do the Thing) ditinggalkan; tim membuat akun standar lewat *Sign up for AWS (advanced)* dengan email kampus. Deploy MVP memakai Lambda + API Gateway (alternatif ECS Fargate), tanpa EC2.
 
 ### Paket dataset
 
@@ -111,10 +137,11 @@ Fitur dari proposal yang dibahas:
 | Data | Kaggle CLI / Kaggle Notebook, DuckDB, pandas atau Polars | Unduh & olah file besar Bibitor | Tahap 2 |
 | Analitik | SQL DuckDB (aturan asosiasi), scikit-learn + LightGBM, statsforecast | Aturan asosiasi, model risiko stok habis, demand forecast | Tahap 3, 9 |
 | API | FastAPI + Pydantic | Tools tervalidasi dan mock API SAP | Tahap 4, 6 |
-| Agent | Strands Agents SDK (alternatif: LangGraph) | Loop agent & pemanggilan tools | Tahap 5 |
-| LLM | Ollama + Qwen3 14B (lokal); Amazon Bedrock opsional untuk final di AWS | Penalaran agent | Tahap 5 |
+| Agent | Strands Agents SDK; Bedrock AgentCore Runtime untuk final | Loop agent & pemanggilan tools, hosting agent di AWS | Tahap 5, 8 |
+| LLM | Ollama + Qwen3 14B (lokal, untuk pengembangan dan fallback); Amazon Bedrock (Nova + Claude) untuk final | Penalaran agent | Tahap 5, 8 |
 | Dashboard | Streamlit | Health Score, notifikasi, 1-Click Approval | Tahap 7 |
-| Cloud | Amazon S3, Lambda atau ECS, RDS PostgreSQL | Arsitektur sesuai proposal | Tahap 8 |
+| Cloud | Amazon S3, Lambda + API Gateway (alternatif ECS Fargate), database terkelola (RDS/Aurora PostgreSQL atau DynamoDB) | Arsitektur final (saran mentor) | Tahap 8 |
+| Dev tools | Kiro | Spec dan steering untuk sebagian build (poin tambahan) | Tahap 7–8 |
 | SAP | SAP Business Accelerator Hub (api.sap.com), SAP BTP trial | Spesifikasi API PO & narasi integrasi | Tahap 6 |
 | Pendukung | Docker, Postman atau Bruno, AWS Budgets | Deploy, uji API, alarm biaya | Kapan saja |
 
@@ -128,6 +155,7 @@ ChibiRex/
 ├── agent/         # Strands Agents + Bedrock
 ├── dashboard/     # Streamlit
 ├── docs/          # proposal, PDF rencana penggabungan dataset
+├── .kiro/         # spec dan steering Kiro (bukti pemakaian Kiro untuk juri)
 ├── tests/         # unit test (pytest)
 ├── progress.md
 └── README.md
@@ -318,53 +346,58 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 
 **Cara menjalankan:** tiruan SAP ikut berjalan di API utama (`uvicorn api.main:app`) pada path yang sama dengan SAP asli: `http://127.0.0.1:8000/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV/A_PurchaseOrder` (dokumentasinya di `/sap/docs`). Kalau API dijalankan di port lain atau tiruan SAP dijalankan terpisah (`uvicorn sap_mock.app:app --port 8001`), set `CHIBIREX_SAP_URL`. Data tiruan SAP ada di `data/processed/sap_mock.sqlite`; hapus file ini untuk mengulang demo.
 
-- [x] Pelajari format payload API Purchase Order SAP (`API_PURCHASEORDER_PROCESS_SRV`). Nama field diverifikasi dari kode integrasi yang memanggil API ini: header `CompanyCode`, `PurchaseOrderType` ("NB"), `Supplier`, `PurchasingOrganization`, `PurchasingGroup`, `DocumentCurrency`; item di `to_PurchaseOrderItem.results` (`PurchaseOrderItem`, `Plant`, `Material`, `OrderQuantity`); harga lewat `to_PurchaseOrderPricingElement` (`ConditionType`, `ConditionRateValue`, `ConditionCurrency`). **Catatan:** layanan OData V2 ini berstatus *deprecated* sejak Agustus 2024; penggantinya OData V4 `CE_PURCHASEORDER_0001`. Ini masuk slide "jalan menuju produksi".
+- [x] Pelajari format payload API Purchase Order SAP (`API_PURCHASEORDER_PROCESS_SRV`). Nama field diverifikasi dari kode integrasi yang memanggil API ini: header `CompanyCode`, `PurchaseOrderType` ("NB"), `Supplier`, `PurchasingOrganization`, `PurchasingGroup`, `DocumentCurrency`; item di `to_PurchaseOrderItem.results` (`PurchaseOrderItem`, `Plant`, `Material`, `OrderQuantity`); harga lewat `to_PurchaseOrderPricingElement` (`ConditionType`, `ConditionRateValue`, `ConditionCurrency`). **Catatan:** layanan OData V2 ini berstatus *deprecated* sejak Agustus 2024; penggantinya OData V4 `CE_PURCHASEORDER_0001`. Ini masuk slide "jalan menuju produksi". Mentor (19 Okt) mengingatkan bahwa tidak semua API OData V2 deprecated, dan menyarankan V4 kalau tim mengintegrasikan SAP riil.
 - [x] Buat tiruan SAP "create PO" (`sap_mock/app.py`) dengan path URL, amplop respons OData V2 (`{"d": ...}`, `__metadata`), **alur token CSRF SAP Gateway** (GET `x-csrf-token: Fetch` → POST dengan token + cookie sesi), validasi field wajib dengan format galat OData, dan nomor PO berurutan mulai 4500000001
 - [x] Hubungkan alur PO ke tiruan SAP (`api/sap.py`): draf menunggu 1-Click Approval, approve membuat PO di SAP dan menyimpan `sap_po_number`. Kolom baru ditambahkan otomatis ke `state.sqlite` lama (migrasi). Pemetaan: toko → plant `T074`, brand → material `BIB-4222`, vendor Bibitor → supplier, harga beli → Rupiah (simulasi); company code dan purchasing org/group memakai nilai contoh.
 - [x] Test dan uji langsung: 7 test SAP (`tests/test_sap.py`, total 57 test), termasuk "SAP mati → PO tetap DRAFT". Uji langsung: agent membuat draf → approve → **PO 4500000001** di tiruan SAP (Smirnoff 80 Proof, 425 × Rp12.320 = Rp5.236.000, cocok dengan nilai PO); approve ulang ditolak 409.
 - [ ] (Opsional) Daftar akun SAP Community dan ambil API key gratis di api.sap.com, untuk membandingkan format dengan sandbox SAP (sandbox hanya bisa membaca data contoh)
-- [ ] (Opsional) Daftar SAP BTP trial **mendekati jadwal hackathon**, karena trial hanya 90 hari lalu akun dan isinya dihapus. Integrasi lewat SAP BTP/Integration Suite memberi poin tambahan dari panitia.
+- [ ] (Opsional) Integrasi SAP riil untuk poin "Use of AWS/SAP": minta akses SAP untuk finalis ke panitia (sub-account dengan AI Core dan Generative AI Hub), atau coba S/4HANA lewat cal.sap.com di akun AWS sendiri (butuh instance besar yang ditagih per jam, jadi matikan setelah dipakai). Targetkan OData V4 `CE_PURCHASEORDER_0001`.
 
 ### Tahap 7 — Dashboard (Streamlit) ⏸️
 
-**Ditunda sampai desain UI/UX tim siap** (keputusan 18 Okt 2026). Tidak bisa dilewati sepenuhnya: panitia meminta demo yang berjalan di final. Sementara itu demo bisa lewat terminal (`python -m agent.run --store 74`) dan approve PO lewat Swagger (`/docs`). Semua data untuk dashboard sudah tersedia di API Tahap 4–6.
+**Ditunda sampai desain UI/UX tim siap** (keputusan 18 Okt 2026). Tidak bisa dilewati sepenuhnya: panitia meminta demo live di final yang memperlihatkan loop agentic dan persetujuan manajer. Sementara itu demo bisa lewat terminal (`python -m agent.run --store 74`) dan approve PO lewat Swagger (`/docs`). Semua data untuk dashboard sudah tersedia di API Tahap 4–6.
 
 - [ ] Setup Streamlit di `dashboard/`
 - [ ] Tampilkan Health Score per SKU per cabang
 - [ ] Tampilkan notifikasi Predictive Stockout Alert beserta Confidence Score
 - [ ] Buat tombol **1-Click Approval** untuk draf PO
 - [ ] Tampilkan rekomendasi Capital Reallocation dalam Rupiah
-- [ ] Tampilkan alasan keputusan agent
+- [ ] Tampilkan jejak agent (plan → reason → tool → review) dan alasan keputusannya, karena juri meminta loop agentic terlihat jelas. Datanya sudah ada di `GET /agent-runs/{run_id}`.
 - [ ] Beri label "simulasi" dan keterangan sumber data per modul
 
 ### Tahap 8 — Deploy ke AWS (wajib untuk final) 🟡
 
-**Wajib untuk final:** panitia mensyaratkan solusi final berjalan di AWS, dan memakai layanan AWS + SAP + Kiro memberi poin tambahan. LLM di AWS bisa memakai Ollama di EC2 (dengan GPU), atau Amazon Bedrock dengan `CHIBIREX_LLM_PROVIDER=bedrock`. Model Amazon Nova bisa dipakai di paket gratis; Claude butuh Paid Plan karena dijual lewat AWS Marketplace.
+**Arah dari mentor (19 Okt 2026):** akun standar baru; LLM lewat **Amazon Bedrock + Strands** (Nova untuk iterasi, Claude untuk penalaran keputusan); agent di **Bedrock AgentCore Runtime** (poin tambahan); API tools di **Lambda + API Gateway** (atau ECS Fargate); tanpa EC2. Final boleh sebagian berjalan lokal kalau deploy terbatas, tetapi targetkan semuanya di AWS.
 
-**Akun AWS tim saat ini memakai "pengalaman baru" AWS (berbasis proyek "Do the Thing"):**
-- Tidak ada akun root; proyek dimiliki oleh AWS Builder ID (login lewat Google).
-- Region ditetapkan otomatis dari negara kontak: **Asia Pacific (Sydney) `ap-southeast-2`**, tidak bisa diganti. Fitur cross-region dibatasi.
-- Bedrock, AgentCore, Lambda, ECS, S3, RDS, dan API Gateway termasuk Free Tier; AWS Marketplace hanya untuk Bedrock.
-- Kredensial CLI memakai `aws login` (tanpa user IAM dan tanpa access key).
-- **Pertimbangkan mendaftar ulang lewat pendaftaran klasik (*advanced*) dengan email kampus**, karena akun "pengalaman baru" tidak mendukung Kiro (padahal Kiro memberi poin), regionnya terkunci, dan Marketplace-nya terbatas. Tanyakan ke mentor.
+**Persiapan akun AWS (akun standar baru):**
 
-**Persiapan akun AWS:**
-
-- [ ] **1. Aktifkan MFA.** Akun saat ini login lewat Google, jadi MFA diaktifkan lewat Verifikasi 2 Langkah di akun Google (https://myaccount.google.com/security). Untuk login dengan email: https://settings.aws.com → **Manage security and sign-in** → **Register device**.
-- [x] **2. Cek region proyek.** https://settings.aws.com → **Project** → **Info tambahan** → **Region**. Hasil: **Asia Pacific (Sydney) `ap-southeast-2`** (terkonfirmasi 17 Okt 2026).
-- [ ] **3. Selesaikan verifikasi akun (saran panitia).** Daftarkan **kartu kredit Visa/Mastercard** dengan transaksi online/internasional aktif (bukan kartu debit), pakai **email kampus**, dan nama sesuai kartu mahasiswa. Ditahan ±USD 1 dan dikembalikan dalam 3–5 hari, tidak ditagih kecuali upgrade. **Status 17 Okt 2026:** akun "Do the Thing" (Gmail, tanpa kartu) masih tertahan verifikasi. Bedrock mengembalikan *"Your account is currently being verified"* (N. Virginia) dan *"Operation not allowed"* (Sydney), dan konsol Bedrock mengarah ke halaman *"Complete your account setup"*. Kasus dukungan dibuka lewat https://settings.aws.com → **Support** → area **Account Activation**: **Case ID 179219134100369** (https://settings.aws.com/support?caseId=179219134100369). Alamat aws-verification@amazon.com tidak dipantau.
+- [ ] **1. Daftar akun standar** lewat *Sign up for AWS (advanced)*: https://portal.aws.amazon.com/billing/signup. Pakai **email kampus**, **kartu kredit Visa/Mastercard** (bukan kartu debit) dengan transaksi online/internasional aktif, dan nama sesuai kartu mahasiswa.
+  - **Pilih paket dengan sadar.** Free plan cukup untuk Amazon Nova, tetapi Claude (Marketplace) dan kredit promosi (termasuk kredit Student Rewards) hanya bisa dipakai di **Paid plan**, yang menagih kartu untuk pemakaian di atas Free Tier/kredit. Saran: mulai dengan Free plan + Nova, lalu upgrade ke Paid plan hanya kalau Claude benar-benar dibutuhkan, setelah alarm Budgets terpasang.
+- [ ] **2. Amankan akun:** aktifkan MFA untuk root user, buat user untuk kerja harian (IAM Identity Center atau user IAM), dan jangan memakai root sehari-hari.
+- [ ] **3. Pasang alarm AWS Budgets** (misalnya US$5 dan US$20) sebelum membuat resource apa pun.
 - [x] **4. Install AWS CLI v2.** Terpasang: aws-cli 2.38.1 (`winget install -e --id Amazon.AWSCLI`). Kalau terminal belum mengenali `aws`, buka ulang VS Code atau jalankan `$env:Path += ";C:\Program Files\Amazon\AWSCLIV2"`.
-- [x] **5. Login CLI ke proyek.** Berhasil 17 Okt 2026 dengan `aws login` (profile `default`, role `AccountFullAccessRole`, pilih proyek **Do the Thing** di browser). Kredensial berlaku 12 jam; ulangi `aws login` kalau kedaluwarsa. Paket Python `awscrt` wajib terpasang supaya boto3 bisa membaca kredensial ini (sudah ada di `requirements.txt`).
-- [ ] **6. Cek biaya.** Paket gratis dengan kredit $100 (sisa 183 hari per 17 Okt 2026) tidak menimbulkan tagihan. Paket gratis **otomatis ditutup** saat kredit habis atau setelah 6 bulan, dan tidak bisa menukar kredit promosi lain. Harga Bedrock: https://aws.amazon.com/bedrock/pricing/.
-- [ ] **7. Tes Bedrock (kalau LLM final memakai Bedrock).** Set `CHIBIREX_LLM_PROVIDER=bedrock` di `.env`, lalu jalankan `python -m agent.cek_llm` (atau `python -m agent.cek_bedrock --claude` untuk Claude). Skrip mencoba 4 kombinasi region + model dan menyimpan yang berhasil ke `.env`.
+- [ ] **5. Login CLI ke akun baru** (`aws configure sso` kalau memakai Identity Center, atau `aws login`). Paket `awscrt` sudah ada di `requirements.txt` untuk kredensial `aws login`.
+- [ ] **6. Aktifkan akses model di Bedrock:** Amazon Nova dan Anthropic Claude (Claude butuh Paid plan). Pilih region yang menyediakan keduanya dan juga AgentCore.
+- [ ] **7. Tes Bedrock:** set `CHIBIREX_LLM_PROVIDER=bedrock` di `.env`, lalu jalankan `python -m agent.cek_llm` (atau `python -m agent.cek_bedrock --claude` untuk Claude). Harga: https://aws.amazon.com/bedrock/pricing/.
+- [ ] **8. Daftar AWS Student Rewards (21 badge)** dan verifikasi profil mahasiswa untuk kredit.
+
+<details>
+<summary>Akun lama "Do the Thing" (pengalaman baru AWS, ditinggalkan 19 Okt 2026)</summary>
+
+- Tanpa akun root, login lewat AWS Builder ID (Google), region terkunci di Asia Pacific (Sydney) `ap-southeast-2`, kredensial CLI lewat `aws login` (berhasil 17 Okt 2026).
+- Bedrock tertahan verifikasi akun (*"Your account is currently being verified"*), dengan kasus dukungan Case ID 179219134100369.
+- Free plan memblokir Claude dan kredit promosi, dan akun jenis ini tidak mendukung Kiro. Mentor menyarankan tidak menghabiskan waktu lagi untuk akun ini.
+
+</details>
 
 **Deploy:**
 
-- [ ] Upload data mentah dan hasil olahan ke Amazon S3
-- [ ] Pindahkan tabel ke RDS PostgreSQL
-- [ ] Deploy API dan agent ke Lambda atau ECS (pakai Docker)
-- [ ] LLM di AWS: Ollama di EC2 dengan GPU (ditagih per jam, nyalakan hanya saat dibutuhkan) atau Amazon Bedrock. (Opsional) Bedrock AgentCore untuk menjalankan agent.
-- [ ] Cek biaya di AWS Budgets setelah deploy
+- [ ] Pindahkan state (`state.sqlite`: PO, hold, idempotency, circuit breaker, audit log) ke database terkelola. Lambda bisa berjalan di banyak instance sekaligus dengan disk sementara, sehingga batas harian dan circuit breaker hanya aman kalau state-nya dipakai bersama. Kandidat: RDS/Aurora PostgreSQL (sesuai proposal; logika SQL dan transaksi tetap) atau DynamoDB. Tanyakan di Zoom 22 Okt.
+- [ ] Simpan data analitik (`chibirex.duckdb`, ±300 MB, hanya dibaca) dan model risiko di S3, lalu sertakan di image container API.
+- [ ] Deploy FastAPI (tools + tiruan SAP) ke Lambda + API Gateway sebagai container image (adapter Mangum atau AWS Lambda Web Adapter); alternatif ECS Fargate.
+- [ ] Deploy agent Strands ke Bedrock AgentCore Runtime, yang memanggil API tools lewat URL API Gateway (`CHIBIREX_API_URL`).
+- [ ] Deploy dashboard setelah Tahap 7. Streamlit butuh server yang terus berjalan, jadi pakai ECS Fargate; atau biarkan dashboard berjalan lokal (diizinkan mentor).
+- [ ] Uji end-to-end di AWS (agent → draf PO → approve → PO di tiruan SAP), cek biaya di AWS Budgets, dan matikan resource yang menganggur.
 
 ### Tahap 9 — Paket Kuat (Product Backorders + Online Retail II) ✅
 
@@ -414,6 +447,8 @@ Rasio dibatasi 24 dan penyebut nol menjadi data kosong. Fitur performa supplier 
 
 ### Tahap 11 — Demo & pitch ⬜
 
+**Final: Sabtu 31 Okt 2026, tatap muka, 15 menit termasuk tanya jawab, berbahasa Inggris.** Demo live diutamakan dan harus memperlihatkan loop agentic (plan → reason → act/tool → review) dengan human-in-the-loop. Buka deck dengan diagram arsitektur dan pakai alur Problem → Solution → Impact.
+
 Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SKU A vs stagnasi SKU B):
 
 | # | Langkah | Dataset | Paket | Isi |
@@ -429,14 +464,17 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 - [ ] Siapkan data dan skenario untuk langkah 1–5 (paket Minimal)
 - [ ] Siapkan skenario untuk langkah 6–7 (jika paket Kuat/Maksimal selesai)
 - [ ] Siapkan skenario injeksi selisih stok (label "simulasi") supaya Data Confidence Score turun dan fitur mitigasi inakurasi data bisa didemokan, karena data Bibitor asli konsisten sempurna
-- [ ] Gladi demo end-to-end
-- [ ] Slide arsitektur: S3, RDS, Lambda/ECS, LLM (Ollama di EC2 atau Bedrock), Strands Agents, AgentCore, SAP. Tekankan bahwa arsitektur tidak terikat ke satu penyedia model dan data stok bisa tetap di infrastruktur sendiri.
+- [ ] Gladi demo live end-to-end dengan timer (15 menit sudah termasuk tanya jawab)
+- [ ] Slide arsitektur (dibuka paling awal): S3, Lambda + API Gateway, database terkelola, Bedrock (Nova/Claude) lewat Strands, AgentCore Runtime, SAP. Tekankan bahwa arsitektur tidak terikat ke satu penyedia model dan data stok bisa tetap di infrastruktur sendiri.
 - [ ] Slide "Sumber data per modul"; transparansi seperti ini menambah kredibilitas di depan juri
 - [ ] Cantumkan atribusi dan catatan lisensi setiap dataset
 - [ ] Slide roadmap: pilot **Fase 2** dengan data cabang riil dan kalibrasi ulang model, lalu **Fase 3** berupa audit fisik lewat foto rak (dataset gambar produk ritel Indonesia)
 - [ ] Rekam video demo cadangan
-- [ ] Kirim pertanyaan mentoring sebelum **Senin 19 Okt 2026, 16.00 WIB**
-- [ ] Ikuti sesi mentoring 1:1 (undangan Zoom ke email kampus, Senin 19 Okt 2026)
+- [x] Kirim pertanyaan mentoring sebelum **Senin 19 Okt 2026, 16.00 WIB** (dikirim 18 Okt, dijawab 19 Okt; ringkasannya di bagian Ketentuan Lomba)
+- [ ] Ikuti Zoom deep-dive teknis 30 menit (diusulkan Rabu 22 Okt 2026 siang/sore WIB, jadwal dari panitia). Bawa diagram arsitektur dan pertanyaan soal database state di Lambda dan AgentCore.
+- [ ] Pakai Kiro secara nyata untuk sebagian pekerjaan (misalnya Tahap 7 atau 8), simpan spec dan steering-nya (`.kiro/`) di repo, dan siapkan cuplikan singkat Kiro untuk demo
+- [ ] Siapkan deck dan naskah presentasi dalam bahasa Inggris, lalu serahkan demo + slide sebagai artefak pada hari final
+- [ ] Putuskan bahasa output agent dan dashboard untuk demo (presentasi berbahasa Inggris, sedangkan ringkasan agent saat ini berbahasa Indonesia)
 
 ---
 
@@ -452,9 +490,11 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 - **Jangan menggabungkan baris antar-dataset** seolah-olah satu perusahaan. Periodenya berbeda (Bibitor 2016, Online Retail II 2009–2011), begitu juga negara dan mata uangnya.
 - **SAP:** sandbox api.sap.com hanya untuk membaca data, jadi pembuatan PO memakai mock. SAP BTP trial berlaku 90 hari dan akun harus login minimal sekali setiap 30 hari.
 - **Biaya AWS:** pasang AWS Budgets sejak awal.
-- **Akun AWS "pengalaman baru" (proyek):** region tetap Asia Pacific (Sydney) `ap-southeast-2`, tidak ada akun root, akses konsol hanya lewat AWS Builder ID, kredensial CLI lewat `aws login`, dan fitur cross-region dibatasi. Hal ini berpengaruh ke Tahap 5 (pilihan model dan inference profile) dan Tahap 8 (semua resource deploy berada di Sydney). Kalau suatu saat butuh fitur yang tidak tersedia, bisa memakai "Activate advanced AWS features".
+- **Akun AWS lama ("pengalaman baru", proyek Do the Thing) ditinggalkan** atas saran mentor (19 Okt 2026): region terkunci di Sydney, tidak mendukung Kiro, serta Marketplace dan cross-region dibatasi. Semua resource final dibuat di akun standar baru.
 - **LLM lokal (Ollama):** demo bergantung pada laptop ber-GPU (RTX 5070 Ti, VRAM 12 GB); anggota tim tanpa GPU besar bisa memakai `qwen3:8b`, dengan respons lebih lambat. Kualitas penalaran model 14B di bawah model cloud kelas atas, jadi angka dan keputusan tetap harus datang dari tools API (guardrail di kode), bukan dari tebakan model. Unduhan model ±9 GB.
-- **Paket gratis AWS:** tidak bisa memakai Claude (Marketplace) dan tidak bisa menukar kredit promosi lain, termasuk kalau panitia memberi kode kredit AWS. Akun **otomatis ditutup** saat kredit $100 habis atau setelah 6 bulan (per 17 Okt 2026 sisa 183 hari, sekitar pertengahan April 2027). Data dan resource disimpan 90 hari setelah itu, dan masih bisa diselamatkan dengan upgrade ke Paid Plan.
+- **Paket AWS di akun baru:** Free plan tetap memblokir Claude (Marketplace) dan kredit promosi, termasuk kredit Student Rewards, dan otomatis ditutup saat kreditnya habis atau setelah 6 bulan. Paid plan membuka semuanya, tetapi pemakaian di atas Free Tier/kredit ditagih ke kartu. Pasang AWS Budgets sebelum membuat resource, dan matikan resource yang menganggur.
+- **Jadwal:** final Sabtu 31 Okt 2026, 12 hari dari 19 Okt. Deploy AWS (Tahap 8) bergantung pada akun baru yang belum dibuat, dan dashboard (Tahap 7) masih menunggu desain. Kalau waktu mepet, mentor mengizinkan sebagian demo berjalan lokal; video cadangan tetap disiapkan.
+- **Bahasa:** presentasi final berbahasa Inggris, sedangkan ringkasan agent, label API, dan istilah di kode berbahasa Indonesia.
 - **Data Indonesia:** tidak ada dataset ritel Indonesia di Kaggle yang memuat stok dan supplier. Data riil dari cabang menjadi bagian dari Fase 2.
 
 ---
@@ -515,4 +555,5 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 17 Okt 2026 | **Tahap 5 selesai.** Paket `agent/` (6 tools Strands, system prompt, `python -m agent.run`), endpoint API baru (`list_prioritas`, `agent-runs`, label `arah_tren`), guardrail satu draf PO per SKU, dan pembatasan tindakan agent ke daftar prioritas di kode. Uji langsung toko 74: semua keputusan benar dalam 29,7 detik; percobaan model membuat PO untuk SKU "turun" ditolak guardrail. Total 50 test lulus. |
 | 18 Okt 2026 | **Tahap 6 inti selesai.** Tiruan SAP `sap_mock/` (OData V2 `API_PURCHASEORDER_PROCESS_SRV`: path URL sama, token CSRF, validasi, nomor PO 45xxxxxxxx) ter-mount di API `/sap`; `api/sap.py` menyusun payload; approve membuat PO di SAP dan menyimpan `sap_po_number` (SAP gagal → PO tetap DRAFT); pratinjau payload `GET /purchase-orders/{id}/sap-payload`; migrasi kolom otomatis. 57 test lulus; uji langsung agent → approve → PO 4500000001. Catatan: V2 deprecated, pengganti OData V4 `CE_PURCHASEORDER_0001`. |
 | 18 Okt 2026 | **Tahap 9 selesai.** `engine/risiko.py`: model LightGBM risiko stok habis dari Product Backorders (mirror lengkap 1,69 juta baris), PR-AUC 0,227 vs aturan cover 0,078; skor untuk setiap SKU Bibitor di tabel `risiko_stockout` (TINGGI 11.671, SEDANG 69.847, RENDAH 194.871) dan tampil sebagai Confidence Score di API + ringkasan agent. `engine/borongan.py`: 87% produk Online Retail II pernah mengalami lonjakan >3σ, median 18,5×. Skenario `python -m agent.skenario_runaway`: 3 PO borongan ditahan → circuit breaker terbuka → PO normal ikut ditahan. Bug fitur rasio (`least()` mengabaikan NULL) ditemukan dan diperbaiki. 62 test lulus. Model forecast statsforecast dipindah ke Tahap 10. |
+| 19 Okt 2026 | Mentor AWS menjawab pertanyaan mentoring (ringkasan di bagian Ketentuan Lomba). Final **Sabtu 31 Okt**, tatap muka, 15 menit, bahasa Inggris, demo live. Rencana Tahap 8 dirombak: akun "pengalaman baru" ditinggalkan dan diganti akun standar baru (email kampus); LLM final Bedrock lewat Strands (Nova + Claude) di AgentCore Runtime; API di Lambda + API Gateway; tanpa EC2. Tiruan SAP dikonfirmasi diterima. Tugas Kiro (spec + steering di repo) ditambahkan ke Tahap 11. Zoom deep-dive diusulkan Rabu 22 Okt. |
 | 17 Okt 2026 | AWS CLI 2.38.1 terpasang dan `aws login` berhasil (ditambah `awscrt` di requirements). Tes Bedrock belum lulus karena **akun AWS masih dalam verifikasi** ("Your account is currently being verified"); ini juga penyebab halaman "Complete your account setup" di konsol Bedrock. Menunggu verifikasi lalu tes ulang. |
