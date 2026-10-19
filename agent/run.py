@@ -9,7 +9,7 @@ from strands import Agent
 
 from agent import config
 from agent.llm import buat_model, nama_model
-from agent.prompt import SYSTEM_PROMPT
+from agent.prompt import SYSTEM_PROMPT, TUGAS_DEFAULT
 from agent.tools import AlatAgent
 
 
@@ -22,10 +22,12 @@ def _token(hasil) -> tuple[int, int, int]:
     return total.get("inputTokens", 0), total.get("outputTokens", 0), terbesar
 
 
-def jalankan(tugas: str, store: int | None = None, client: httpx.Client | None = None, verbose: bool = True) -> dict:
+def jalankan(tugas: str, store: int | None = None, client: httpx.Client | None = None, verbose: bool = True,
+             run_id: str | None = None, langkah: list[dict] | None = None) -> dict:
+    """`run_id` dan `langkah` diisi oleh API saat agent dijalankan dari dashboard (lihat api/agent_runner.py)."""
     client = client or httpx.Client(base_url=config.API_URL, timeout=60)
-    run_id = uuid4().hex[:12]
-    alat = AlatAgent(client, run_id, pembuat=f"agent ChibiRex ({nama_model()})", verbose=verbose)
+    run_id = run_id or uuid4().hex[:12]
+    alat = AlatAgent(client, run_id, pembuat=f"agent Rexa ({nama_model()})", verbose=verbose, langkah=langkah)
     agent = Agent(model=buat_model(), tools=alat.tools(), system_prompt=SYSTEM_PROMPT, callback_handler=None)
 
     if verbose:
@@ -54,11 +56,11 @@ def jalankan(tugas: str, store: int | None = None, client: httpx.Client | None =
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Jalankan agent ChibiRex untuk satu toko.")
+    p = argparse.ArgumentParser(description="Jalankan agent Rexa untuk satu toko.")
     p.add_argument("--store", type=int, default=74)
     p.add_argument("--tugas", help="Instruksi untuk agent (default: tinjau toko sesuai prosedur).")
     args = p.parse_args()
-    tugas = args.tugas or f"Tinjau toko {args.store} dan ambil tindakan untuk SKU prioritas sesuai prosedur."
+    tugas = args.tugas or TUGAS_DEFAULT.format(store=args.store)
     jalankan(tugas, store=args.store)
 
 

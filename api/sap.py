@@ -45,7 +45,7 @@ def payload_po(po: dict, tanggal: datetime) -> dict:
             "Material": material(po["inventory_id"]),
             "OrderQuantity": str(po["qty"]),
             "DocumentCurrency": MATA_UANG,
-            "RequisitionerName": "ChibiRex",
+            "RequisitionerName": "Rexa",
             "to_PurchaseOrderPricingElement": {"results": [{
                 "ConditionType": "PBXX",  # harga beli yang diinput manual
                 "ConditionRateValue": str(harga_satuan),

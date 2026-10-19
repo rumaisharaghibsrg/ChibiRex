@@ -1,1 +1,1 @@
-"""REST API tervalidasi untuk tools agent ChibiRex."""
+"""REST API tervalidasi untuk tools agent Rexa dan dashboard."""

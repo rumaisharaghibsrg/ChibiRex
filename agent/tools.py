@@ -28,12 +28,14 @@ def _pilih(data: dict, field: list[str]) -> dict:
 class AlatAgent:
     """Membuat tools Strands yang terikat ke satu sesi agent (run_id) dan satu klien HTTP."""
 
-    def __init__(self, client: httpx.Client, run_id: str, pembuat: str, verbose: bool = False):
+    def __init__(self, client: httpx.Client, run_id: str, pembuat: str, verbose: bool = False,
+                 langkah: list[dict] | None = None):
         self.client = client
         self.run_id = run_id
         self.pembuat = pembuat[:100]
         self.verbose = verbose
-        self.langkah: list[dict] = []
+        # Bisa diisi list dari luar, supaya dashboard melihat langkah agent selagi berjalan.
+        self.langkah: list[dict] = langkah if langkah is not None else []
         # SKU yang boleh diberi tindakan pada sesi ini, diisi dari hasil list_prioritas.
         self.prioritas: dict[str, set[str]] | None = None
 
@@ -75,7 +77,7 @@ class AlatAgent:
     @staticmethod
     def _alasan(alasan: str) -> str:
         alasan = alasan.strip()
-        return alasan if len(alasan) >= 10 else f"{alasan} (keputusan agent ChibiRex)"
+        return alasan if len(alasan) >= 10 else f"{alasan} (keputusan agent Rexa)"
 
     def tools(self) -> list:
         alat = self

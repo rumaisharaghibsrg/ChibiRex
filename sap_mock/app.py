@@ -60,7 +60,7 @@ def create_sap_mock(db_path: Path) -> FastAPI:
     token_sesi: dict[str, str] = {}
 
     app = FastAPI(title="Mock SAP S/4HANA: API_PURCHASEORDER_PROCESS_SRV",
-                  description="Tiruan SAP untuk demo ChibiRex. Bukan sistem SAP sungguhan.")
+                  description="Tiruan SAP untuk demo Rexa. Bukan sistem SAP sungguhan.")
 
     @contextmanager
     def koneksi():

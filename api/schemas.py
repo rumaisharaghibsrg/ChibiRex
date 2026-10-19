@@ -206,6 +206,61 @@ class AgentRun(AgentRunIn):
     waktu: str
 
 
+class AgentRunMulai(Request):
+    store: int
+    tugas: str | None = Field(default=None, max_length=2000, description="Kosongkan untuk prosedur standar")
+
+
+class AgentRunStatus(BaseModel):
+    run_id: str
+    status: Literal["BERJALAN", "SELESAI", "GAGAL"]
+    store: int | None
+    tugas: str
+    langkah: list[LangkahAgent] = Field(description="Tool yang sudah dipanggil, bertambah selama agent berjalan")
+    mulai_pada: str | None = None
+    waktu: str | None = Field(default=None, description="Waktu jejak disimpan (setelah selesai)")
+    model: str | None = None
+    jawaban: str | None = Field(default=None, description="Ringkasan akhir agent (setelah selesai)")
+    durasi_dtk: float | None = None
+    token_input: int | None = None
+    token_output: int | None = None
+    pesan: str | None = Field(default=None, description="Penyebab kalau GAGAL")
+
+
+class Toko(BaseModel):
+    store: int
+    kota: str
+    sku_aktif: int
+    perlu_reorder: int
+
+
+class KomponenHealth(BaseModel):
+    kode: Literal["KETERSEDIAAN", "PERPUTARAN", "STABILITAS_KAS"]
+    nama: str
+    nilai: float = Field(description="0-100")
+    penjelasan: str
+
+
+class RingkasanToko(BaseModel):
+    store: int
+    kota: str
+    per_tanggal: date = Field(description="Tanggal data (simulasi dari Bibitor)")
+    health_score: int = Field(description="Inventory Health Score 0-100 = rata-rata komponen")
+    rumus: str
+    komponen: list[KomponenHealth]
+    sku_aktif: int
+    jumlah_status: dict[str, int]
+    nilai_stok_idr: float
+    modal_tertahan_idr: float = Field(description="Nilai stok di SKU OVERSTOCK dan DEADSTOCK")
+    sku_risiko_tinggi: int
+    po_menunggu: int = Field(description="Draf PO yang menunggu 1-Click Approval")
+    nilai_po_menunggu_idr: float
+    po_disetujui: int
+    po_ditahan_guardrail: int
+    modal_diselamatkan_idr: float = Field(description="Dari Hold Reorder yang aktif")
+    exploration_budget_idr: float = Field(description="Nilai stok uji dari Hold Reorder yang aktif")
+
+
 class AuditEntry(BaseModel):
     id: int
     waktu: str

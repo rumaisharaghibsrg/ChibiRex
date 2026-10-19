@@ -1,7 +1,7 @@
 """Pengaturan API dan ambang guardrail. Semua ambang ditetapkan pengguna dan bisa diubah di sini."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -35,5 +35,12 @@ class Settings:
     sap_mock_db: Path = config.ROOT / "data" / "processed" / "sap_mock.sqlite"
     sap_mock_app: Any = None  # aplikasi tiruan SAP yang di-mount di /sap; dibuat otomatis kalau kosong
     sap_client: Callable[[], httpx.Client] | None = None  # untuk test: klien HTTP ke SAP
+
+    # Dashboard React (Vite dev server di port 5173) memanggil API dari origin lain, jadi perlu CORS.
+    # Saat deploy, tambahkan domain dashboard lewat CHIBIREX_CORS_ORIGINS (dipisah koma).
+    cors_origins: list[str] = field(default_factory=lambda: os.environ.get(
+        "CHIBIREX_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(","))
+    # Fungsi yang menjalankan agent untuk tombol "Jalankan agent" di dashboard; kosong = agent Strands lokal.
+    agent_runner: Callable[..., dict] | None = None
 
     clock: Callable[[], datetime] = datetime.now

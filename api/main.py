@@ -1,4 +1,4 @@
-"""REST API tervalidasi untuk tools agent ChibiRex.
+"""REST API tervalidasi untuk tools agent Rexa dan dashboard.
 
 Jalankan: `uvicorn api.main:app --reload`, lalu buka http://127.0.0.1:8000/docs.
 Hentikan API sebelum menjalankan `python -m engine.pipeline`, karena DuckDB tidak bisa ditulis
@@ -15,11 +15,14 @@ from uuid import uuid4
 import duckdb
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 
+from agent.prompt import TUGAS_DEFAULT
 from api import guardrails, sap, state
-from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AuditEntry, DraftPORequest, Hold, HoldRequest,
-                         Keputusan, Prioritas, PurchaseOrder, Realokasi, Sku, StatusGuardrail, StatusPO, StatusStok,
-                         Substitusi)
+from api.agent_runner import AgentSedangBerjalan, PenjalanAgent, jalankan_agent_lokal
+from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AgentRunMulai, AgentRunStatus, AuditEntry,
+                         DraftPORequest, Hold, HoldRequest, Keputusan, Prioritas, PurchaseOrder, Realokasi,
+                         RingkasanToko, Sku, StatusGuardrail, StatusPO, StatusStok, Substitusi, Toko)
 from api.settings import Settings
 from engine import basket, config
 from engine.format import angka, rupiah
@@ -29,6 +32,26 @@ TOOLS = "Tools agent"
 APPROVAL = "Approval manusia"
 GUARDRAIL = "Guardrail & audit"
 AGENT = "Jejak agent"
+DASHBOARD = "Dashboard"
+
+# Inventory Health Score (proposal Bagian 3): risiko stockout, perputaran barang, dan stabilitas kas persediaan,
+# masing-masing 0-100 dengan bobot sama. Dihitung dari SKU aktif (yang masih punya stok atau penjualan).
+KOMPONEN_HEALTH = [
+    ("KETERSEDIAAN", "Ketersediaan stok", "% SKU aktif yang stoknya masih di atas reorder point"),
+    ("PERPUTARAN", "Perputaran barang", "% SKU aktif yang tidak menumpuk (bukan OVERSTOCK atau DEADSTOCK)"),
+    ("STABILITAS_KAS", "Stabilitas kas persediaan",
+     "% nilai persediaan yang tidak tertahan di SKU OVERSTOCK atau DEADSTOCK"),
+]
+HEALTH_SQL = """
+    select any_value(s.kota) as kota, count(*) as sku_aktif,
+        avg(case when s.status_stok <> 'REORDER' then 1.0 else 0 end) as ketersediaan,
+        avg(case when s.status_stok not in ('OVERSTOCK', 'DEADSTOCK') then 1.0 else 0 end) as perputaran,
+        coalesce(sum(s.nilai_stok_idr), 0) as nilai_stok,
+        coalesce(sum(case when s.status_stok in ('OVERSTOCK', 'DEADSTOCK') then s.nilai_stok_idr end), 0) as tertahan,
+        count(*) filter (where r.level_risiko = 'TINGGI') as risiko_tinggi
+    from sku_metrics s left join risiko_stockout r using (inventory_id)
+    where s.store = ? and s.status_stok <> 'TIDAK_AKTIF'
+"""
 
 SKU_SQL = """
     select s.*, bj.jenis, bj.status_komplementer, r.risiko_stockout, r.skor_risiko, r.level_risiko
@@ -65,13 +88,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.duck.close()
 
     app = FastAPI(
-        title="ChibiRex Copilot API",
+        title="Rexa Copilot API",
         version="0.1.0",
-        description="Tools tervalidasi untuk agent Smart Inventory & Cash Flow Copilot. "
+        description="Tools tervalidasi untuk agent Rexa (Smart Inventory & Cash Flow Copilot) dan dashboard. "
                     "Semua aksi agent wajib lewat API ini; guardrail dijalankan di kode, bukan di prompt.",
         lifespan=lifespan,
     )
+    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"],
+                       allow_headers=["*"], expose_headers=["Idempotent-Replay", "Existing-Draft"])
     app.state.settings = settings
+    app.state.agent = PenjalanAgent(settings.agent_runner or jalankan_agent_lokal, settings.clock)
     _routes(app)
     # Tiruan SAP ikut berjalan di server yang sama (/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV).
     app.mount("/sap", settings.sap_mock_app or create_sap_mock(settings.sap_mock_db))
@@ -450,6 +476,79 @@ def _routes(app: FastAPI) -> None:
         with state.baca(_settings(request).state_db) as con:
             rows = con.execute("select * from agent_runs order by waktu desc limit ?", (limit,)).fetchall()
         return [{**dict(r), "langkah": json.loads(r["langkah"]), "berhasil": bool(r["berhasil"])} for r in rows]
+
+    @app.post("/agent-runs/mulai", response_model=AgentRunStatus, status_code=202, tags=[DASHBOARD])
+    def mulai_agent(body: AgentRunMulai, request: Request, cur=Depends(_duck)):
+        """Tombol "Jalankan agent" di dashboard. Agent berjalan di latar (±30-60 detik dengan LLM lokal); pantau
+        langkahnya lewat `GET /agent-runs/{run_id}` sampai status SELESAI atau GAGAL. Hanya satu agent sekaligus."""
+        if not cur.execute("select 1 from sku_metrics where store = ? limit 1", [body.store]).fetchone():
+            raise galat(404, "TOKO_TIDAK_ADA", f"Toko {body.store} tidak ditemukan.")
+        try:
+            return request.app.state.agent.mulai(body.tugas or TUGAS_DEFAULT.format(store=body.store), body.store)
+        except AgentSedangBerjalan:
+            raise galat(409, "AGENT_SEDANG_BERJALAN", "Agent masih berjalan; tunggu sampai selesai.")
+
+    @app.get("/agent-runs/{run_id}", response_model=AgentRunStatus, tags=[DASHBOARD])
+    def status_agent_run(run_id: str, request: Request):
+        """Status dan langkah satu kali jalannya agent. Selama BERJALAN, `langkah` bertambah setiap agent
+        memanggil tool; setelah SELESAI, `jawaban` berisi ringkasan akhir agent."""
+        berjalan = request.app.state.agent.status(run_id)
+        if berjalan and berjalan["status"] == "BERJALAN":
+            return berjalan
+        with state.baca(_settings(request).state_db) as con:
+            row = con.execute("select * from agent_runs where run_id = ?", (run_id,)).fetchone()
+        if row:
+            return {**dict(row), "langkah": json.loads(row["langkah"]),
+                    "status": "SELESAI" if row["berhasil"] else "GAGAL",
+                    "mulai_pada": berjalan["mulai_pada"] if berjalan else None,
+                    "pesan": None if row["berhasil"] else row["jawaban"]}
+        if berjalan:  # gagal sebelum jejaknya sempat disimpan
+            return berjalan
+        raise galat(404, "AGENT_RUN_TIDAK_ADA", f"Agent run {run_id} tidak ditemukan.")
+
+    # ---------------------------------------------------------------- dashboard
+
+    @app.get("/stores", response_model=list[Toko], tags=[DASHBOARD])
+    def list_toko(cur=Depends(_duck)):
+        """Daftar toko untuk pilihan cabang di dashboard."""
+        rows = cur.execute("""
+            select store, any_value(kota) as kota, count(*) filter (where status_stok <> 'TIDAK_AKTIF') as sku_aktif,
+                count(*) filter (where perlu_reorder) as perlu_reorder
+            from sku_metrics group by store order by store
+        """).fetchall()
+        return [dict(zip(["store", "kota", "sku_aktif", "perlu_reorder"], r)) for r in rows]
+
+    @app.get("/stores/{store}/ringkasan", response_model=RingkasanToko, tags=[DASHBOARD])
+    def ringkasan_toko(store: int, request: Request, cur=Depends(_duck)):
+        """Inventory Health Score dan angka KPI satu toko untuk dashboard. Health Score dan nilai stok dihitung dari
+        data per tanggal simulasi; PO dan modal yang diselamatkan berasal dari tindakan agent dan manajer."""
+        rel = cur.execute(HEALTH_SQL, [store])
+        h = dict(zip([d[0] for d in rel.description], rel.fetchone()))
+        jumlah_status = dict(cur.execute("select status_stok, count(*) from sku_metrics where store = ? group by 1",
+                                         [store]).fetchall())
+        if not jumlah_status:
+            raise galat(404, "TOKO_TIDAK_ADA", f"Toko {store} tidak ditemukan.")
+        nilai = {"KETERSEDIAAN": h["ketersediaan"] or 0, "PERPUTARAN": h["perputaran"] or 0,
+                 "STABILITAS_KAS": 1 - h["tertahan"] / h["nilai_stok"] if h["nilai_stok"] else 1}
+        komponen = [{"kode": k, "nama": nama, "nilai": round(100 * nilai[k], 1), "penjelasan": penjelasan}
+                    for k, nama, penjelasan in KOMPONEN_HEALTH]
+
+        with state.baca(_settings(request).state_db) as con:
+            po = {r[0]: (r[1], r[2]) for r in con.execute(
+                "select status, count(*), coalesce(sum(nilai_idr), 0) from purchase_orders where store = ? group by 1",
+                (store,))}
+            diselamatkan, uji = con.execute(
+                """select coalesce(sum(modal_diselamatkan_idr), 0), coalesce(sum(nilai_uji_idr), 0) from holds
+                   where store = ? and status = 'AKTIF'""", (store,)).fetchone()
+        return {"store": store, "kota": h["kota"] or "", "per_tanggal": config.AS_OF,
+                "health_score": round(sum(nilai.values()) / len(nilai) * 100),
+                "rumus": "Rata-rata tiga komponen dengan bobot sama", "komponen": komponen,
+                "sku_aktif": h["sku_aktif"], "jumlah_status": jumlah_status, "nilai_stok_idr": h["nilai_stok"],
+                "modal_tertahan_idr": h["tertahan"], "sku_risiko_tinggi": h["risiko_tinggi"],
+                "po_menunggu": po.get("DRAFT", (0, 0))[0], "nilai_po_menunggu_idr": po.get("DRAFT", (0, 0))[1],
+                "po_disetujui": po.get("APPROVED", (0, 0))[0],
+                "po_ditahan_guardrail": po.get("DITAHAN_GUARDRAIL", (0, 0))[0],
+                "modal_diselamatkan_idr": diselamatkan, "exploration_budget_idr": uji}
 
     @app.get("/audit-log", response_model=list[AuditEntry], tags=[GUARDRAIL])
     def audit_log(request: Request, limit: int = Query(50, ge=1, le=500)):

@@ -1,9 +1,9 @@
 # Progress — ChibiRex
 
-**Smart Inventory & Cash Flow Copilot** · Lomba Agentic AI Hackathon 2026
+**Rexa: Smart Inventory & Cash Flow Copilot** · Tim ChibiRex · Lomba Agentic AI Hackathon 2026
 
 > Disusun dari pembahasan di claude.ai ([link percakapan](https://claude.ai/share/459288bb-adfd-4d82-be55-6cf142bf8bc8)) dan PDF *Rencana_Penggabungan_Dataset_Copilot.pdf* yang dibuat di percakapan tersebut.
-> Terakhir diperbarui: **19 Oktober 2026**
+> Terakhir diperbarui: **20 Oktober 2026**
 
 **Cara pakai:** ubah `[ ]` menjadi `[x]` saat sebuah langkah selesai, lalu perbarui tabel ringkasan dan log progres di bagian bawah.
 
@@ -20,15 +20,15 @@
 | 4 | Tools API + guardrail | ✅ Selesai | 13/13 |
 | 5 | Agent layer (Strands + Ollama) | ✅ Selesai | 9/9 |
 | 6 | Mock API SAP | 🟡 Inti selesai (sisa opsional) | 4/6 |
-| 7 | Dashboard (Streamlit) | ⏸️ Ditunda (menunggu desain UI/UX) | 0/7 |
+| 7 | Dashboard Rexa (React) | 🟡 Desain siap, disambungkan ke API lewat Kiro | 2/8 |
 | 8 | Deploy ke AWS (wajib untuk final) | 🟡 Berjalan (pindah ke akun baru) | 1/14 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ✅ Selesai | 9/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/8 |
 | 11 | Demo & pitch | 🟡 Berjalan | 1/14 |
-| | **Total** | | **75/118 (±64%)** |
+| | **Total** | | **77/119 (±65%)** |
 
-**Posisi sekarang:** Tahap 9 selesai: setiap SKU punya Confidence Score risiko stok habis (model LightGBM dari Product Backorders) yang tampil di API dan ringkasan agent, dan skenario uji Runaway PO dari pola borongan Online Retail II membuktikan guardrail 3σ + circuit breaker bekerja.
-**Target terdekat:** (1) buat **akun AWS standar baru** dengan email kampus (Tahap 8); (2) Zoom deep-dive dengan mentor AWS, diusulkan **Rabu 22 Okt 2026** siang/sore WIB; (3) **final Sabtu 31 Okt 2026** (tatap muka, 15 menit termasuk tanya jawab, berbahasa Inggris, demo live). Tahap 7 (dashboard) masih menunggu desain UI/UX.
+**Posisi sekarang:** desain dashboard **Rexa** (React) sudah ada dan backend sudah menyediakan endpoint untuk dashboard (Health Score, daftar toko, menjalankan agent dari dashboard). Kontraknya ada di `docs/api-dashboard.md`; penyambungan dikerjakan teman tim lewat Kiro. Model risiko (Tahap 9) dan guardrail Runaway PO sudah teruji dengan data asli.
+**Target terdekat:** (1) sambungkan dashboard ke API lewat Kiro, terutama panel agent dan 1-Click Approval (Tahap 7); (2) buat **akun AWS standar baru** dengan email kampus (Tahap 8); (3) Zoom deep-dive dengan mentor AWS, diusulkan **Rabu 22 Okt 2026** siang/sore WIB; (4) **final Sabtu 31 Okt 2026** (tatap muka, 15 menit termasuk tanya jawab, berbahasa Inggris, demo live).
 
 Legenda: ✅ selesai · 🟡 berjalan · ⬜ belum mulai
 
@@ -107,6 +107,7 @@ Fitur dari proposal yang dibahas:
 11. **LLM agent: Ollama dengan Qwen3 14B di laptop** (keputusan tim 17 Okt 2026, diizinkan panitia untuk prototipe). Sebelumnya sempat dipilih Amazon Nova di Bedrock, tetapi akun AWS tertahan verifikasi. Penyedia model dipilih lewat `CHIBIREX_LLM_PROVIDER` (`ollama` / `bedrock`), sehingga build final bisa memakai Bedrock tanpa mengubah kode agent. **Update 19 Okt:** mentor meminta Bedrock lewat Strands sebagai runtime final; Ollama tetap menjadi fallback lokal dan **tidak** dijalankan di EC2.
 12. **Confidence Score = peringkat risiko 0–100, bukan probabilitas mentah** (Tahap 9). Probabilitas dari model Backorders tidak terkalibrasi untuk minuman, tetapi urutannya bisa dipercaya. Level: TINGGI ≥ 90, SEDANG ≥ 70, sisanya RENDAH. Skor ini informasi untuk manajer; keputusan reorder tetap dari ROP dan guardrail.
 13. **Akun dan arsitektur AWS final (saran mentor, 19 Okt 2026):** akun "pengalaman baru" (proyek Do the Thing) ditinggalkan; tim membuat akun standar lewat *Sign up for AWS (advanced)* dengan email kampus. Deploy MVP memakai Lambda + API Gateway (alternatif ECS Fargate), tanpa EC2.
+14. **Nama produk: Rexa; dashboard React** (keputusan tim 20 Okt 2026). Tim tetap bernama ChibiRex. Dashboard memakai desain React + Vite + Tailwind dari tim (bukan Streamlit) dan disambungkan ke API lewat **Kiro**, sekaligus menjadi bukti pemakaian Kiro. Semua angka di dashboard wajib berasal dari API; kontraknya di `docs/api-dashboard.md`.
 
 ### Paket dataset
 
@@ -139,7 +140,7 @@ Fitur dari proposal yang dibahas:
 | API | FastAPI + Pydantic | Tools tervalidasi dan mock API SAP | Tahap 4, 6 |
 | Agent | Strands Agents SDK; Bedrock AgentCore Runtime untuk final | Loop agent & pemanggilan tools, hosting agent di AWS | Tahap 5, 8 |
 | LLM | Ollama + Qwen3 14B (lokal, untuk pengembangan dan fallback); Amazon Bedrock (Nova + Claude) untuk final | Penalaran agent | Tahap 5, 8 |
-| Dashboard | Streamlit | Health Score, notifikasi, 1-Click Approval | Tahap 7 |
+| Dashboard | React + Vite + Tailwind (di `dashboard/`), hosting S3 + CloudFront | Health Score, notifikasi, panel agent, 1-Click Approval | Tahap 7 |
 | Cloud | Amazon S3, Lambda + API Gateway (alternatif ECS Fargate), database terkelola (RDS/Aurora PostgreSQL atau DynamoDB) | Arsitektur final (saran mentor) | Tahap 8 |
 | Dev tools | Kiro | Spec dan steering untuk sebagian build (poin tambahan) | Tahap 7–8 |
 | SAP | SAP Business Accelerator Hub (api.sap.com), SAP BTP trial | Spesifikasi API PO & narasi integrasi | Tahap 6 |
@@ -153,7 +154,7 @@ ChibiRex/
 ├── engine/        # rekonstruksi stok, Vs, lead time, ROP, market basket, model risiko
 ├── api/           # FastAPI: tools tervalidasi + guardrail + mock SAP
 ├── agent/         # Strands Agents + Bedrock
-├── dashboard/     # Streamlit
+├── dashboard/     # React + Vite (dashboard Rexa)
 ├── docs/          # proposal, PDF rencana penggabungan dataset
 ├── .kiro/         # spec dan steering Kiro (bukti pemakaian Kiro untuk juri)
 ├── tests/         # unit test (pytest)
@@ -353,17 +354,20 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 - [ ] (Opsional) Daftar akun SAP Community dan ambil API key gratis di api.sap.com, untuk membandingkan format dengan sandbox SAP (sandbox hanya bisa membaca data contoh)
 - [ ] (Opsional) Integrasi SAP riil untuk poin "Use of AWS/SAP": minta akses SAP untuk finalis ke panitia (sub-account dengan AI Core dan Generative AI Hub), atau coba S/4HANA lewat cal.sap.com di akun AWS sendiri (butuh instance besar yang ditagih per jam, jadi matikan setelah dipakai). Targetkan OData V4 `CE_PURCHASEORDER_0001`.
 
-### Tahap 7 — Dashboard (Streamlit) ⏸️
+### Tahap 7 — Dashboard Rexa (React) 🟡
 
-**Ditunda sampai desain UI/UX tim siap** (keputusan 18 Okt 2026). Tidak bisa dilewati sepenuhnya: panitia meminta demo live di final yang memperlihatkan loop agentic dan persetujuan manajer. Sementara itu demo bisa lewat terminal (`python -m agent.run --store 74`) dan approve PO lewat Swagger (`/docs`). Semua data untuk dashboard sudah tersedia di API Tahap 4–6.
+**Desain dari tim (19 Okt 2026):** aplikasi React + Vite + Tailwind bermerek **Rexa** yang memuat semua fitur proposal (Health Score, Smart Reorder + prediksi stok habis, Hold Reorder, Exploration Budget, Realokasi Modal, 1-Click Approval + payload SAP, matriks guardrail + audit log, chatbot Copilot, pilihan cabang dan tingkat otonomi). Build lulus. **Kekurangannya:** semua data masih tiruan (produk kopi di `mockData.js`), nomor PO SAP dibuat acak, jawaban chatbot ditulis tetap di kode, dan belum ada cara menjalankan agent dari dashboard.
 
-- [ ] Setup Streamlit di `dashboard/`
-- [ ] Tampilkan Health Score per SKU per cabang
-- [ ] Tampilkan notifikasi Predictive Stockout Alert beserta Confidence Score
-- [ ] Buat tombol **1-Click Approval** untuk draf PO
-- [ ] Tampilkan rekomendasi Capital Reallocation dalam Rupiah
-- [ ] Tampilkan jejak agent (plan → reason → tool → review) dan alasan keputusannya, karena juri meminta loop agentic terlihat jelas. Datanya sudah ada di `GET /agent-runs/{run_id}`.
-- [ ] Beri label "simulasi" dan keterangan sumber data per modul
+**Cara menjalankan:** API di terminal 1 (`uvicorn api.main:app`), dashboard di terminal 2 (`cd dashboard`, `npm install`, `npm run dev`, lalu buka http://localhost:5173). Kontrak API per komponen, aturan tampilan, dan daftar yang perlu diubah ada di **`docs/api-dashboard.md`**.
+
+- [x] Desain UI/UX dashboard Rexa (React) dari tim, mencakup semua fitur di proposal Bagian 3
+- [x] Endpoint backend untuk dashboard: CORS untuk Vite (`CHIBIREX_CORS_ORIGINS`), `GET /stores` (pilihan cabang), `GET /stores/{store}/ringkasan` (Inventory Health Score + KPI dari tindakan agent/manajer), `POST /agent-runs/mulai` + `GET /agent-runs/{run_id}` (agent berjalan di latar dan langkahnya bisa dipantau selagi berjalan, satu agent sekaligus). Nama agent di prompt, payload SAP, dan judul API diganti menjadi Rexa. 6 test baru (total 68 lulus). Health Score = rata-rata 3 komponen: ketersediaan stok (% SKU aktif di atas ROP), perputaran (% SKU aktif bukan OVERSTOCK/DEADSTOCK), dan stabilitas kas (% nilai stok yang tidak tertahan). Dengan data asli, skornya tersebar 52–82 antar toko; toko 74 = **69**.
+- [ ] Pindahkan front-end dari root repo ke `dashboard/` dan keluarkan `node_modules` dari git (commit desain sempat menyertakan 1.728 file `node_modules` yang tidak bisa dipakai karena folder `dist/` di dalamnya terabaikan `.gitignore`)
+- [ ] Sambungkan dashboard ke API lewat **Kiro Spec** (spec + steering disimpan di `.kiro/`): Health Score, KPI, tabel Smart Reorder dengan Confidence Score, 1-Click Approval (nomor PO dari tiruan SAP), detail Hold, realokasi, status guardrail
+- [ ] **Panel agent:** tombol "Jalankan agent" dan tampilan langkah plan → reason → act → review selagi agent berjalan, ditutup ringkasan agent dan PO yang menunggu persetujuan manajer
+- [ ] Tombol skenario Runaway PO (urutan panggilan API seperti `agent/skenario_runaway.py`) dan tombol reset circuit breaker oleh manajer
+- [ ] Bersihkan angka dan klaim tanpa sumber (KPI stockout/akurasi ML/waktu proses, SageMaker, SAP BTP, PPN), ubah Level 3 menjadi "segera hadir" (Fase 3), tambahkan label "simulasi" dan sumber data per modul
+- [ ] Putuskan chatbot Copilot: jawaban dari data API (pertanyaan cepat) atau LLM read-only dengan endpoint baru
 
 ### Tahap 8 — Deploy ke AWS (wajib untuk final) 🟡
 
@@ -396,7 +400,7 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 - [ ] Simpan data analitik (`chibirex.duckdb`, ±300 MB, hanya dibaca) dan model risiko di S3, lalu sertakan di image container API.
 - [ ] Deploy FastAPI (tools + tiruan SAP) ke Lambda + API Gateway sebagai container image (adapter Mangum atau AWS Lambda Web Adapter); alternatif ECS Fargate.
 - [ ] Deploy agent Strands ke Bedrock AgentCore Runtime, yang memanggil API tools lewat URL API Gateway (`CHIBIREX_API_URL`).
-- [ ] Deploy dashboard setelah Tahap 7. Streamlit butuh server yang terus berjalan, jadi pakai ECS Fargate; atau biarkan dashboard berjalan lokal (diizinkan mentor).
+- [ ] Deploy dashboard React sebagai situs statis di S3 + CloudFront (`npm run build`); set `VITE_API_URL` ke URL API Gateway dan `CHIBIREX_CORS_ORIGINS` ke domain CloudFront.
 - [ ] Uji end-to-end di AWS (agent → draf PO → approve → PO di tiruan SAP), cek biaya di AWS Budgets, dan matikan resource yang menganggur.
 
 ### Tahap 9 — Paket Kuat (Product Backorders + Online Retail II) ✅
@@ -556,4 +560,5 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 18 Okt 2026 | **Tahap 6 inti selesai.** Tiruan SAP `sap_mock/` (OData V2 `API_PURCHASEORDER_PROCESS_SRV`: path URL sama, token CSRF, validasi, nomor PO 45xxxxxxxx) ter-mount di API `/sap`; `api/sap.py` menyusun payload; approve membuat PO di SAP dan menyimpan `sap_po_number` (SAP gagal → PO tetap DRAFT); pratinjau payload `GET /purchase-orders/{id}/sap-payload`; migrasi kolom otomatis. 57 test lulus; uji langsung agent → approve → PO 4500000001. Catatan: V2 deprecated, pengganti OData V4 `CE_PURCHASEORDER_0001`. |
 | 18 Okt 2026 | **Tahap 9 selesai.** `engine/risiko.py`: model LightGBM risiko stok habis dari Product Backorders (mirror lengkap 1,69 juta baris), PR-AUC 0,227 vs aturan cover 0,078; skor untuk setiap SKU Bibitor di tabel `risiko_stockout` (TINGGI 11.671, SEDANG 69.847, RENDAH 194.871) dan tampil sebagai Confidence Score di API + ringkasan agent. `engine/borongan.py`: 87% produk Online Retail II pernah mengalami lonjakan >3σ, median 18,5×. Skenario `python -m agent.skenario_runaway`: 3 PO borongan ditahan → circuit breaker terbuka → PO normal ikut ditahan. Bug fitur rasio (`least()` mengabaikan NULL) ditemukan dan diperbaiki. 62 test lulus. Model forecast statsforecast dipindah ke Tahap 10. |
 | 19 Okt 2026 | Mentor AWS menjawab pertanyaan mentoring (ringkasan di bagian Ketentuan Lomba). Final **Sabtu 31 Okt**, tatap muka, 15 menit, bahasa Inggris, demo live. Rencana Tahap 8 dirombak: akun "pengalaman baru" ditinggalkan dan diganti akun standar baru (email kampus); LLM final Bedrock lewat Strands (Nova + Claude) di AgentCore Runtime; API di Lambda + API Gateway; tanpa EC2. Tiruan SAP dikonfirmasi diterima. Tugas Kiro (spec + steering di repo) ditambahkan ke Tahap 11. Zoom deep-dive diusulkan Rabu 22 Okt. |
+| 20 Okt 2026 | Desain dashboard **Rexa** (React + Vite + Tailwind) masuk dari tim; ditinjau: semua fitur proposal ada dan build lulus, tetapi datanya masih tiruan. Tim memutuskan nama produk **Rexa** dan penyambungan dashboard lewat **Kiro**. Backend menambah CORS, `GET /stores`, `GET /stores/{store}/ringkasan` (Health Score toko 74 = 69), dan agent yang bisa dijalankan dari dashboard (`POST /agent-runs/mulai`, langkah dipantau lewat `GET /agent-runs/{run_id}`). Kontrak API untuk dashboard ditulis di `docs/api-dashboard.md`. 68 test lulus. |
 | 17 Okt 2026 | AWS CLI 2.38.1 terpasang dan `aws login` berhasil (ditambah `awscrt` di requirements). Tes Bedrock belum lulus karena **akun AWS masih dalam verifikasi** ("Your account is currently being verified"); ini juga penyebab halaman "Complete your account setup" di konsol Bedrock. Menunggu verifikasi lalu tes ulang. |
