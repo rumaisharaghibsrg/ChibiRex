@@ -21,8 +21,10 @@ async function request(path, { method = 'GET', body, headers } = {}) {
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
+    // Browser melaporkan API mati dan penolakan CORS dengan galat yang sama, jadi sebutkan keduanya.
     throw new ApiError(0, 'API_TIDAK_TERJANGKAU',
-      `API tidak bisa dihubungi di ${API_URL}. Jalankan "uvicorn api.main:app" di root repo.`);
+      `API tidak bisa dihubungi di ${API_URL}. Pastikan API berjalan (lokal: "uvicorn api.main:app") dan domain ` +
+      `dashboard ini diizinkan lewat CHIBIREX_CORS_ORIGINS di API.`);
   }
   const data = await res.json().catch(() => null);
   if (!res.ok) {

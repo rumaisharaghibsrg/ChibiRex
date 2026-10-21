@@ -21,11 +21,11 @@
 | 5 | Agent layer (Strands + Ollama) | ✅ Selesai | 9/9 |
 | 6 | Mock API SAP | 🟡 Inti selesai (sisa opsional) | 4/6 |
 | 7 | Dashboard Rexa (React) | 🟡 Inti demo tersambung; sisanya lewat Kiro | 4/8 |
-| 8 | Deploy ke AWS (wajib untuk final) | 🟡 Berjalan (pindah ke akun baru) | 1/14 |
+| 8 | Deploy ke AWS (wajib untuk final) | 🟡 API sudah di Lambda; CORS, agent, dan state menyusul | 2/14 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ✅ Selesai | 9/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/8 |
 | 11 | Demo & pitch | 🟡 Berjalan | 1/14 |
-| | **Total** | | **79/119 (±66%)** |
+| | **Total** | | **80/119 (±67%)** |
 
 **Posisi sekarang:** desain dashboard **Rexa** (React) sudah ada dan backend sudah menyediakan endpoint untuk dashboard (Health Score, daftar toko, menjalankan agent dari dashboard). Kontraknya ada di `docs/api-dashboard.md`; penyambungan dikerjakan teman tim lewat Kiro. Model risiko (Tahap 9) dan guardrail Runaway PO sudah teruji dengan data asli.
 **Target terdekat:** (1) sambungkan dashboard ke API lewat Kiro, terutama panel agent dan 1-Click Approval (Tahap 7); (2) buat **akun AWS standar baru** dengan email kampus (Tahap 8); (3) Zoom deep-dive dengan mentor AWS, diusulkan **Rabu 22 Okt 2026** siang/sore WIB; (4) **final Sabtu 31 Okt 2026** (tatap muka, 15 menit termasuk tanya jawab, berbahasa Inggris, demo live).
@@ -398,7 +398,7 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 
 - [ ] Pindahkan state (`state.sqlite`: PO, hold, idempotency, circuit breaker, audit log) ke database terkelola. Lambda bisa berjalan di banyak instance sekaligus dengan disk sementara, sehingga batas harian dan circuit breaker hanya aman kalau state-nya dipakai bersama. Kandidat: RDS/Aurora PostgreSQL (sesuai proposal; logika SQL dan transaksi tetap) atau DynamoDB. Tanyakan di Zoom 22 Okt.
 - [ ] Simpan data analitik (`chibirex.duckdb`, ±300 MB, hanya dibaca) dan model risiko di S3, lalu sertakan di image container API.
-- [ ] Deploy FastAPI (tools + tiruan SAP) ke Lambda + API Gateway sebagai container image (adapter Mangum atau AWS Lambda Web Adapter); alternatif ECS Fargate.
+- [x] Deploy FastAPI (tools + tiruan SAP) ke Lambda. **Selesai 22 Okt** oleh tim, lewat Lambda Function URL di `ap-southeast-2` (tanpa API Gateway); `/docs`, `/stores`, dan `/stores/74/ringkasan` menjawab dengan data asli (Health Score toko 74 = 69), ±2 dtk per request. **Belum:** file deploy (Dockerfile/handler) belum ada di repo; `CHIBIREX_CORS_ORIGINS` belum berisi domain dashboard, sehingga browser menolak respons API.
 - [ ] Deploy agent Strands ke Bedrock AgentCore Runtime, yang memanggil API tools lewat URL API Gateway (`CHIBIREX_API_URL`).
 - [ ] Deploy dashboard React sebagai situs statis di S3 + CloudFront (`npm run build`); set `VITE_API_URL` ke URL API Gateway dan `CHIBIREX_CORS_ORIGINS` ke domain CloudFront.
 - [ ] Uji end-to-end di AWS (agent → draf PO → approve → PO di tiruan SAP), cek biaya di AWS Budgets, dan matikan resource yang menganggur.
@@ -562,4 +562,5 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 19 Okt 2026 | Mentor AWS menjawab pertanyaan mentoring (ringkasan di bagian Ketentuan Lomba). Final **Sabtu 31 Okt**, tatap muka, 15 menit, bahasa Inggris, demo live. Rencana Tahap 8 dirombak: akun "pengalaman baru" ditinggalkan dan diganti akun standar baru (email kampus); LLM final Bedrock lewat Strands (Nova + Claude) di AgentCore Runtime; API di Lambda + API Gateway; tanpa EC2. Tiruan SAP dikonfirmasi diterima. Tugas Kiro (spec + steering di repo) ditambahkan ke Tahap 11. Zoom deep-dive diusulkan Rabu 22 Okt. |
 | 20 Okt 2026 | Desain dashboard **Rexa** (React + Vite + Tailwind) masuk dari tim; ditinjau: semua fitur proposal ada dan build lulus, tetapi datanya masih tiruan. Tim memutuskan nama produk **Rexa** dan penyambungan dashboard lewat **Kiro**. Backend menambah CORS, `GET /stores`, `GET /stores/{store}/ringkasan` (Health Score toko 74 = 69), dan agent yang bisa dijalankan dari dashboard (`POST /agent-runs/mulai`, langkah dipantau lewat `GET /agent-runs/{run_id}`). Kontrak API untuk dashboard ditulis di `docs/api-dashboard.md`. 68 test lulus. |
 | 20 Okt 2026 | Front-end dipindah ke `dashboard/` dan `node_modules` dikeluarkan dari git. **Inti demo dashboard tersambung ke API:** klien `src/lib/api.js`, panel agent (Plan → Reason → Act → Review, langkah tampil selagi agent berjalan), kartu PO menunggu persetujuan, dan 1-Click Approval dengan PO asli. Diuji di browser dengan agent asli: 2 draf PO → approve → SAP PO #4500000001. Sisa dashboard dilanjutkan teman tim lewat Kiro. |
+| 22 Okt 2026 | Tim men-deploy API ke **AWS Lambda** (Function URL, Sydney) dan dashboard ke **Vercel** (`chibirex-dashboard.vercel.app`, build sudah mengarah ke URL Lambda). Hasil cek: API menjawab dengan data asli, tetapi **CORS menolak domain Vercel** ("Disallowed CORS origin"), jadi bagian dashboard yang memakai API belum bisa tampil. Perbaikan: isi `CHIBIREX_CORS_ORIGINS` di Lambda. Catatan lanjutan: agent belum bisa jalan di Lambda (butuh Bedrock + AgentCore), state SQLite di Lambda tidak bertahan antar-instance, dan Vercel bukan AWS. |
 | 17 Okt 2026 | AWS CLI 2.38.1 terpasang dan `aws login` berhasil (ditambah `awscrt` di requirements). Tes Bedrock belum lulus karena **akun AWS masih dalam verifikasi** ("Your account is currently being verified"); ini juga penyebab halaman "Complete your account setup" di konsol Bedrock. Menunggu verifikasi lalu tes ulang. |
