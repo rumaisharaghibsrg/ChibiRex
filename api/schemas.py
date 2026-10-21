@@ -51,7 +51,9 @@ class Sku(BaseModel):
     beli_jan_sep: int
     beli_q4: int
     hari_stok_kosong_jan: int | None
-    data_confidence: float
+    data_confidence: float = Field(description="0-1; ikut turun kalau ada selisih hitung fisik yang belum diaudit")
+    stok_fisik: int | None = Field(default=None, description="Hasil hitung fisik terakhir yang belum diaudit")
+    stok_fisik_dicatat_pada: str | None = None
     risiko_stockout: float | None = Field(default=None, description="Probabilitas mentah model (indikatif)")
     skor_risiko: int | None = Field(default=None, description="Confidence Score risiko stok habis, peringkat 0-100")
     level_risiko: Literal["TINGGI", "SEDANG", "RENDAH"] | None = None
@@ -153,6 +155,27 @@ class Hold(BaseModel):
     alasan: str
     dibuat_oleh: str
     dibuat_pada: str
+
+
+class StokFisikRequest(Request):
+    stok_fisik: int = Field(ge=0, le=1_000_000, description="Jumlah unit hasil hitung fisik di rak dan gudang")
+    dicatat_oleh: str = Field(min_length=1, max_length=100)
+    catatan: str | None = Field(default=None, max_length=1000)
+
+
+class StokFisik(BaseModel):
+    inventory_id: str
+    store: int
+    deskripsi: str | None = None
+    stok_sistem: int
+    stok_fisik: int
+    selisih: int = Field(description="stok fisik - stok sistem")
+    data_confidence_data: float = Field(description="Data Confidence dari riwayat data, sebelum hitung fisik")
+    data_confidence: float = Field(description="Data Confidence yang berlaku sekarang")
+    perlu_audit: bool = Field(description="Data Confidence di bawah ambang: PO ditahan sampai selisih diaudit")
+    dicatat_oleh: str
+    catatan: str | None
+    dicatat_pada: str
 
 
 class TujuanRealokasi(BaseModel):

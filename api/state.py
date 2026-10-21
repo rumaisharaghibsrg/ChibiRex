@@ -1,4 +1,5 @@
-"""State transaksional API di SQLite: draf PO, hold, idempotency key, circuit breaker, dan audit log."""
+"""State transaksional API di SQLite: draf PO, hold, hasil hitung fisik, idempotency key, circuit breaker, dan
+audit log."""
 
 import json
 import sqlite3
@@ -46,6 +47,19 @@ create table if not exists holds (
     dibuat_pada text not null
 );
 create unique index if not exists hold_aktif_per_sku on holds (inventory_id) where status = 'AKTIF';
+
+-- Hasil hitung fisik (stock opname) yang belum diaudit. Selisih dengan stok sistem menurunkan
+-- Data Confidence SKU, sehingga PO ditahan guardrail sampai catatan ini dihapus setelah audit.
+create table if not exists stok_fisik (
+    inventory_id text primary key,
+    store integer not null,
+    stok_sistem integer not null,
+    stok_fisik integer not null,
+    data_confidence real not null,
+    dicatat_oleh text not null,
+    catatan text,
+    dicatat_pada text not null
+);
 
 create table if not exists idempotency (
     kunci text primary key,

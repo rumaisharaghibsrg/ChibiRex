@@ -24,8 +24,8 @@
 | 8 | Deploy ke AWS (wajib untuk final) | 🟡 API sudah di Lambda; CORS, agent, dan state menyusul | 2/14 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ✅ Selesai | 9/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/8 |
-| 11 | Demo & pitch | 🟡 Berjalan | 1/14 |
-| | **Total** | | **80/119 (±67%)** |
+| 11 | Demo & pitch | 🟡 Berjalan | 2/14 |
+| | **Total** | | **81/119 (±68%)** |
 
 **Posisi sekarang:** desain dashboard **Rexa** (React) sudah ada dan backend sudah menyediakan endpoint untuk dashboard (Health Score, daftar toko, menjalankan agent dari dashboard). Kontraknya ada di `docs/api-dashboard.md`; penyambungan dikerjakan teman tim lewat Kiro. Model risiko (Tahap 9) dan guardrail Runaway PO sudah teruji dengan data asli.
 **Target terdekat:** (1) sambungkan dashboard ke API lewat Kiro, terutama panel agent dan 1-Click Approval (Tahap 7); (2) buat **akun AWS standar baru** dengan email kampus (Tahap 8); (3) Zoom deep-dive dengan mentor AWS, diusulkan **Rabu 22 Okt 2026** siang/sore WIB; (4) **final Sabtu 31 Okt 2026** (tatap muka, 15 menit termasuk tanya jawab, berbahasa Inggris, demo live).
@@ -467,9 +467,9 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 
 - [ ] Siapkan data dan skenario untuk langkah 1–5 (paket Minimal)
 - [ ] Siapkan skenario untuk langkah 6–7 (jika paket Kuat/Maksimal selesai)
-- [ ] Siapkan skenario injeksi selisih stok (label "simulasi") supaya Data Confidence Score turun dan fitur mitigasi inakurasi data bisa didemokan, karena data Bibitor asli konsisten sempurna
+- [x] **Selesai 22 Okt:** `POST /sku/{id}/stok-fisik` (hitung fisik, label simulasi) menurunkan Data Confidence menjadi 1 − |selisih| / stok sistem; di bawah 0,8 draf PO baru ditahan `DATA_CONFIDENCE_RENDAH`, draf lama tidak bisa disetujui (409), dan Hold juga ditolak, sampai `DELETE /sku/{id}/stok-fisik` (audit selesai). Skrip demo `python -m agent.skenario_selisih_stok --store 74` (akhiri dengan `--audit-selesai`). Uji dengan agent asli: Bacardi Gold stok sistem 43, fisik 32 → confidence 1,00 → 0,74 → draf PO ditahan, Smirnoff tetap DRAFT. 5 test baru (73 lulus). Skenario ini dibutuhkan karena data Bibitor asli konsisten sempurna, sehingga fitur mitigasi inakurasi data tidak akan pernah terlihat tanpa injeksi selisih.
 - [ ] Gladi demo live end-to-end dengan timer (15 menit sudah termasuk tanya jawab)
-- [ ] Slide arsitektur (dibuka paling awal): S3, Lambda + API Gateway, database terkelola, Bedrock (Nova/Claude) lewat Strands, AgentCore Runtime, SAP. Tekankan bahwa arsitektur tidak terikat ke satu penyedia model dan data stok bisa tetap di infrastruktur sendiri.
+- [ ] Slide arsitektur (dibuka paling awal; diagram dasar dan loop agentic sudah ada di `docs/arsitektur.md`): S3, Lambda + API Gateway, database terkelola, Bedrock (Nova/Claude) lewat Strands, AgentCore Runtime, SAP. Tekankan bahwa arsitektur tidak terikat ke satu penyedia model dan data stok bisa tetap di infrastruktur sendiri.
 - [ ] Slide "Sumber data per modul"; transparansi seperti ini menambah kredibilitas di depan juri
 - [ ] Cantumkan atribusi dan catatan lisensi setiap dataset
 - [ ] Slide roadmap: pilot **Fase 2** dengan data cabang riil dan kalibrasi ulang model, lalu **Fase 3** berupa audit fisik lewat foto rak (dataset gambar produk ritel Indonesia)
@@ -563,4 +563,5 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 20 Okt 2026 | Desain dashboard **Rexa** (React + Vite + Tailwind) masuk dari tim; ditinjau: semua fitur proposal ada dan build lulus, tetapi datanya masih tiruan. Tim memutuskan nama produk **Rexa** dan penyambungan dashboard lewat **Kiro**. Backend menambah CORS, `GET /stores`, `GET /stores/{store}/ringkasan` (Health Score toko 74 = 69), dan agent yang bisa dijalankan dari dashboard (`POST /agent-runs/mulai`, langkah dipantau lewat `GET /agent-runs/{run_id}`). Kontrak API untuk dashboard ditulis di `docs/api-dashboard.md`. 68 test lulus. |
 | 20 Okt 2026 | Front-end dipindah ke `dashboard/` dan `node_modules` dikeluarkan dari git. **Inti demo dashboard tersambung ke API:** klien `src/lib/api.js`, panel agent (Plan → Reason → Act → Review, langkah tampil selagi agent berjalan), kartu PO menunggu persetujuan, dan 1-Click Approval dengan PO asli. Diuji di browser dengan agent asli: 2 draf PO → approve → SAP PO #4500000001. Sisa dashboard dilanjutkan teman tim lewat Kiro. |
 | 22 Okt 2026 | Tim men-deploy API ke **AWS Lambda** (Function URL, Sydney) dan dashboard ke **Vercel** (`chibirex-dashboard.vercel.app`, build sudah mengarah ke URL Lambda). Hasil cek: API menjawab dengan data asli, tetapi **CORS menolak domain Vercel** ("Disallowed CORS origin"), jadi bagian dashboard yang memakai API belum bisa tampil. Perbaikan: isi `CHIBIREX_CORS_ORIGINS` di Lambda. Catatan lanjutan: agent belum bisa jalan di Lambda (butuh Bedrock + AgentCore), state SQLite di Lambda tidak bertahan antar-instance, dan Vercel bukan AWS. |
+| 22 Okt 2026 | Diagram arsitektur (target AWS + loop agentic) ditulis di `docs/arsitektur.md` (Mermaid, tampil di GitHub; sudah dicek ter-render). **Skenario selisih stok** selesai: hitung fisik menurunkan Data Confidence, guardrail menahan draf PO baru, approval draf lama, dan Hold sampai audit selesai; skrip `agent.skenario_selisih_stok`; diuji dengan agent asli (Bacardi Gold 1,00 → 0,74 → PO ditahan). 73 test lulus. |
 | 17 Okt 2026 | AWS CLI 2.38.1 terpasang dan `aws login` berhasil (ditambah `awscrt` di requirements). Tes Bedrock belum lulus karena **akun AWS masih dalam verifikasi** ("Your account is currently being verified"); ini juga penyebab halaman "Complete your account setup" di konsol Bedrock. Menunggu verifikasi lalu tes ulang. |

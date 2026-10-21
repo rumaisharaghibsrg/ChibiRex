@@ -20,6 +20,12 @@ def batas_qty_wajar(sku: dict, sigma_kali: float) -> int:
     return max(0, math.ceil(batas))
 
 
+def confidence_hitung_fisik(stok_sistem: int, stok_fisik: int) -> float:
+    """Porsi stok sistem yang terbukti ada saat dihitung fisik: 1 - |fisik - sistem| / sistem.
+    Selisih 25% (misalnya susut atau salah catat) memberi 0,75, di bawah ambang 0,8."""
+    return round(max(0.0, 1 - abs(stok_fisik - stok_sistem) / max(stok_sistem, 1)), 3)
+
+
 def total_po_hari_ini(con: sqlite3.Connection, store: int, sekarang: datetime) -> float:
     return con.execute(
         """select coalesce(sum(nilai_idr), 0) from purchase_orders

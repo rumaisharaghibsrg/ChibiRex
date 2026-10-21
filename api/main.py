@@ -22,7 +22,8 @@ from api import guardrails, sap, state
 from api.agent_runner import AgentSedangBerjalan, PenjalanAgent, jalankan_agent_lokal
 from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AgentRunMulai, AgentRunStatus, AuditEntry,
                          DraftPORequest, Hold, HoldRequest, Keputusan, Prioritas, PurchaseOrder, Realokasi,
-                         RingkasanToko, Sku, StatusGuardrail, StatusPO, StatusStok, Substitusi, Toko)
+                         RingkasanToko, Sku, StatusGuardrail, StatusPO, StatusStok, StokFisik, StokFisikRequest,
+                         Substitusi, Toko)
 from api.settings import Settings
 from engine import basket, config
 from engine.format import angka, rupiah
@@ -164,6 +165,40 @@ def _hold(con, hold_id: str) -> dict:
     return dict(con.execute("select * from holds where hold_id = ?", (hold_id,)).fetchone())
 
 
+def _stok_fisik(con, inventory_ids: list[str]) -> dict:
+    if not inventory_ids:
+        return {}
+    tanda = ", ".join("?" * len(inventory_ids))
+    rows = con.execute(f"select * from stok_fisik where inventory_id in ({tanda})", inventory_ids)
+    return {r["inventory_id"]: r for r in rows}
+
+
+def _dengan_stok_fisik(sku: dict, catatan) -> dict:
+    """Selisih hitung fisik yang belum diaudit ikut menurunkan Data Confidence (yang berlaku nilai terendah)."""
+    if catatan is not None:
+        sku["stok_fisik"] = catatan["stok_fisik"]
+        sku["stok_fisik_dicatat_pada"] = catatan["dicatat_pada"]
+        sku["data_confidence"] = min(sku["data_confidence"], catatan["data_confidence"])
+    return sku
+
+
+def _sku_terkini(cur, s: Settings, inventory_id: str) -> dict:
+    sku = _ambil_sku(cur, inventory_id)
+    with state.baca(s.state_db) as con:
+        return _dengan_stok_fisik(sku, _stok_fisik(con, [inventory_id]).get(inventory_id))
+
+
+def _ringkas_stok_fisik(sku: dict, catatan, s: Settings) -> dict:
+    """`sku` adalah data asli (sebelum hitung fisik diterapkan)."""
+    berlaku = min(sku["data_confidence"], catatan["data_confidence"])
+    return {"inventory_id": catatan["inventory_id"], "store": catatan["store"], "deskripsi": sku["deskripsi"],
+            "stok_sistem": catatan["stok_sistem"], "stok_fisik": catatan["stok_fisik"],
+            "selisih": catatan["stok_fisik"] - catatan["stok_sistem"], "data_confidence_data": sku["data_confidence"],
+            "data_confidence": berlaku, "perlu_audit": berlaku < s.data_confidence_min,
+            "dicatat_oleh": catatan["dicatat_oleh"], "catatan": catatan["catatan"],
+            "dicatat_pada": catatan["dicatat_pada"]}
+
+
 def _routes(app: FastAPI) -> None:
 
     @app.get("/health", tags=[GUARDRAIL])
@@ -187,12 +222,16 @@ def _routes(app: FastAPI) -> None:
         rel = cur.execute(sql + " order by s.nilai_saran_po_idr desc nulls last, s.inventory_id limit ?", params + [limit])
         cols = [d[0] for d in rel.description]
         s = _settings(request)
-        return [_dengan_arah(dict(zip(cols, row)), s) for row in rel.fetchall()]
+        skus = [_dengan_arah(dict(zip(cols, row)), s) for row in rel.fetchall()]
+        with state.baca(s.state_db) as con:
+            catatan = _stok_fisik(con, [k["inventory_id"] for k in skus])
+        return [_dengan_stok_fisik(k, catatan.get(k["inventory_id"])) for k in skus]
 
     @app.get("/sku/{inventory_id}", response_model=Sku, tags=[TOOLS], operation_id="get_sku_metrics")
     def get_sku_metrics(request: Request, inventory_id: str = InventoryIdPath, cur=Depends(_duck)):
         """Metrik satu SKU di satu toko: stok, Vs, tren, lead time, reorder point, saran PO, dan Data Confidence Score."""
-        return _dengan_arah(_ambil_sku(cur, inventory_id), _settings(request))
+        s = _settings(request)
+        return _dengan_arah(_sku_terkini(cur, s, inventory_id), s)
 
     @app.get("/stores/{store}/prioritas", response_model=Prioritas, tags=[TOOLS], operation_id="list_prioritas")
     def list_prioritas(store: int, request: Request, limit_naik: int = Query(2, ge=0, le=10),
@@ -254,6 +293,7 @@ def _routes(app: FastAPI) -> None:
                 response.headers["Existing-Draft"] = "true"
                 return _po(con, draf[0])
 
+            _dengan_stok_fisik(sku, _stok_fisik(con, [body.inventory_id]).get(body.inventory_id))
             langgar = guardrails.cek_po(con, s, sku, qty, nilai, sekarang)
             status = "DITAHAN_GUARDRAIL" if langgar else "DRAFT"
             po_id = f"PO-{uuid4().hex[:10].upper()}"
@@ -302,7 +342,7 @@ def _routes(app: FastAPI) -> None:
         return {"po_id": po_id, "tujuan": f"POST {s.sap_base_url}/A_PurchaseOrder",
                 "payload": sap.payload_po(po, s.clock())}
 
-    def _putuskan(po_id: str, body: Keputusan, request: Request, status_baru: str) -> dict:
+    def _putuskan(po_id: str, body: Keputusan, request: Request, status_baru: str, cur=None) -> dict:
         s = _settings(request)
         sekarang = s.clock()
         with state.transaksi(s.state_db) as con:
@@ -312,6 +352,15 @@ def _routes(app: FastAPI) -> None:
                             f"PO {po_id} berstatus {po['status']}; hanya PO DRAFT yang bisa diputuskan.")
             sap_po = None
             if status_baru == "APPROVED":
+                # Hitung fisik bisa dicatat setelah draf dibuat: draf tetap ada, tetapi baru bisa disetujui
+                # setelah selisih stoknya diaudit.
+                sku = _dengan_stok_fisik(_ambil_sku(cur, po["inventory_id"]),
+                                         _stok_fisik(con, [po["inventory_id"]]).get(po["inventory_id"]))
+                if sku["data_confidence"] < s.data_confidence_min:
+                    raise galat(409, "DATA_CONFIDENCE_RENDAH",
+                                f"Data Confidence {angka(sku['data_confidence'], 2)} di bawah ambang "
+                                f"{angka(s.data_confidence_min, 2)} karena selisih hitung fisik. Audit stok dulu; "
+                                "PO tetap DRAFT.")
                 # Persetujuan baru berlaku kalau PO berhasil dibuat di SAP; kalau gagal, PO tetap DRAFT.
                 try:
                     with _sap_client(s) as klien:
@@ -328,10 +377,11 @@ def _routes(app: FastAPI) -> None:
             return _po(con, po_id)
 
     @app.post("/purchase-orders/{po_id}/approve", response_model=PurchaseOrder, tags=[APPROVAL])
-    def approve_purchase_order(po_id: str, body: Keputusan, request: Request):
+    def approve_purchase_order(po_id: str, body: Keputusan, request: Request, cur=Depends(_duck)):
         """1-Click Approval oleh manajer: PO dibuat di SAP (API_PURCHASEORDER_PROCESS_SRV) dan nomor PO SAP disimpan.
-        Hanya PO berstatus DRAFT yang bisa disetujui; kalau SAP gagal, persetujuan dibatalkan dan PO tetap DRAFT."""
-        return _putuskan(po_id, body, request, "APPROVED")
+        Hanya PO berstatus DRAFT yang bisa disetujui; kalau SAP gagal, persetujuan dibatalkan dan PO tetap DRAFT.
+        Ditolak (409 DATA_CONFIDENCE_RENDAH) selama ada selisih hitung fisik yang belum diaudit."""
+        return _putuskan(po_id, body, request, "APPROVED", cur)
 
     @app.post("/purchase-orders/{po_id}/reject", response_model=PurchaseOrder, tags=[APPROVAL])
     def reject_purchase_order(po_id: str, body: Keputusan, request: Request):
@@ -363,6 +413,7 @@ def _routes(app: FastAPI) -> None:
                 response.status_code = 200
                 return _hold(con, aktif[0])
 
+            _dengan_stok_fisik(sku, _stok_fisik(con, [body.inventory_id]).get(body.inventory_id))
             tolak = guardrails.cek_hold(s, sku, substitusi)
             if not tolak:
                 qty = sku["saran_qty_po"]
@@ -457,6 +508,46 @@ def _routes(app: FastAPI) -> None:
                         (f"direset oleh {body.oleh}", sekarang.isoformat(timespec="seconds")))
             state.audit(con, sekarang, body.oleh, "circuit_breaker_reset", None, {"catatan": body.catatan})
         return guardrail_status(request)
+
+    @app.post("/sku/{inventory_id}/stok-fisik", response_model=StokFisik, status_code=201, tags=[GUARDRAIL])
+    def catat_stok_fisik(body: StokFisikRequest, request: Request, inventory_id: str = InventoryIdPath,
+                         cur=Depends(_duck)):
+        """Catat hasil hitung fisik (stock opname; di demo berlabel simulasi). Selisih dengan stok sistem menurunkan
+        Data Confidence menjadi 1 - |selisih| / stok sistem. Di bawah ambang, draf PO baru ditahan guardrail dan draf
+        yang sudah ada tidak bisa disetujui sampai selisihnya diaudit (`DELETE` catatan ini)."""
+        s = _settings(request)
+        sku = _ambil_sku(cur, inventory_id)
+        sekarang = s.clock()
+        confidence = guardrails.confidence_hitung_fisik(sku["stok_akhir"], body.stok_fisik)
+        with state.transaksi(s.state_db) as con:
+            con.execute("insert or replace into stok_fisik values (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (inventory_id, sku["store"], sku["stok_akhir"], body.stok_fisik, confidence,
+                         body.dicatat_oleh, body.catatan, sekarang.isoformat(timespec="seconds")))
+            state.audit(con, sekarang, body.dicatat_oleh, "catat_stok_fisik", inventory_id,
+                        {"stok_sistem": sku["stok_akhir"], "stok_fisik": body.stok_fisik,
+                         "data_confidence": confidence, "catatan": body.catatan})
+            catatan = _stok_fisik(con, [inventory_id])[inventory_id]
+        return _ringkas_stok_fisik(sku, catatan, s)
+
+    @app.get("/stores/{store}/stok-fisik", response_model=list[StokFisik], tags=[GUARDRAIL])
+    def list_stok_fisik(store: int, request: Request, cur=Depends(_duck)):
+        """Hasil hitung fisik yang belum diaudit di satu toko."""
+        s = _settings(request)
+        with state.baca(s.state_db) as con:
+            daftar = list(con.execute("select * from stok_fisik where store = ? order by dicatat_pada desc", (store,)))
+        return [_ringkas_stok_fisik(_ambil_sku(cur, c["inventory_id"]), c, s) for c in daftar]
+
+    @app.delete("/sku/{inventory_id}/stok-fisik", status_code=204, tags=[GUARDRAIL])
+    def selesai_audit_stok(request: Request, inventory_id: str = InventoryIdPath,
+                           oleh: str = Query(min_length=1, max_length=100)):
+        """Selisih hitung fisik sudah diaudit: catatannya dihapus dan Data Confidence kembali ke nilai dari data."""
+        s = _settings(request)
+        sekarang = s.clock()
+        with state.transaksi(s.state_db) as con:
+            if not con.execute("delete from stok_fisik where inventory_id = ?", (inventory_id,)).rowcount:
+                raise galat(404, "STOK_FISIK_TIDAK_ADA", f"Tidak ada hitung fisik yang menunggu audit untuk {inventory_id}.")
+            state.audit(con, sekarang, oleh, "audit_stok_selesai", inventory_id, {})
+        return Response(status_code=204)
 
     @app.post("/agent-runs", response_model=AgentRun, status_code=201, tags=[AGENT])
     def simpan_agent_run(body: AgentRunIn, request: Request):

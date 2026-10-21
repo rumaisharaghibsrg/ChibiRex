@@ -97,6 +97,17 @@ Saran pengelompokan langkah untuk tampilan:
 
 Dengan LLM lokal, satu kali jalan butuh ±30-60 detik, jadi tampilkan langkah satu per satu selagi berjalan.
 
+## Skenario selisih stok (tombol di `ScenarioBar`)
+
+Mendemokan mitigasi inakurasi data: hasil hitung fisik (simulasi) yang berbeda dari stok sistem menurunkan Data Confidence, dan guardrail menahan PO sampai selisihnya diaudit.
+
+1. Ambil SKU target, misalnya SKU teratas dari `GET /stores/{store}/prioritas?limit_naik=1&limit_turun=0` (toko 74: Bacardi Gold Rum).
+2. `POST /sku/{inventory_id}/stok-fisik` dengan body `{"stok_fisik": round(stok_akhir × 0,75), "dicatat_oleh": "<nama manajer>", "catatan": "Simulasi stock opname"}`. Respons berisi `data_confidence_data` (sebelum), `data_confidence` (sesudah, misalnya 1,00 → 0,74), dan `perlu_audit`.
+3. Jalankan agent. Draf PO SKU itu akan berstatus `DITAHAN_GUARDRAIL` dengan kode `DATA_CONFIDENCE_RENDAH`; draf lama SKU itu juga ditolak saat approve (409).
+4. Tampilkan daftar yang menunggu audit dari `GET /stores/{store}/stok-fisik`, dengan tombol "Audit selesai" yang memanggil `DELETE /sku/{inventory_id}/stok-fisik?oleh=<nama manajer>` (204).
+
+Versi terminalnya: `python -m agent.skenario_selisih_stok --store 74`, lalu `--audit-selesai` di akhir demo.
+
 ## Skenario uji Runaway PO (tombol di `ScenarioBar`)
 
 Belum ada endpoint khusus. Skenario ini cukup berupa urutan panggilan API yang sama dengan `agent/skenario_runaway.py`:
