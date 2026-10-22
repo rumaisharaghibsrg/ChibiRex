@@ -19,18 +19,18 @@
 | 3 | Logika substitusi / Market Basket (Instacart) | ✅ Selesai | 8/8 |
 | 4 | Tools API + guardrail | ✅ Selesai | 13/13 |
 | 5 | Agent layer (Strands + Ollama) | ✅ Selesai | 9/9 |
-| 6 | Mock API SAP | 🟡 Inti selesai (sisa opsional) | 4/6 |
+| 6 | Mock API SAP | ✅ Selesai (opsional dibatalkan) | 4/4 |
 | 7 | Dashboard Rexa (React) | 🟡 Inti demo tersambung; sisanya lewat Kiro | 4/8 |
-| 8 | Deploy ke AWS (wajib untuk final) | 🟡 Dashboard (Amplify) + API (Lambda + EFS) online; LLM di laptop (opsi 4) | 6/14 |
+| 8 | Deploy ke AWS (wajib untuk final) | 🟡 Dashboard (Amplify) + API (Lambda + EFS) online; LLM di laptop (opsi 4) | 7/9 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ✅ Selesai | 9/9 |
-| 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/8 |
-| 11 | Demo & pitch | 🟡 Berjalan | 2/14 |
-| | **Total** | | **85/119 (±71%)** |
+| 10 | Paket Maksimal (Montgomery County + M5) | ⛔ Dibatalkan (waktu) | 0/0 |
+| 11 | Demo & pitch | 🟡 Berjalan | 4/14 |
+| | **Total** | | **88/104 (±85%)** |
 
 **Posisi sekarang:** demo berjalan online di AWS: dashboard di **Amplify** (https://main.d30b19xkk8lknt.amplifyapp.com), API + guardrail + tiruan SAP di **Lambda** dengan data di **EFS**, dan agent memakai LLM di laptop lewat worker (`python -m agent.worker`, opsi 4). Panduan demo dan deploy: `docs/deploy.md`.
 **Target terdekat:** (1) gladi demo online dengan timer dan rekam video cadangan; (2) sambungkan sisa dashboard lewat Kiro (Health Score, KPI, tabel) lalu deploy ulang dengan `deploy\deploy_dashboard.ps1`; (3) deck berbahasa Inggris; (4) **final Sabtu 31 Okt 2026**.
 
-Legenda: ✅ selesai · 🟡 berjalan · ⬜ belum mulai
+Legenda: ✅ selesai · 🟡 berjalan · ⬜ belum mulai · ⛔ dibatalkan (dicoret, tidak dihitung)
 
 ---
 
@@ -343,7 +343,7 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 | 1 | 54,8 dtk | 14 | 3.479 token | Keputusan hold benar, tapi model membuat 5 PO (3 diambil dari daftar tujuan realokasi). Lalu ditambahkan pembatasan di kode. |
 | 2 | **29,7 dtk** | 10 | 2.837 token | **Semua keputusan benar.** Model sempat mencoba membuat PO untuk Capt Morgan dan Buchanans (daftar "turun") dengan alasan keliru "penjualan naik", tetapi **ditolak oleh guardrail di kode**. Momen bagus untuk pitch: model kecil bisa salah, sistem tetap aman. |
 
-### Tahap 6 — Mock API SAP 🟡
+### Tahap 6 — Mock API SAP ✅
 
 **Alur (sesuai proposal: "agen menyusun draf PO ke SAP, otorisasi final lewat 1-Click Approval"):** agent membuat draf PO → payload SAP bisa dipratinjau (`GET /purchase-orders/{po_id}/sap-payload`) → manajer approve → API membuat PO di SAP dan menyimpan **nomor PO SAP** (45xxxxxxxx). Kalau SAP gagal, persetujuan dibatalkan dan PO tetap DRAFT, sehingga tidak ada PO "disetujui" tanpa nomor SAP. PO yang ditahan guardrail tidak pernah sampai ke SAP, dan reject tidak mengirim apa pun.
 
@@ -353,8 +353,8 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 - [x] Buat tiruan SAP "create PO" (`sap_mock/app.py`) dengan path URL, amplop respons OData V2 (`{"d": ...}`, `__metadata`), **alur token CSRF SAP Gateway** (GET `x-csrf-token: Fetch` → POST dengan token + cookie sesi), validasi field wajib dengan format galat OData, dan nomor PO berurutan mulai 4500000001
 - [x] Hubungkan alur PO ke tiruan SAP (`api/sap.py`): draf menunggu 1-Click Approval, approve membuat PO di SAP dan menyimpan `sap_po_number`. Kolom baru ditambahkan otomatis ke `state.sqlite` lama (migrasi). Pemetaan: toko → plant `T074`, brand → material `BIB-4222`, vendor Bibitor → supplier, harga beli → Rupiah (simulasi); company code dan purchasing org/group memakai nilai contoh.
 - [x] Test dan uji langsung: 7 test SAP (`tests/test_sap.py`, total 57 test), termasuk "SAP mati → PO tetap DRAFT". Uji langsung: agent membuat draf → approve → **PO 4500000001** di tiruan SAP (Smirnoff 80 Proof, 425 × Rp12.320 = Rp5.236.000, cocok dengan nilai PO); approve ulang ditolak 409.
-- [ ] (Opsional) Daftar akun SAP Community dan ambil API key gratis di api.sap.com, untuk membandingkan format dengan sandbox SAP (sandbox hanya bisa membaca data contoh)
-- [ ] (Opsional) Integrasi SAP riil untuk poin "Use of AWS/SAP": minta akses SAP untuk finalis ke panitia (sub-account dengan AI Core dan Generative AI Hub), atau coba S/4HANA lewat cal.sap.com di akun AWS sendiri (butuh instance besar yang ditagih per jam, jadi matikan setelah dipakai). Targetkan OData V4 `CE_PURCHASEORDER_0001`.
+- ⛔ ~~(Opsional) Daftar akun SAP Community dan ambil API key gratis di api.sap.com, untuk membandingkan format dengan sandbox SAP (sandbox hanya bisa membaca data contoh)~~ **Dibatalkan:** Tidak dikejar: tiruan SAP sudah diterima mentor untuk penjurian, dan sisa waktu dipakai untuk demo.
+- ⛔ ~~(Opsional) Integrasi SAP riil untuk poin "Use of AWS/SAP": minta akses SAP untuk finalis ke panitia (sub-account dengan AI Core dan Generative AI Hub), atau coba S/4HANA lewat cal.sap.com di akun AWS sendiri (butuh instance besar yang ditagih per jam, jadi matikan setelah dipakai). Targetkan OData V4 `CE_PURCHASEORDER_0001`.~~ **Dibatalkan:** Terhambat: butuh akses SAP dari panitia dan waktu integrasi. Tiruan SAP sudah diterima mentor; jadi bahan slide jalan menuju produksi.
 
 ### Tahap 7 — Dashboard Rexa (React) 🟡
 
@@ -377,14 +377,14 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 
 **Persiapan akun AWS (akun standar baru):**
 
-- [ ] **1. Daftar akun standar** lewat *Sign up for AWS (advanced)*: https://portal.aws.amazon.com/billing/signup. Pakai **email kampus**, **kartu kredit Visa/Mastercard** (bukan kartu debit) dengan transaksi online/internasional aktif, dan nama sesuai kartu mahasiswa.
+- ⛔ ~~**1. Daftar akun standar** lewat *Sign up for AWS (advanced)*: https://portal.aws.amazon.com/billing/signup. Pakai **email kampus**, **kartu kredit Visa/Mastercard** (bukan kartu debit) dengan transaksi online/internasional aktif, dan nama sesuai kartu mahasiswa.~~ **Dibatalkan:** Terhambat: kartu ditolak saat verifikasi pembayaran (22 Okt). Diganti opsi 4 di akun proyek tim (keputusan no. 16).
   - **Pilih paket dengan sadar.** Free plan cukup untuk Amazon Nova, tetapi Claude (Marketplace) dan kredit promosi (termasuk kredit Student Rewards) hanya bisa dipakai di **Paid plan**, yang menagih kartu untuk pemakaian di atas Free Tier/kredit. Saran: mulai dengan Free plan + Nova, lalu upgrade ke Paid plan hanya kalau Claude benar-benar dibutuhkan, setelah alarm Budgets terpasang.
-- [ ] **2. Amankan akun:** aktifkan MFA untuk root user, buat user untuk kerja harian (IAM Identity Center atau user IAM), dan jangan memakai root sehari-hari.
+- ⛔ ~~**2. Amankan akun:** aktifkan MFA untuk root user, buat user untuk kerja harian (IAM Identity Center atau user IAM), dan jangan memakai root sehari-hari.~~ **Dibatalkan:** Ikut batal karena akun standar tidak jadi dipakai.
 - [ ] **3. Pasang alarm AWS Budgets** (misalnya US$5 dan US$20) sebelum membuat resource apa pun.
 - [x] **4. Install AWS CLI v2.** Terpasang: aws-cli 2.38.1 (`winget install -e --id Amazon.AWSCLI`). Kalau terminal belum mengenali `aws`, buka ulang VS Code atau jalankan `$env:Path += ";C:\Program Files\Amazon\AWSCLIV2"`.
-- [ ] **5. Login CLI ke akun baru** (`aws configure sso` kalau memakai Identity Center, atau `aws login`). Paket `awscrt` sudah ada di `requirements.txt` untuk kredensial `aws login`.
-- [ ] **6. Aktifkan akses model di Bedrock:** Amazon Nova dan Anthropic Claude (Claude butuh Paid plan). Pilih region yang menyediakan keduanya dan juga AgentCore.
-- [ ] **7. Tes Bedrock:** set `CHIBIREX_LLM_PROVIDER=bedrock` di `.env`, lalu jalankan `python -m agent.cek_llm` (atau `python -m agent.cek_bedrock --claude` untuk Claude). Harga: https://aws.amazon.com/bedrock/pricing/.
+- [x] **5. Login CLI.** Tercapai di akun proyek tim (Moonshot Mode): `aws login --profile rexa` (22 Okt), dipakai skrip deploy.
+- ⛔ ~~**6. Aktifkan akses model di Bedrock:** Amazon Nova dan Anthropic Claude (Claude butuh Paid plan). Pilih region yang menyediakan keduanya dan juga AgentCore.~~ **Dibatalkan:** Terhambat: di akun proyek tim kuota tokens per day semua model Nova = 0 dan tidak bisa dinaikkan; Claude butuh formulir use case dan Paid plan.
+- ⛔ ~~**7. Tes Bedrock:** set `CHIBIREX_LLM_PROVIDER=bedrock` di `.env`, lalu jalankan `python -m agent.cek_llm` (atau `python -m agent.cek_bedrock --claude` untuk Claude). Harga: https://aws.amazon.com/bedrock/pricing/.~~ **Dibatalkan:** Terhambat: sudah dites 22 Okt, semua model Nova menjawab ThrottlingException (kuota 0).
 - [ ] **8. Daftar AWS Student Rewards (21 badge)** dan verifikasi profil mahasiswa untuk kredit.
 
 <details>
@@ -406,7 +406,7 @@ Guardrail ditaruh **di kode, bukan di prompt**.
   - Jalur "agent cadangan" berbasis aturan yang sempat ada di image lama (membuat PO/hold tanpa LLM tetapi tercatat sebagai agent berhasil dengan model Ollama) **dihapus**, karena menyesatkan juri.
   - **Cara deploy ulang:** Docker Desktop menyala → `aws login --profile rexa` → `powershell -ExecutionPolicy Bypass -File deploy\deploy_lambda.ps1` (build, uji di kontainer hanya-baca, push ke ECR, perbarui Lambda; `-UjiSaja` untuk uji tanpa deploy). Jangan deploy dari salinan kode lain, supaya versi repo tidak tertimpa.
   - Hasil cek online: `/stores/74/ringkasan`, endpoint hitung fisik, CORS Vercel, dan **draf PO → 1-Click Approval → SAP PO #4500000001** berjalan. Waktu proses di server 5–100 ms per request (cold start ±5 dtk); sisa ±2 dtk dari laptop tim adalah jaringan/TLS ke Sydney.
-- [ ] Deploy agent Strands ke Bedrock AgentCore Runtime. **Tertunda:** kuota Bedrock akun proyek = 0 dan akun standar gagal karena kartu ditolak. Sementara (opsi 4, keputusan no. 16) LLM berjalan di laptop lewat worker `python -m agent.worker` dalam **mode antrian**: tombol dashboard → tugas MENUNGGU di API → worker mengambil, menjalankan agent dengan Ollama, dan melaporkan setiap langkah ke API (token `X-Worker-Token`).
+- ⛔ ~~Deploy agent Strands ke Bedrock AgentCore Runtime. **Tertunda:** kuota Bedrock akun proyek = 0 dan akun standar gagal karena kartu ditolak. Sementara (opsi 4, keputusan no. 16) LLM berjalan di laptop lewat worker `python -m agent.worker` dalam **mode antrian**: tombol dashboard → tugas MENUNGGU di API → worker mengambil, menjalankan agent dengan Ollama, dan melaporkan setiap langkah ke API (token `X-Worker-Token`).~~ **Dibatalkan:** Terhambat oleh kuota Bedrock. Diganti worker di laptop (mode antrian, keputusan no. 16).
 - [x] Dashboard React di **AWS Amplify** `rexa-dashboard`: https://main.d30b19xkk8lknt.amplifyapp.com (deploy manual tanpa GitHub lewat `deploy\deploy_dashboard.ps1`; alamat API diambil dari Function URL). Domain Amplify sudah ada di `CHIBIREX_CORS_ORIGINS`. Vercel tetap jalan untuk data, tetapi link resmi sekarang Amplify.
 - [x] Uji end-to-end online (22 Okt, Edge headless di dashboard Amplify): worker aktif → **Jalankan Agent** → MENUNGGU (3 dtk) → langkah tampil langsung → selesai 57 dtk (hold Ciroc + 2 draf PO) → 1-Click Approval → **SAP PO #4500000001**. Reset data demo: `python -m agent.reset_demo` (endpoint `POST /demo/reset`, butuh token). Panduan lengkap demo dan deploy: **`docs/deploy.md`**. Alarm AWS Budgets belum dipasang.
 
@@ -445,18 +445,20 @@ Rasio dibatasi 24 dan penyebut nol menjadi data kosong. Fitur performa supplier 
 
 </details>
 
-### Tahap 10 — Paket Maksimal (Montgomery County + M5) ⬜
+### Tahap 10 — Paket Maksimal (Montgomery County + M5) ⛔
 
-- [ ] **Montgomery County:** export CSV ketiga tabel dari portal county: [Warehouse and Retail Sales](https://data.montgomerycountymd.gov/d/v76h-r7br), [Product Purchases by DLC](https://data.montgomerycountymd.gov/d/kpfd-c5d5), [ABS Store Inventory](https://data.montgomerycountymd.gov/d/ib5t-5ncy)
-- [ ] Cek kecocokan kode item antar-tabel (`ITEM CODE`, `ITEM`, `Code`)
-- [ ] Hitung Vs bulanan per item, pisahkan slow vs fast-moving, bandingkan ritel vs grosir, dan hitung berapa hari stok cukup (stok ÷ kecepatan jual)
-- [ ] Mulai kumpulkan snapshot stok harian ABS selama beberapa hari, karena tabelnya hanya menyimpan kondisi saat diunduh
-- [ ] **M5:** unduh `sales_train_evaluation.csv`, `calendar.csv`, dan `sell_prices.csv`. Pakai subset (misalnya kategori FOODS di 1–2 toko).
-- [ ] Buat model demand forecast (statsforecast), lalu pakai untuk fitur ramalan model risiko (sekarang: laju harian × horizon). Dipindah dari Tahap 9.
-- [ ] Jadikan 28 hari terakhir sebagai data uji, lalu bandingkan model forecast dengan baseline sederhana. Hasilnya menjadi angka akurasi untuk Bagian 6 proposal.
-- [ ] Uji logika Death Spiral di M5 (penjualan nol karena stok habis vs karena tidak ada peminat)
+**Dibatalkan (22 Okt 2026):** waktu tidak cukup sebelum final 31 Okt, dan validasi ini bukan syarat demo. Validasi pada data riil ritel dan angka akurasi forecast dipindah ke roadmap pilot Fase 2.
 
-### Tahap 11 — Demo & pitch ⬜
+- ⛔ ~~**Montgomery County:** export CSV ketiga tabel dari portal county: [Warehouse and Retail Sales](https://data.montgomerycountymd.gov/d/v76h-r7br), [Product Purchases by DLC](https://data.montgomerycountymd.gov/d/kpfd-c5d5), [ABS Store Inventory](https://data.montgomerycountymd.gov/d/ib5t-5ncy)~~ **Dibatalkan bersama Tahap 10.**
+- ⛔ ~~Cek kecocokan kode item antar-tabel (`ITEM CODE`, `ITEM`, `Code`)~~ **Dibatalkan bersama Tahap 10.**
+- ⛔ ~~Hitung Vs bulanan per item, pisahkan slow vs fast-moving, bandingkan ritel vs grosir, dan hitung berapa hari stok cukup (stok ÷ kecepatan jual)~~ **Dibatalkan bersama Tahap 10.**
+- ⛔ ~~Mulai kumpulkan snapshot stok harian ABS selama beberapa hari, karena tabelnya hanya menyimpan kondisi saat diunduh~~ **Dibatalkan bersama Tahap 10.**
+- ⛔ ~~**M5:** unduh `sales_train_evaluation.csv`, `calendar.csv`, dan `sell_prices.csv`. Pakai subset (misalnya kategori FOODS di 1–2 toko).~~ **Dibatalkan bersama Tahap 10.**
+- ⛔ ~~Buat model demand forecast (statsforecast), lalu pakai untuk fitur ramalan model risiko (sekarang: laju harian × horizon). Dipindah dari Tahap 9.~~ **Dibatalkan bersama Tahap 10.**
+- ⛔ ~~Jadikan 28 hari terakhir sebagai data uji, lalu bandingkan model forecast dengan baseline sederhana. Hasilnya menjadi angka akurasi untuk Bagian 6 proposal.~~ **Dibatalkan bersama Tahap 10.**
+- ⛔ ~~Uji logika Death Spiral di M5 (penjualan nol karena stok habis vs karena tidak ada peminat)~~ **Dibatalkan bersama Tahap 10.**
+
+### Tahap 11 — Demo & pitch 🟡
 
 **Final: Sabtu 31 Okt 2026, tatap muka, 15 menit termasuk tanya jawab, berbahasa Inggris.** Demo live diutamakan dan harus memperlihatkan loop agentic (plan → reason → act/tool → review) dengan human-in-the-loop. Buka deck dengan diagram arsitektur dan pakai alur Problem → Solution → Impact.
 
@@ -470,10 +472,10 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 4 | SKU B: Hold Reorder | Bibitor + Instacart | Minimal | Tidak ada peran komplementer → Hold Reorder, exploration budget tetap dialokasikan |
 | 5 | Capital Reallocation | Bibitor | Minimal | Modal dari SKU B direkomendasikan untuk SKU A, dalam Rupiah |
 | 6 | Uji guardrail | Online Retail II | Kuat | Injeksi pesanan borongan → filter >3σ menahan PO, circuit breaker aktif |
-| 7 | Slide validasi | Montgomery + M5 | Maksimal | Vs pada data riil ritel + grosir, akurasi forecast vs baseline |
+| 7 | ~~Slide validasi~~ | ~~Montgomery + M5~~ | ~~Maksimal~~ | Dibatalkan bersama Tahap 10; validasi data riil masuk roadmap Fase 2 |
 
-- [ ] Siapkan data dan skenario untuk langkah 1–5 (paket Minimal)
-- [ ] Siapkan skenario untuk langkah 6–7 (jika paket Kuat/Maksimal selesai)
+- [x] Data dan skenario langkah 1–5 siap di toko 74: agent menahan reorder Ciroc, menyusun draf PO Bacardi Gold dan Smirnoff, dan menyarankan realokasi; data dibersihkan dengan `python -m agent.reset_demo` (lihat `docs/deploy.md`).
+- [x] Langkah 6 siap: `python -m agent.skenario_runaway` (juga skenario selisih stok `agent.skenario_selisih_stok`). Langkah 7 dibatalkan bersama Tahap 10.
 - [x] **Selesai 22 Okt:** `POST /sku/{id}/stok-fisik` (hitung fisik, label simulasi) menurunkan Data Confidence menjadi 1 − |selisih| / stok sistem; di bawah 0,8 draf PO baru ditahan `DATA_CONFIDENCE_RENDAH`, draf lama tidak bisa disetujui (409), dan Hold juga ditolak, sampai `DELETE /sku/{id}/stok-fisik` (audit selesai). Skrip demo `python -m agent.skenario_selisih_stok --store 74` (akhiri dengan `--audit-selesai`). Uji dengan agent asli: Bacardi Gold stok sistem 43, fisik 32 → confidence 1,00 → 0,74 → draf PO ditahan, Smirnoff tetap DRAFT. 5 test baru (73 lulus). Skenario ini dibutuhkan karena data Bibitor asli konsisten sempurna, sehingga fitur mitigasi inakurasi data tidak akan pernah terlihat tanpa injeksi selisih.
 - [ ] Gladi demo live end-to-end dengan timer (15 menit sudah termasuk tanya jawab)
 - [ ] Slide arsitektur (dibuka paling awal; diagram dasar dan loop agentic sudah ada di `docs/arsitektur.md`): S3, Lambda + API Gateway, database terkelola, Bedrock (Nova/Claude) lewat Strands, AgentCore Runtime, SAP. Tekankan bahwa arsitektur tidak terikat ke satu penyedia model dan data stok bisa tetap di infrastruktur sendiri.
@@ -575,4 +577,5 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 22 Okt 2026 | **Deploy Lambda dirapikan dan dijalankan ulang dari repo** (akses CLI ke akun tim lewat `aws login --profile rexa`). Isi image lama dibaca dari ECR: perubahan tim (CORS, state di `/tmp`, handler Mangum) dipindahkan ke repo; jalur agent cadangan tanpa LLM dihapus. File baru: `Dockerfile`, `.dockerignore`, `requirements-lambda.txt`, `api/lambda_handler.py`, `deploy/deploy_lambda.ps1`. Perbaikan tambahan: tiruan SAP dipanggil di proses yang sama di Lambda (approve sebelumnya mengarah ke `127.0.0.1:8000`). Uji online: approve → SAP PO #4500000001. 77 test lulus. |
 | 22 Okt 2026 | Cek Bedrock di akun proyek tim: semua kuota "tokens per day" Nova = 0 dan tidak bisa dinaikkan (ThrottlingException), Claude meminta formulir use case. **Tim memutuskan membuat akun AWS standar** (email kampus + kartu kredit) untuk Bedrock dan AgentCore; deploy dipegang pemilik akun baru. |
 | 22 Okt 2026 | Akun standar `Rexa-ChibiRex` terbuat, tetapi **kartu ditolak** saat verifikasi pembayaran. Tim memilih **opsi 4**: tetap di akun proyek tim, API + dashboard + guardrail + tiruan SAP di AWS, LLM di laptop. Dikerjakan: mode antrian agent di API (`POST /agent-runs/mulai` → MENUNGGU, `POST /agent-runs/antrian/ambil`, `POST /agent-runs/{id}/langkah`, `GET /agent-runs/worker`, token `X-Worker-Token`), worker `agent/worker.py`, panel agent menampilkan status worker, **EFS** untuk state, Lambda ke VPC, **dashboard di AWS Amplify**, `POST /demo/reset` + `agent.reset_demo`, skrip `deploy\deploy_dashboard.ps1`, panduan `docs/deploy.md`. Uji online penuh: agent dari tombol dashboard → approve → SAP PO #4500000001. 81 test lulus. Catatan: satu test sempat mengosongkan PO di tiruan SAP lokal (`data/processed/sap_mock.sqlite`); test sudah diperbaiki agar hanya memakai file sementara. |
+| 22 Okt 2026 | Item yang terhambat ditandai **dibatalkan** (dicoret, tidak dihitung): langkah akun standar dan Bedrock/AgentCore (kartu ditolak, kuota 0), integrasi SAP riil (opsional), dan seluruh Tahap 10 (waktu). Login CLI dan skenario demo langkah 1–6 dicentang karena sudah tercapai. |
 | 17 Okt 2026 | AWS CLI 2.38.1 terpasang dan `aws login` berhasil (ditambah `awscrt` di requirements). Tes Bedrock belum lulus karena **akun AWS masih dalam verifikasi** ("Your account is currently being verified"); ini juga penyebab halaman "Complete your account setup" di konsol Bedrock. Menunggu verifikasi lalu tes ulang. |
