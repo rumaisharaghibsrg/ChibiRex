@@ -15,6 +15,7 @@ statsforecast==2.1.1
 fastapi==0.143.3
 uvicorn==0.54.0
 pydantic==2.14.1
+mangum==0.22.0  # adapter Lambda (api/lambda_handler.py); paket untuk image Lambda ada di requirements-lambda.txt
 
 # Agent + AWS (Tahap 5, 8)
 strands-agents==1.61.1

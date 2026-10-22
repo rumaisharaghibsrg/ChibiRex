@@ -1,0 +1,10 @@
+# Paket untuk API Rexa di AWS Lambda (Python 3.12, lihat Dockerfile).
+# Hanya yang diimpor api/, engine/, dan sap_mock/. Agent (Strands, Ollama) dan pipeline data tidak ikut,
+# sehingga image jauh lebih kecil. Versi disamakan dengan requirements.txt supaya file DuckDB hasil
+# pipeline di laptop bisa langsung dibaca di Lambda.
+duckdb==1.5.6
+fastapi==0.143.3
+starlette==1.8.0
+pydantic==2.14.1
+httpx==0.28.1
+mangum==0.22.0

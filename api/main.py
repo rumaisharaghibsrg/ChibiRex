@@ -16,6 +16,7 @@ import duckdb
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.testclient import TestClient
 
 from agent.prompt import TUGAS_DEFAULT
 from api import guardrails, sap, state
@@ -27,6 +28,7 @@ from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AgentRunMulai, Agen
 from api.settings import Settings
 from engine import basket, config
 from engine.format import angka, rupiah
+from sap_mock import SERVICE
 from sap_mock.app import create_sap_mock
 
 TOOLS = "Tools agent"
@@ -71,22 +73,38 @@ def galat(status: int, kode: str, pesan: str, **extra) -> HTTPException:
     return HTTPException(status, detail={"kode": kode, "pesan": pesan, **extra})
 
 
+def siapkan(app: FastAPI) -> None:
+    """Buka DuckDB (hanya baca) dan siapkan tabel state. Idempoten: di Lambda dipanggil sekali per cold start dan
+    koneksinya dipakai ulang antar-request (lihat api/lambda_handler.py), bukan dibuka ulang setiap request."""
+    if getattr(app.state, "duck", None) is not None:
+        return
+    s: Settings = app.state.settings
+    if not s.analytics_db.exists():
+        raise RuntimeError(f"{s.analytics_db} belum ada. Jalankan `python -m engine.pipeline` dulu.")
+    duck = duckdb.connect(str(s.analytics_db), read_only=True)
+    ada = {r[0] for r in duck.execute("select table_name from information_schema.tables").fetchall()}
+    if kurang := [t for t in TABEL_WAJIB if t not in ada]:
+        duck.close()
+        raise RuntimeError(f"Tabel {', '.join(kurang)} belum ada di {s.analytics_db}. "
+                           "Hentikan API lalu jalankan `python -m engine.pipeline`.")
+    state.init(s.state_db)
+    app.state.duck = duck
+
+
+def tutup(app: FastAPI) -> None:
+    if (duck := getattr(app.state, "duck", None)) is not None:
+        duck.close()
+        app.state.duck = None
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        if not settings.analytics_db.exists():
-            raise RuntimeError(f"{settings.analytics_db} belum ada. Jalankan `python -m engine.pipeline` dulu.")
-        app.state.duck = duckdb.connect(str(settings.analytics_db), read_only=True)
-        ada = {r[0] for r in app.state.duck.execute("select table_name from information_schema.tables").fetchall()}
-        if kurang := [t for t in TABEL_WAJIB if t not in ada]:
-            app.state.duck.close()
-            raise RuntimeError(f"Tabel {', '.join(kurang)} belum ada di {settings.analytics_db}. "
-                               "Hentikan API lalu jalankan `python -m engine.pipeline`.")
-        state.init(settings.state_db)
+        siapkan(app)
         yield
-        app.state.duck.close()
+        tutup(app)
 
     app = FastAPI(
         title="Rexa Copilot API",
@@ -95,18 +113,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "Semua aksi agent wajib lewat API ini; guardrail dijalankan di kode, bukan di prompt.",
         lifespan=lifespan,
     )
-    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"],
-                       allow_headers=["*"], expose_headers=["Idempotent-Replay", "Existing-Draft"])
+    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins,
+                       allow_origin_regex=settings.cors_origin_regex, allow_methods=["*"], allow_headers=["*"],
+                       expose_headers=["Idempotent-Replay", "Existing-Draft"])
     app.state.settings = settings
     app.state.agent = PenjalanAgent(settings.agent_runner or jalankan_agent_lokal, settings.clock)
     _routes(app)
     # Tiruan SAP ikut berjalan di server yang sama (/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV).
-    app.mount("/sap", settings.sap_mock_app or create_sap_mock(settings.sap_mock_db))
+    sap_app = settings.sap_mock_app or create_sap_mock(settings.sap_mock_db)
+    app.mount("/sap", sap_app)
+    if settings.sap_dalam_proses and settings.sap_client is None:
+        settings.sap_client = lambda: TestClient(sap_app, base_url="http://sap-dalam-proses" + SERVICE)
     return app
 
 
 def _sap_client(s: Settings) -> httpx.Client:
     return s.sap_client() if s.sap_client else httpx.Client(base_url=s.sap_base_url, timeout=15)
+
+
+def _tujuan_sap(s: Settings) -> str:
+    if s.sap_dalam_proses:
+        return f"POST /sap{SERVICE}/A_PurchaseOrder (tiruan SAP di proses API yang sama)"
+    return f"POST {s.sap_base_url}/A_PurchaseOrder"
 
 
 def _settings(request: Request) -> Settings:
@@ -339,7 +367,7 @@ def _routes(app: FastAPI) -> None:
         s = _settings(request)
         with state.baca(s.state_db) as con:
             po = _po(con, po_id)
-        return {"po_id": po_id, "tujuan": f"POST {s.sap_base_url}/A_PurchaseOrder",
+        return {"po_id": po_id, "tujuan": _tujuan_sap(s),
                 "payload": sap.payload_po(po, s.clock())}
 
     def _putuskan(po_id: str, body: Keputusan, request: Request, status_baru: str, cur=None) -> dict:

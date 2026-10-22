@@ -1,0 +1,10 @@
+# Hanya file yang dibutuhkan API di Lambda yang masuk ke image (lihat Dockerfile).
+*
+!requirements-lambda.txt
+!api/
+!agent/
+!engine/
+!sap_mock/
+!data/processed/chibirex.duckdb
+**/__pycache__
+**/*.pyc

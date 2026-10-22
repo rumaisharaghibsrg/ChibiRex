@@ -21,11 +21,11 @@
 | 5 | Agent layer (Strands + Ollama) | ✅ Selesai | 9/9 |
 | 6 | Mock API SAP | 🟡 Inti selesai (sisa opsional) | 4/6 |
 | 7 | Dashboard Rexa (React) | 🟡 Inti demo tersambung; sisanya lewat Kiro | 4/8 |
-| 8 | Deploy ke AWS (wajib untuk final) | 🟡 API di Lambda + dashboard Vercel tersambung; agent dan state menyusul | 2/14 |
+| 8 | Deploy ke AWS (wajib untuk final) | 🟡 API di Lambda (deploy dari repo) + dashboard Vercel tersambung; agent dan state menyusul | 3/14 |
 | 9 | Paket Kuat (Backorders + Online Retail II) | ✅ Selesai | 9/9 |
 | 10 | Paket Maksimal (Montgomery County + M5) | ⬜ Belum | 0/8 |
 | 11 | Demo & pitch | 🟡 Berjalan | 2/14 |
-| | **Total** | | **81/119 (±68%)** |
+| | **Total** | | **82/119 (±69%)** |
 
 **Posisi sekarang:** desain dashboard **Rexa** (React) sudah ada dan backend sudah menyediakan endpoint untuk dashboard (Health Score, daftar toko, menjalankan agent dari dashboard). Kontraknya ada di `docs/api-dashboard.md`; penyambungan dikerjakan teman tim lewat Kiro. Model risiko (Tahap 9) dan guardrail Runaway PO sudah teruji dengan data asli.
 **Target terdekat:** (1) sambungkan dashboard ke API lewat Kiro, terutama panel agent dan 1-Click Approval (Tahap 7); (2) buat **akun AWS standar baru** dengan email kampus (Tahap 8); (3) Zoom deep-dive dengan mentor AWS, diusulkan **Rabu 22 Okt 2026** siang/sore WIB; (4) **final Sabtu 31 Okt 2026** (tatap muka, 15 menit termasuk tanya jawab, berbahasa Inggris, demo live).
@@ -397,8 +397,13 @@ Guardrail ditaruh **di kode, bukan di prompt**.
 **Deploy:**
 
 - [ ] Pindahkan state (`state.sqlite`: PO, hold, idempotency, circuit breaker, audit log) ke database terkelola. Lambda bisa berjalan di banyak instance sekaligus dengan disk sementara, sehingga batas harian dan circuit breaker hanya aman kalau state-nya dipakai bersama. Kandidat: RDS/Aurora PostgreSQL (sesuai proposal; logika SQL dan transaksi tetap) atau DynamoDB. Tanyakan di Zoom 22 Okt.
-- [ ] Simpan data analitik (`chibirex.duckdb`, ±300 MB, hanya dibaca) dan model risiko di S3, lalu sertakan di image container API.
-- [x] Deploy FastAPI (tools + tiruan SAP) ke Lambda. **Selesai 22 Okt** oleh tim, lewat Lambda Function URL di `ap-southeast-2` (tanpa API Gateway); `/docs`, `/stores`, dan `/stores/74/ringkasan` menjawab dengan data asli (Health Score toko 74 = 69), ±2 dtk per request. `CHIBIREX_CORS_ORIGINS` sudah diisi (22 Okt) dan dashboard Vercel sudah menampilkan data dari API ini (dicek di browser). **Belum:** file deploy (Dockerfile/handler) belum ada di repo, dan Lambda belum memuat kode terbaru (endpoint hitung fisik dan pengaman agent).
+- [x] Data analitik (`chibirex.duckdb`, hanya dibaca) ikut di dalam image container API (bukan S3; tabel risiko sudah ada di dalamnya, file model tidak dibutuhkan API).
+- [x] Deploy FastAPI (tools + tiruan SAP) ke Lambda `chibirex-api-function` (container image di ECR `chibirex-api`, Function URL di `ap-southeast-2`, memori 1024 MB). Deploy awal oleh tim 21–22 Okt; **22 Okt dirapikan dan bisa diulang dari repo:**
+  - `Dockerfile` + `.dockerignore` + `requirements-lambda.txt` (Python 3.12, hanya paket yang dipakai API) dan handler `api/lambda_handler.py` (Mangum, DuckDB dibuka sekali per cold start, bukan setiap request).
+  - Di Lambda otomatis: state dan tiruan SAP di `/tmp`, tiruan SAP dipanggil di proses yang sama (sebelumnya approve memanggil `127.0.0.1:8000` yang tidak ada di Lambda), CORS untuk `chibirex-dashboard.vercel.app` + preview-nya, tombol agent menjawab 503 `AGENT_BELUM_TERSEDIA`.
+  - Jalur "agent cadangan" berbasis aturan yang sempat ada di image lama (membuat PO/hold tanpa LLM tetapi tercatat sebagai agent berhasil dengan model Ollama) **dihapus**, karena menyesatkan juri.
+  - **Cara deploy ulang:** Docker Desktop menyala → `aws login --profile rexa` → `powershell -ExecutionPolicy Bypass -File deploy\deploy_lambda.ps1` (build, uji di kontainer hanya-baca, push ke ECR, perbarui Lambda; `-UjiSaja` untuk uji tanpa deploy). Jangan deploy dari salinan kode lain, supaya versi repo tidak tertimpa.
+  - Hasil cek online: `/stores/74/ringkasan`, endpoint hitung fisik, CORS Vercel, dan **draf PO → 1-Click Approval → SAP PO #4500000001** berjalan. Waktu proses di server 5–100 ms per request (cold start ±5 dtk); sisa ±2 dtk dari laptop tim adalah jaringan/TLS ke Sydney.
 - [ ] Deploy agent Strands ke Bedrock AgentCore Runtime, yang memanggil API tools lewat URL API Gateway (`CHIBIREX_API_URL`).
 - [ ] Deploy dashboard React sebagai situs statis di S3 + CloudFront (`npm run build`); set `VITE_API_URL` ke URL API Gateway dan `CHIBIREX_CORS_ORIGINS` ke domain CloudFront.
 - [ ] Uji end-to-end di AWS (agent → draf PO → approve → PO di tiruan SAP), cek biaya di AWS Budgets, dan matikan resource yang menganggur.
@@ -565,4 +570,5 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 | 22 Okt 2026 | Tim men-deploy API ke **AWS Lambda** (Function URL, Sydney) dan dashboard ke **Vercel** (`chibirex-dashboard.vercel.app`, build sudah mengarah ke URL Lambda). Hasil cek: API menjawab dengan data asli, tetapi **CORS menolak domain Vercel** ("Disallowed CORS origin"), jadi bagian dashboard yang memakai API belum bisa tampil. Perbaikan: isi `CHIBIREX_CORS_ORIGINS` di Lambda. Catatan lanjutan: agent belum bisa jalan di Lambda (butuh Bedrock + AgentCore), state SQLite di Lambda tidak bertahan antar-instance, dan Vercel bukan AWS. |
 | 22 Okt 2026 | Diagram arsitektur (target AWS + loop agentic) ditulis di `docs/arsitektur.md` (Mermaid, tampil di GitHub; sudah dicek ter-render). **Skenario selisih stok** selesai: hitung fisik menurunkan Data Confidence, guardrail menahan draf PO baru, approval draf lama, dan Hold sampai audit selesai; skrip `agent.skenario_selisih_stok`; diuji dengan agent asli (Bacardi Gold 1,00 → 0,74 → PO ditahan). 73 test lulus. |
 | 22 Okt 2026 | CORS di Lambda sudah diisi tim; dashboard Vercel kini memuat data dari API Lambda tanpa galat (dicek di Edge headless). Pengaman baru: di Lambda, `POST /agent-runs/mulai` menjawab 503 `AGENT_BELUM_TERSEDIA` (agent lokal tidak bisa jalan di sana) sampai agent di-deploy ke Bedrock AgentCore. 74 test lulus. |
+| 22 Okt 2026 | **Deploy Lambda dirapikan dan dijalankan ulang dari repo** (akses CLI ke akun tim lewat `aws login --profile rexa`). Isi image lama dibaca dari ECR: perubahan tim (CORS, state di `/tmp`, handler Mangum) dipindahkan ke repo; jalur agent cadangan tanpa LLM dihapus. File baru: `Dockerfile`, `.dockerignore`, `requirements-lambda.txt`, `api/lambda_handler.py`, `deploy/deploy_lambda.ps1`. Perbaikan tambahan: tiruan SAP dipanggil di proses yang sama di Lambda (approve sebelumnya mengarah ke `127.0.0.1:8000`). Uji online: approve → SAP PO #4500000001. 77 test lulus. |
 | 17 Okt 2026 | AWS CLI 2.38.1 terpasang dan `aws login` berhasil (ditambah `awscrt` di requirements). Tes Bedrock belum lulus karena **akun AWS masih dalam verifikasi** ("Your account is currently being verified"); ini juga penyebab halaman "Complete your account setup" di konsol Bedrock. Menunggu verifikasi lalu tes ulang. |
