@@ -42,5 +42,8 @@ class Settings:
         "CHIBIREX_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(","))
     # Fungsi yang menjalankan agent untuk tombol "Jalankan agent" di dashboard; kosong = agent Strands lokal.
     agent_runner: Callable[..., dict] | None = None
+    # Agent lokal butuh Ollama dan thread latar. Di AWS Lambda keduanya tidak tersedia (thread dibekukan setelah
+    # respons terkirim), jadi di sana tombol agent menunggu agent di Bedrock AgentCore.
+    agent_lokal: bool = field(default_factory=lambda: "AWS_LAMBDA_FUNCTION_NAME" not in os.environ)
 
     clock: Callable[[], datetime] = datetime.now

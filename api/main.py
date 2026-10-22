@@ -574,6 +574,11 @@ def _routes(app: FastAPI) -> None:
         langkahnya lewat `GET /agent-runs/{run_id}` sampai status SELESAI atau GAGAL. Hanya satu agent sekaligus."""
         if not cur.execute("select 1 from sku_metrics where store = ? limit 1", [body.store]).fetchone():
             raise galat(404, "TOKO_TIDAK_ADA", f"Toko {body.store} tidak ditemukan.")
+        s = _settings(request)
+        if s.agent_runner is None and not s.agent_lokal:
+            raise galat(503, "AGENT_BELUM_TERSEDIA",
+                        "Agent belum di-deploy ke AWS (Bedrock + AgentCore). Untuk sementara jalankan agent dari "
+                        "versi lokal (uvicorn + Ollama).")
         try:
             return request.app.state.agent.mulai(body.tugas or TUGAS_DEFAULT.format(store=body.store), body.store)
         except AgentSedangBerjalan:

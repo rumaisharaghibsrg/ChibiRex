@@ -80,6 +80,12 @@ def test_jalankan_agent_dari_dashboard(analytics_db, tmp_path):
         assert client.get("/agent-runs/tidak-ada").status_code == 404
 
 
+def test_agent_lokal_tidak_dijalankan_di_lambda(analytics_db, tmp_path):
+    with buat_client(analytics_db, tmp_path, agent_lokal=False) as client:
+        r = client.post("/agent-runs/mulai", json={"store": 1})
+        assert r.status_code == 503 and r.json()["detail"]["kode"] == "AGENT_BELUM_TERSEDIA"
+
+
 def test_status_agent_dari_jejak_tersimpan(analytics_db, tmp_path):
     def agent_palsu(tugas, store, run_id, langkah):
         # Agent asli menyimpan jejaknya sendiri lewat POST /agent-runs di akhir.
