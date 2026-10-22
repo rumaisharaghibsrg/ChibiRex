@@ -67,10 +67,10 @@ sequenceDiagram
 
 | Komponen | Sekarang (22 Okt 2026) | Target final |
 |---|---|---|
-| Dashboard | Vercel (`chibirex-dashboard.vercel.app`) dan lokal (Vite) | AWS Amplify atau S3 + CloudFront |
-| Tools API | AWS Lambda Function URL (Sydney); CORS untuk domain Vercel belum diisi | Lambda (+ API Gateway bila perlu) |
-| Agent | Laptop (Strands + Ollama `qwen3:14b`) | Bedrock AgentCore Runtime + Amazon Bedrock |
-| State transaksi | SQLite (di Lambda tidak bertahan antar-instance) | Database terkelola (dibahas di Zoom 22 Okt) |
+| Dashboard | **AWS Amplify** (`main.d30b19xkk8lknt.amplifyapp.com`); Vercel dan lokal tetap ada | AWS Amplify |
+| Tools API | AWS Lambda (container image, Function URL, Sydney) di VPC; deploy dari repo (`deploy\deploy_lambda.ps1`) | Lambda (+ API Gateway bila perlu) |
+| Agent | Laptop (Strands + Ollama `qwen3:14b`) lewat worker yang mengambil tugas dari antrian API; kuota Bedrock akun proyek = 0 | Bedrock AgentCore Runtime + Amazon Bedrock |
+| State transaksi | SQLite di **Amazon EFS** (dipakai bersama semua instance, tidak hilang saat cold start) | Database terkelola (RDS/DynamoDB) |
 | Data analitik | DuckDB ikut di-deploy bersama API | Tetap DuckDB (hanya dibaca), disimpan di S3 |
 | SAP | Tiruan OData V2 `API_PURCHASEORDER_PROCESS_SRV` di dalam API | Tetap tiruan; opsional SAP riil (OData V4 `CE_PURCHASEORDER_0001`) |
 

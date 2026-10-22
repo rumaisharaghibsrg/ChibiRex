@@ -76,5 +76,6 @@ export const api = {
   // Agent
   mulaiAgent: (store, tugas) => request('/agent-runs/mulai', { method: 'POST', body: { store, tugas } }),
   statusAgent: (runId) => request(`/agent-runs/${runId}`),
+  statusWorker: () => request('/agent-runs/worker'),
   riwayatAgent: (limit = 10) => request(`/agent-runs${query({ limit })}`),
 };

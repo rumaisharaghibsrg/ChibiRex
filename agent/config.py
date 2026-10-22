@@ -41,5 +41,13 @@ KANDIDAT_CLAUDE = [
 BEDROCK_REGION = os.environ.get("CHIBIREX_BEDROCK_REGION", KANDIDAT_BEDROCK[0][0])
 BEDROCK_MODEL_ID = os.environ.get("CHIBIREX_BEDROCK_MODEL_ID", KANDIDAT_BEDROCK[0][1])
 
-# Alamat API Tahap 4 yang dipanggil tools agent.
+# Alamat API Tahap 4 yang dipanggil tools agent. Untuk API di Lambda, isi dengan URL Function URL-nya.
 API_URL = os.environ.get("CHIBIREX_API_URL", "http://127.0.0.1:8000")
+# Worker agent (`python -m agent.worker`): API tujuan (Lambda) dan token yang sama dengan CHIBIREX_WORKER_TOKEN
+# di Lambda, dikirim di header X-Worker-Token. Terpisah dari API_URL supaya alat lokal lain tetap ke API laptop.
+WORKER_API_URL = os.environ.get("CHIBIREX_WORKER_API_URL") or API_URL
+WORKER_TOKEN = os.environ.get("CHIBIREX_WORKER_TOKEN") or None
+
+
+def header_worker() -> dict:
+    return {"X-Worker-Token": WORKER_TOKEN} if WORKER_TOKEN else {}

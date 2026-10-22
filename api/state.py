@@ -91,6 +91,14 @@ create table if not exists agent_runs (
     berhasil integer not null
 );
 
+-- Kapan worker agent di laptop terakhir mengambil antrian (mode antrian), untuk status di dashboard.
+create table if not exists worker_status (
+    id integer primary key check (id = 1),
+    terakhir_terlihat text,
+    nama text
+);
+insert or ignore into worker_status values (1, null, null);
+
 create table if not exists audit_log (
     id integer primary key autoincrement,
     waktu text not null,
@@ -109,7 +117,11 @@ def connect(path: Path) -> sqlite3.Connection:
 
 
 # Kolom yang ditambahkan setelah tabel pertama kali dibuat; ditambahkan otomatis ke database lama.
-KOLOM_TAMBAHAN = {"purchase_orders": [("sap_po_number", "text"), ("sap_dikirim_pada", "text")]}
+KOLOM_TAMBAHAN = {
+    "purchase_orders": [("sap_po_number", "text"), ("sap_dikirim_pada", "text")],
+    # Mode antrian: MENUNGGU -> BERJALAN -> SELESAI/GAGAL. Baris lama (tanpa status) dibaca dari `berhasil`.
+    "agent_runs": [("status", "text"), ("mulai_pada", "text"), ("pesan", "text")],
+}
 
 
 def init(path: Path) -> None:

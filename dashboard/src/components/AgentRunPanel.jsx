@@ -9,7 +9,8 @@ import {
   ShieldAlert,
   CheckCircle2,
   AlertTriangle,
-  Send
+  Send,
+  Laptop
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { rupiah } from '../lib/format';
@@ -38,7 +39,24 @@ const NAMA_TOOL = {
   suggest_reallocation: 'Saran realokasi modal',
 };
 const INTERVAL_PANTAU_MS = 1500;
+const INTERVAL_WORKER_MS = 15000;
 const TANPA_LANGKAH = [];
+// MENUNGGU: mode antrian (API di Lambda), tugas belum diambil worker agent di laptop.
+const STATUS_AKTIF = ['MENUNGGU', 'BERJALAN'];
+
+// Keterangan cara agent dijalankan, dari GET /agent-runs/worker.
+function KeteranganWorker({ worker }) {
+  if (!worker || worker.mode === 'lokal') return null;
+  if (worker.mode === 'mati') {
+    return <span className="text-amber-700">Agent belum tersedia di versi online.</span>;
+  }
+  return (
+    <span className={`inline-flex items-center gap-1 ${worker.aktif ? 'text-emerald-700' : 'text-amber-700'}`}>
+      <Laptop className="w-3.5 h-3.5" />
+      LLM di laptop: worker {worker.aktif ? 'aktif' : 'tidak aktif (jalankan python -m agent.worker)'}
+    </span>
+  );
+}
 
 function diblokir(output) {
   return Boolean(output?.ditolak || output?.error || output?.status === 'DITAHAN_GUARDRAIL');
@@ -110,7 +128,16 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
     };
   }, [store]);
 
-  const berjalan = run?.status === 'BERJALAN';
+  const [worker, setWorker] = useState(null);
+  useEffect(() => {
+    const muat = () => api.statusWorker().then(setWorker).catch(() => {});
+    muat();
+    const ulang = setInterval(muat, INTERVAL_WORKER_MS);
+    return () => clearInterval(ulang);
+  }, []);
+
+  const berjalan = STATUS_AKTIF.includes(run?.status);
+  const menunggu = run?.status === 'MENUNGGU';
   const runId = run?.run_id;
 
   // Pantau langkah agent selagi berjalan; berhenti saat SELESAI atau GAGAL.
@@ -121,7 +148,7 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
       try {
         const terbaru = await api.statusAgent(runId);
         setRun(terbaru);
-        if (terbaru.status !== 'BERJALAN') onSelesaiRef.current?.(terbaru);
+        if (!STATUS_AKTIF.includes(terbaru.status)) onSelesaiRef.current?.(terbaru);
       } catch (e) {
         setGalat(e.message);
       }
@@ -152,7 +179,7 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
   }, [langkah]);
 
   const faseTercapai = new Set(langkah.map((l) => FASE_TOOL[l.tool]));
-  if (run && run.status !== 'BERJALAN') faseTercapai.add('REVIEW');
+  if (run && !berjalan) faseTercapai.add('REVIEW');
   const jumlahDiblokir = langkah.filter((l) => diblokir(l.output)).length;
 
   return (
@@ -168,6 +195,9 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
             <p className="text-xs text-slate-500 font-medium mt-0.5">
               Toko {store} &bull; semua aksi lewat API berguardrail, PO tetap menunggu persetujuan manajer
             </p>
+            <p className="text-[11px] font-semibold mt-0.5">
+              <KeteranganWorker worker={worker} />
+            </p>
           </div>
         </div>
         <button
@@ -178,7 +208,7 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
           {berjalan || memulai ? (
             <>
               <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
-              <span>Agent berjalan{berjalan ? ` (${detik} dtk)` : '...'}</span>
+              <span>{menunggu ? 'Menunggu worker' : 'Agent berjalan'}{berjalan ? ` (${detik} dtk)` : '...'}</span>
             </>
           ) : (
             <>
@@ -261,12 +291,12 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
         {berjalan && (
           <div className="flex items-center gap-2 text-xs text-slate-500 pl-[68px]">
             <span className="animate-pulse w-2 h-2 rounded-full bg-[#4e8a6e]" />
-            Agent sedang berpikir...
+            {menunggu ? 'Menunggu worker agent di laptop mengambil tugas...' : 'Agent sedang berpikir...'}
           </div>
         )}
 
         {/* Review */}
-        {run && run.status !== 'BERJALAN' && (
+        {run && !berjalan && (
           <div className={`mt-4 rounded-xl border p-4 ${run.status === 'SELESAI' ? 'bg-[#f0f7f4] border-[#a2d2bf]' : 'bg-red-50 border-red-200'}`}>
             <div className="flex items-center gap-2 text-xs font-extrabold text-[#1b4d3e] mb-2">
               {run.status === 'SELESAI'

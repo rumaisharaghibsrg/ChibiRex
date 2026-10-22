@@ -8,6 +8,8 @@ selama API masih membukanya.
 import hashlib
 import json
 import math
+import secrets
+import sqlite3
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from uuid import uuid4
@@ -21,10 +23,10 @@ from fastapi.testclient import TestClient
 from agent.prompt import TUGAS_DEFAULT
 from api import guardrails, sap, state
 from api.agent_runner import AgentSedangBerjalan, PenjalanAgent, jalankan_agent_lokal
-from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AgentRunMulai, AgentRunStatus, AuditEntry,
-                         DraftPORequest, Hold, HoldRequest, Keputusan, Prioritas, PurchaseOrder, Realokasi,
-                         RingkasanToko, Sku, StatusGuardrail, StatusPO, StatusStok, StokFisik, StokFisikRequest,
-                         Substitusi, Toko)
+from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AgentRunMulai, AgentRunStatus, AgentRunTugas,
+                         AuditEntry, DraftPORequest, Hold, HoldRequest, Keputusan, LangkahAgent, Prioritas,
+                         PurchaseOrder, Realokasi, RingkasanToko, Sku, StatusGuardrail, StatusPO, StatusStok,
+                         StatusWorker, StokFisik, StokFisikRequest, Substitusi, Toko)
 from api.settings import Settings
 from engine import basket, config
 from engine.format import angka, rupiah
@@ -67,6 +69,8 @@ TABEL_WAJIB = ["sku_metrics", "brand_jenis", "aturan_asosiasi", "risiko_stockout
 IdempotencyKey = Header(alias="Idempotency-Key", min_length=8, max_length=100,
                         description="Kunci unik per aksi. Request ulang dengan kunci yang sama tidak membuat data ganda.")
 InventoryIdPath = Path(pattern=INVENTORY_ID, examples=["74_PAENTMARWY_4222"])
+WorkerToken = Header(default=None, alias="X-Worker-Token",
+                     description="Token worker agent (CHIBIREX_WORKER_TOKEN); wajib kalau API mengaturnya.")
 
 
 def galat(status: int, kode: str, pesan: str, **extra) -> HTTPException:
@@ -225,6 +229,47 @@ def _ringkas_stok_fisik(sku: dict, catatan, s: Settings) -> dict:
             "data_confidence": berlaku, "perlu_audit": berlaku < s.data_confidence_min,
             "dicatat_oleh": catatan["dicatat_oleh"], "catatan": catatan["catatan"],
             "dicatat_pada": catatan["dicatat_pada"]}
+
+
+def _cek_worker(s: Settings, token: str | None) -> None:
+    """Endpoint yang mengubah jejak agent hanya untuk agent/worker yang memegang token (kalau API mengaturnya)."""
+    if s.worker_token and not secrets.compare_digest(token or "", s.worker_token):
+        raise galat(401, "WORKER_TIDAK_SAH", "Header X-Worker-Token tidak valid.")
+
+
+def _kedaluwarsa_agent(con, s: Settings, sekarang) -> None:
+    """Mode antrian: tugas yang tidak diambil worker atau macet di tengah jalan ditutup sebagai GAGAL."""
+    batas_tunggu = (sekarang - timedelta(seconds=s.worker_batas_menunggu_dtk)).isoformat(timespec="seconds")
+    batas_jalan = (sekarang - timedelta(seconds=s.worker_batas_berjalan_dtk)).isoformat(timespec="seconds")
+    con.execute("""update agent_runs set status = 'GAGAL', pesan = ? where status = 'MENUNGGU' and waktu < ?""",
+                (f"Tidak ada worker agent yang mengambil tugas dalam {s.worker_batas_menunggu_dtk} detik. "
+                 "Jalankan `python -m agent.worker` di laptop yang punya Ollama, lalu coba lagi.", batas_tunggu))
+    con.execute("""update agent_runs set status = 'GAGAL', pesan = ? where status = 'BERJALAN' and mulai_pada < ?""",
+                ("Worker agent berhenti sebelum agent selesai.", batas_jalan))
+
+
+def _run_dari_baris(row) -> dict:
+    run = {**dict(row), "langkah": json.loads(row["langkah"])}
+    if not run.get("status"):  # jejak lama sebelum ada kolom status
+        run["status"] = "SELESAI" if row["berhasil"] else "GAGAL"
+        run["pesan"] = None if row["berhasil"] else row["jawaban"]
+    for kolom in ("model", "jawaban"):  # masih kosong selama tugas di antrian
+        run[kolom] = run[kolom] or None
+    return run
+
+
+def _antrikan_agent(s: Settings, tugas: str, store: int) -> dict:
+    sekarang = s.clock()
+    with state.transaksi(s.state_db) as con:
+        _kedaluwarsa_agent(con, s, sekarang)
+        if con.execute("select 1 from agent_runs where status in ('MENUNGGU', 'BERJALAN')").fetchone():
+            raise galat(409, "AGENT_SEDANG_BERJALAN", "Agent masih berjalan; tunggu sampai selesai.")
+        run_id = uuid4().hex[:12]
+        con.execute(
+            """insert into agent_runs (run_id, waktu, tugas, store, model, jawaban, langkah, durasi_dtk, token_input,
+                   token_output, berhasil, status) values (?, ?, ?, ?, '', '', '[]', 0, 0, 0, 0, 'MENUNGGU')""",
+            (run_id, sekarang.isoformat(timespec="seconds"), tugas, store))
+        return _run_dari_baris(con.execute("select * from agent_runs where run_id = ?", (run_id,)).fetchone())
 
 
 def _routes(app: FastAPI) -> None:
@@ -537,6 +582,30 @@ def _routes(app: FastAPI) -> None:
             state.audit(con, sekarang, body.oleh, "circuit_breaker_reset", None, {"catatan": body.catatan})
         return guardrail_status(request)
 
+    @app.post("/demo/reset", status_code=204, tags=[GUARDRAIL])
+    def reset_demo(request: Request, token: str | None = WorkerToken):
+        """Kosongkan data transaksi demo (PO, hold, hitung fisik, jejak agent, audit log) dan PO di tiruan SAP, lalu
+        tutup circuit breaker. Untuk gladi dan sebelum presentasi; butuh token worker kalau API mengaturnya."""
+        s = _settings(request)
+        _cek_worker(s, token)
+        sekarang = s.clock()
+        with state.transaksi(s.state_db) as con:
+            for tabel in ("purchase_orders", "holds", "stok_fisik", "idempotency", "agent_runs", "audit_log"):
+                con.execute(f"delete from {tabel}")
+            con.execute("update circuit_breaker set terbuka = 0, alasan = null, berubah_pada = ? where id = 1",
+                        (sekarang.isoformat(timespec="seconds"),))
+            state.audit(con, sekarang, "reset demo", "reset_demo", None, {})
+        if s.sap_mock_db.exists():
+            sap_db = sqlite3.connect(s.sap_mock_db, timeout=10)
+            try:
+                sap_db.execute("delete from purchase_order")  # nomor PO SAP mulai lagi dari 4500000001
+                sap_db.commit()
+            except sqlite3.OperationalError:  # tiruan SAP belum pernah dipakai, tabelnya belum ada
+                pass
+            finally:
+                sap_db.close()
+        return Response(status_code=204)
+
     @app.post("/sku/{inventory_id}/stok-fisik", response_model=StokFisik, status_code=201, tags=[GUARDRAIL])
     def catat_stok_fisik(body: StokFisikRequest, request: Request, inventory_id: str = InventoryIdPath,
                          cur=Depends(_duck)):
@@ -578,39 +647,102 @@ def _routes(app: FastAPI) -> None:
         return Response(status_code=204)
 
     @app.post("/agent-runs", response_model=AgentRun, status_code=201, tags=[AGENT])
-    def simpan_agent_run(body: AgentRunIn, request: Request):
-        """Simpan jejak satu kali jalannya agent (tools yang dipanggil dan alasannya) untuk dashboard."""
+    def simpan_agent_run(body: AgentRunIn, request: Request, token: str | None = WorkerToken):
+        """Simpan jejak satu kali jalannya agent (tools yang dipanggil dan alasannya) untuk dashboard. Dipanggil agent
+        di akhir run; dalam mode antrian ini juga menutup tugas antrian dengan status SELESAI/GAGAL."""
         s = _settings(request)
+        _cek_worker(s, token)
         waktu = s.clock().isoformat(timespec="seconds")
         with state.transaksi(s.state_db) as con:
             con.execute(
-                "insert or replace into agent_runs values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                """insert into agent_runs (run_id, waktu, tugas, store, model, jawaban, langkah, durasi_dtk,
+                       token_input, token_output, berhasil, status, pesan)
+                   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   on conflict (run_id) do update set waktu = excluded.waktu, tugas = excluded.tugas,
+                       store = excluded.store, model = excluded.model, jawaban = excluded.jawaban,
+                       langkah = excluded.langkah, durasi_dtk = excluded.durasi_dtk,
+                       token_input = excluded.token_input, token_output = excluded.token_output,
+                       berhasil = excluded.berhasil, status = excluded.status, pesan = excluded.pesan""",
                 (body.run_id, waktu, body.tugas, body.store, body.model, body.jawaban,
                  json.dumps([l.model_dump() for l in body.langkah], ensure_ascii=False, default=str),
-                 body.durasi_dtk, body.token_input, body.token_output, int(body.berhasil)))
+                 body.durasi_dtk, body.token_input, body.token_output, int(body.berhasil),
+                 "SELESAI" if body.berhasil else "GAGAL", None if body.berhasil else body.jawaban))
         return {**body.model_dump(), "waktu": waktu}
 
     @app.get("/agent-runs", response_model=list[AgentRun], tags=[AGENT])
     def list_agent_runs(request: Request, limit: int = Query(20, ge=1, le=200)):
+        """Jejak agent yang sudah selesai, terbaru dulu."""
         with state.baca(_settings(request).state_db) as con:
-            rows = con.execute("select * from agent_runs order by waktu desc limit ?", (limit,)).fetchall()
+            rows = con.execute("""select * from agent_runs where coalesce(status, '') not in ('MENUNGGU', 'BERJALAN')
+                                  order by waktu desc limit ?""", (limit,)).fetchall()
         return [{**dict(r), "langkah": json.loads(r["langkah"]), "berhasil": bool(r["berhasil"])} for r in rows]
 
     @app.post("/agent-runs/mulai", response_model=AgentRunStatus, status_code=202, tags=[DASHBOARD])
     def mulai_agent(body: AgentRunMulai, request: Request, cur=Depends(_duck)):
-        """Tombol "Jalankan agent" di dashboard. Agent berjalan di latar (±30-60 detik dengan LLM lokal); pantau
-        langkahnya lewat `GET /agent-runs/{run_id}` sampai status SELESAI atau GAGAL. Hanya satu agent sekaligus."""
+        """Tombol "Jalankan agent" di dashboard. Pantau langkahnya lewat `GET /agent-runs/{run_id}` sampai status
+        SELESAI atau GAGAL. Mode lokal: agent berjalan di latar proses ini. Mode antrian: tugas MENUNGGU sampai
+        worker di laptop (`python -m agent.worker`) mengambilnya. Hanya satu agent sekaligus."""
         if not cur.execute("select 1 from sku_metrics where store = ? limit 1", [body.store]).fetchone():
             raise galat(404, "TOKO_TIDAK_ADA", f"Toko {body.store} tidak ditemukan.")
         s = _settings(request)
-        if s.agent_runner is None and not s.agent_lokal:
+        tugas = body.tugas or TUGAS_DEFAULT.format(store=body.store)
+        if s.agent_runner is None and s.agent_mode == "antrian":
+            return _antrikan_agent(s, tugas, body.store)
+        if s.agent_runner is None and s.agent_mode != "lokal":
             raise galat(503, "AGENT_BELUM_TERSEDIA",
                         "Agent belum di-deploy ke AWS (Bedrock + AgentCore). Untuk sementara jalankan agent dari "
                         "versi lokal (uvicorn + Ollama).")
         try:
-            return request.app.state.agent.mulai(body.tugas or TUGAS_DEFAULT.format(store=body.store), body.store)
+            return request.app.state.agent.mulai(tugas, body.store)
         except AgentSedangBerjalan:
             raise galat(409, "AGENT_SEDANG_BERJALAN", "Agent masih berjalan; tunggu sampai selesai.")
+
+    @app.get("/agent-runs/worker", response_model=StatusWorker, tags=[DASHBOARD])
+    def status_worker(request: Request):
+        """Mode agent API ini, dan (mode antrian) apakah worker di laptop sedang aktif mengambil antrian."""
+        s = _settings(request)
+        with state.baca(s.state_db) as con:
+            row = con.execute("select terakhir_terlihat, nama from worker_status where id = 1").fetchone()
+        terakhir = row["terakhir_terlihat"] if row else None
+        batas = (s.clock() - timedelta(seconds=s.worker_aktif_dtk)).isoformat(timespec="seconds")
+        return {"mode": "lokal" if s.agent_runner else s.agent_mode, "aktif": bool(terakhir and terakhir >= batas),
+                "terakhir_terlihat": terakhir, "nama": row["nama"] if row else None}
+
+    @app.post("/agent-runs/antrian/ambil", response_model=AgentRunTugas, tags=[AGENT],
+              responses={204: {"description": "Tidak ada tugas"}})
+    def ambil_tugas_agent(request: Request, token: str | None = WorkerToken,
+                          nama: str = Query("worker", max_length=100)):
+        """Dipanggil worker di laptop setiap beberapa detik: ambil tugas tertua yang MENUNGGU (menjadi BERJALAN),
+        atau 204 kalau antrian kosong. Sekaligus mencatat bahwa worker aktif."""
+        s = _settings(request)
+        _cek_worker(s, token)
+        sekarang = s.clock()
+        with state.transaksi(s.state_db) as con:
+            con.execute("update worker_status set terakhir_terlihat = ?, nama = ? where id = 1",
+                        (sekarang.isoformat(timespec="seconds"), nama))
+            _kedaluwarsa_agent(con, s, sekarang)
+            row = con.execute("select * from agent_runs where status = 'MENUNGGU' order by waktu limit 1").fetchone()
+            if row is None:
+                return Response(status_code=204)
+            con.execute("update agent_runs set status = 'BERJALAN', mulai_pada = ? where run_id = ?",
+                        (sekarang.isoformat(timespec="seconds"), row["run_id"]))
+        return {"run_id": row["run_id"], "tugas": row["tugas"], "store": row["store"]}
+
+    @app.post("/agent-runs/{run_id}/langkah", status_code=204, tags=[AGENT])
+    def lapor_langkah_agent(run_id: str, body: LangkahAgent, request: Request, token: str | None = WorkerToken):
+        """Worker melaporkan satu pemanggilan tool selagi agent berjalan, supaya dashboard menampilkannya langsung."""
+        s = _settings(request)
+        _cek_worker(s, token)
+        with state.transaksi(s.state_db) as con:
+            row = con.execute("select langkah, status from agent_runs where run_id = ?", (run_id,)).fetchone()
+            if row is None:
+                raise galat(404, "AGENT_RUN_TIDAK_ADA", f"Agent run {run_id} tidak ditemukan.")
+            if row["status"] != "BERJALAN":
+                raise galat(409, "STATUS_TIDAK_VALID", f"Agent run {run_id} berstatus {row['status']}.")
+            langkah = json.loads(row["langkah"]) + [body.model_dump()]
+            con.execute("update agent_runs set langkah = ? where run_id = ?",
+                        (json.dumps(langkah, ensure_ascii=False, default=str), run_id))
+        return Response(status_code=204)
 
     @app.get("/agent-runs/{run_id}", response_model=AgentRunStatus, tags=[DASHBOARD])
     def status_agent_run(run_id: str, request: Request):
@@ -619,13 +751,15 @@ def _routes(app: FastAPI) -> None:
         berjalan = request.app.state.agent.status(run_id)
         if berjalan and berjalan["status"] == "BERJALAN":
             return berjalan
-        with state.baca(_settings(request).state_db) as con:
+        s = _settings(request)
+        with state.transaksi(s.state_db) as con:
+            _kedaluwarsa_agent(con, s, s.clock())
             row = con.execute("select * from agent_runs where run_id = ?", (run_id,)).fetchone()
         if row:
-            return {**dict(row), "langkah": json.loads(row["langkah"]),
-                    "status": "SELESAI" if row["berhasil"] else "GAGAL",
-                    "mulai_pada": berjalan["mulai_pada"] if berjalan else None,
-                    "pesan": None if row["berhasil"] else row["jawaban"]}
+            run = _run_dari_baris(row)
+            if berjalan and not run["mulai_pada"]:
+                run["mulai_pada"] = berjalan["mulai_pada"]
+            return run
         if berjalan:  # gagal sebelum jejaknya sempat disimpan
             return berjalan
         raise galat(404, "AGENT_RUN_TIDAK_ADA", f"Agent run {run_id} tidak ditemukan.")

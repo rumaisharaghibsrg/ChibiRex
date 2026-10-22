@@ -81,7 +81,7 @@ def test_jalankan_agent_dari_dashboard(analytics_db, tmp_path):
 
 
 def test_agent_lokal_tidak_dijalankan_di_lambda(analytics_db, tmp_path):
-    with buat_client(analytics_db, tmp_path, agent_lokal=False) as client:
+    with buat_client(analytics_db, tmp_path, agent_mode="mati") as client:
         r = client.post("/agent-runs/mulai", json={"store": 1})
         assert r.status_code == 503 and r.json()["detail"]["kode"] == "AGENT_BELUM_TERSEDIA"
 

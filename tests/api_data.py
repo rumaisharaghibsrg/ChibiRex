@@ -70,8 +70,10 @@ def buat_analytics_db(path) -> None:
 def buat_client(analytics_db, tmp_path, **ubah) -> TestClient:
     # Tiruan SAP memakai database sementara; API mengirim PO ke sana lewat TestClient (tanpa jaringan).
     sap_app = create_sap_mock(tmp_path / "sap_mock.sqlite")
-    pengaturan = {"sap_mock_app": sap_app,
+    # worker_token None: token di .env laptop (untuk worker) tidak boleh ikut mengunci API di test.
+    pengaturan = {"sap_mock_app": sap_app, "worker_token": None, "clock": lambda: SEKARANG,
                   "sap_client": lambda: TestClient(sap_app, base_url="http://testserver" + SERVICE), **ubah}
-    settings = Settings(analytics_db=analytics_db, state_db=tmp_path / "state.sqlite", clock=lambda: SEKARANG,
-                        **pengaturan)
+    # Semua file yang ditulis API diarahkan ke tmp_path, supaya test tidak pernah menyentuh data/processed.
+    settings = Settings(analytics_db=analytics_db, state_db=tmp_path / "state.sqlite",
+                        sap_mock_db=tmp_path / "sap_mock.sqlite", **pengaturan)
     return TestClient(create_app(settings))

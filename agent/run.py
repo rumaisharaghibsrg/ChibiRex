@@ -25,7 +25,7 @@ def _token(hasil) -> tuple[int, int, int]:
 def jalankan(tugas: str, store: int | None = None, client: httpx.Client | None = None, verbose: bool = True,
              run_id: str | None = None, langkah: list[dict] | None = None) -> dict:
     """`run_id` dan `langkah` diisi oleh API saat agent dijalankan dari dashboard (lihat api/agent_runner.py)."""
-    client = client or httpx.Client(base_url=config.API_URL, timeout=60)
+    client = client or httpx.Client(base_url=config.API_URL, timeout=60, headers=config.header_worker())
     run_id = run_id or uuid4().hex[:12]
     alat = AlatAgent(client, run_id, pembuat=f"agent Rexa ({nama_model()})", verbose=verbose, langkah=langkah)
     agent = Agent(model=buat_model(), tools=alat.tools(), system_prompt=SYSTEM_PROMPT, callback_handler=None)

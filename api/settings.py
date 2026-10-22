@@ -60,10 +60,19 @@ class Settings:
         "CHIBIREX_CORS_ORIGINS", CORS_ORIGINS).split(","))
     cors_origin_regex: str | None = field(default_factory=lambda: os.environ.get(
         "CHIBIREX_CORS_ORIGIN_REGEX", CORS_ORIGIN_REGEX))
-    # Fungsi yang menjalankan agent untuk tombol "Jalankan agent" di dashboard; kosong = agent Strands lokal.
+    # Fungsi yang menjalankan agent untuk tombol "Jalankan agent" di dashboard (dipakai test); kosong = ikut agent_mode.
     agent_runner: Callable[..., dict] | None = None
-    # Agent lokal butuh Ollama dan thread latar. Di AWS Lambda keduanya tidak tersedia (thread dibekukan setelah
-    # respons terkirim), jadi di sana tombol agent menunggu agent di Bedrock AgentCore.
-    agent_lokal: bool = field(default_factory=lambda: not di_lambda())
+    # Cara tombol "Jalankan agent" menjalankan agent:
+    # - "lokal": agent Strands + Ollama di thread proses API ini (API di laptop, `uvicorn`).
+    # - "antrian": tugas masuk antrian di state; worker di laptop (`python -m agent.worker`) mengambilnya,
+    #   menjalankan agent dengan Ollama, dan melaporkan setiap langkah ke API. Untuk API di Lambda + LLM di laptop.
+    # - "mati": tombol menjawab 503. Default di Lambda, karena thread latar dibekukan setelah respons terkirim.
+    agent_mode: str = field(default_factory=lambda: os.environ.get(
+        "CHIBIREX_AGENT_MODE", "mati" if di_lambda() else "lokal"))
+    # Token rahasia worker (header X-Worker-Token). Kosong = endpoint worker tidak dikunci (API di laptop dan test).
+    worker_token: str | None = field(default_factory=lambda: os.environ.get("CHIBIREX_WORKER_TOKEN") or None)
+    worker_batas_menunggu_dtk: int = 30  # tugas yang tidak diambil worker selama ini dianggap gagal
+    worker_batas_berjalan_dtk: int = 300  # tugas yang berjalan lebih lama dari ini dianggap macet
+    worker_aktif_dtk: int = 15  # worker dianggap aktif kalau terakhir mengambil antrian dalam rentang ini
 
     clock: Callable[[], datetime] = datetime.now

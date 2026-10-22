@@ -27,16 +27,22 @@ def _event(path: str, origin: str = VERCEL) -> dict:
 
 def test_pengaturan_di_lambda(monkeypatch):
     monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "chibirex-api-function")
-    for env in ("CHIBIREX_STATE_DB", "CHIBIREX_SAP_MOCK_DB", "CHIBIREX_SAP_URL"):
+    for env in ("CHIBIREX_STATE_DB", "CHIBIREX_SAP_MOCK_DB", "CHIBIREX_SAP_URL", "CHIBIREX_AGENT_MODE"):
         monkeypatch.delenv(env, raising=False)
     s = Settings()
     assert (s.state_db, s.sap_mock_db) == (Path("/tmp/state.sqlite"), Path("/tmp/sap_mock.sqlite"))
-    assert s.sap_dalam_proses and not s.agent_lokal
+    assert s.sap_dalam_proses and s.agent_mode == "mati"
 
-    monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME")
+    monkeypatch.setenv("CHIBIREX_STATE_DB", "/mnt/rexa/state.sqlite")  # EFS
+    monkeypatch.setenv("CHIBIREX_AGENT_MODE", "antrian")
+    efs = Settings()
+    assert (efs.state_db, efs.agent_mode) == (Path("/mnt/rexa/state.sqlite"), "antrian")
+
+    for env in ("AWS_LAMBDA_FUNCTION_NAME", "CHIBIREX_STATE_DB", "CHIBIREX_AGENT_MODE"):
+        monkeypatch.delenv(env)
     lokal = Settings()
     assert lokal.state_db.parts[-3:] == ("data", "processed", "state.sqlite")
-    assert not lokal.sap_dalam_proses and lokal.agent_lokal
+    assert not lokal.sap_dalam_proses and lokal.agent_mode == "lokal"
 
 
 def test_approve_dengan_tiruan_sap_di_proses_yang_sama(analytics_db, tmp_path):

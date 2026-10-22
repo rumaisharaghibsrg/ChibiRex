@@ -226,6 +226,8 @@ class AgentRunIn(Request):
 
 
 class AgentRun(AgentRunIn):
+    # Respons, bukan request: kolom tambahan dari tabel (status, mulai_pada, pesan) diabaikan, tidak ditolak.
+    model_config = ConfigDict(extra="ignore")
     waktu: str
 
 
@@ -234,9 +236,23 @@ class AgentRunMulai(Request):
     tugas: str | None = Field(default=None, max_length=2000, description="Kosongkan untuk prosedur standar")
 
 
+class AgentRunTugas(BaseModel):
+    run_id: str
+    tugas: str
+    store: int | None
+
+
+class StatusWorker(BaseModel):
+    mode: str = Field(description="lokal, antrian, atau mati (lihat api/settings.py)")
+    aktif: bool = Field(description="Mode antrian: worker di laptop baru saja mengambil antrian")
+    terakhir_terlihat: str | None
+    nama: str | None
+
+
 class AgentRunStatus(BaseModel):
     run_id: str
-    status: Literal["BERJALAN", "SELESAI", "GAGAL"]
+    status: Literal["MENUNGGU", "BERJALAN", "SELESAI", "GAGAL"] = Field(
+        description="MENUNGGU = mode antrian, belum diambil worker di laptop")
     store: int | None
     tugas: str
     langkah: list[LangkahAgent] = Field(description="Tool yang sudah dipanggil, bertambah selama agent berjalan")
