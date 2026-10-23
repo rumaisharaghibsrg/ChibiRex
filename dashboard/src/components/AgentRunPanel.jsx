@@ -242,9 +242,18 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
       {/* Langkah */}
       <div className="p-6 flex-1 space-y-2.5">
         {galat && (
-          <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{galat}</span>
+          <div className="flex items-center justify-between gap-2 text-xs text-rose-700 bg-rose-50/80 border border-rose-200 rounded-xl px-3.5 py-2.5 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{galat}</span>
+            </div>
+            <button
+              onClick={() => setGalat(null)}
+              className="text-rose-400 hover:text-rose-700 font-bold text-xs px-1.5 py-0.5 rounded-lg hover:bg-rose-100 transition-colors"
+              aria-label="Tutup notifikasi"
+            >
+              ✕
+            </button>
           </div>
         )}
 

@@ -1,9 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
-import ScenarioBar from './ScenarioBar';
-import HealthScoreCard from './HealthScoreCard';
-import KpiGrid from './KpiGrid';
+import TopKeyMetricsRow from './TopKeyMetricsRow';
 import ExplorationBudgetCard from './ExplorationBudgetCard';
 import CapitalReallocationCard from './CapitalReallocationCard';
 import SmartReorderTable from './SmartReorderTable';
@@ -13,6 +11,7 @@ import GuardrailsModal from './GuardrailsModal';
 import AiCopilotWidget from './AiCopilotWidget';
 import AgentRunPanel from './AgentRunPanel';
 import PendingPoCard from './PendingPoCard';
+import KpiGrid from './KpiGrid';
 import {
   Bell,
   CheckCircle,
@@ -145,8 +144,8 @@ export default function DashboardApp({ user, onLogout }) {
   const urgentCount = inventoryList.filter(i => i.agentStatus === 'DRAFT_PO').length;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex font-sans antialiased text-slate-800">
-      {/* ── Toast Notifications ── */}
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col lg:flex-row font-sans antialiased text-slate-800">
+      {/* ── Toast Notifications (Quiet & Minimal) ── */}
       {toast && (() => {
         const isWarn = toast.type === 'warn';
         const isInfo = toast.type === 'info';
@@ -161,7 +160,7 @@ export default function DashboardApp({ user, onLogout }) {
         );
       })()}
 
-      {/* ── Main Sidebar (with genuine logo & high-contrast navigation) ── */}
+      {/* ── Main Sidebar ── */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -173,7 +172,7 @@ export default function DashboardApp({ user, onLogout }) {
 
       {/* ── Right Content Area ── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header */}
+        {/* Top Header with Embedded Scenario Dropdown in Top-Right */}
         <Header
           currentBranch={currentBranch}
           setCurrentBranch={setCurrentBranch}
@@ -182,48 +181,47 @@ export default function DashboardApp({ user, onLogout }) {
           openGuardrailsModal={() => setIsGuardrailsOpen(true)}
           urgentCount={urgentCount}
           activeTab={activeTab}
+          activeScenario={activeScenario}
+          setActiveScenario={applyScenario}
+          onResetScenario={handleReset}
         />
 
         {/* Main Body */}
-        <main className="flex-1 p-8 space-y-8 max-w-7xl mx-auto w-full">
-          {/* Skenario Bar */}
-          <ScenarioBar
-            activeScenario={activeScenario}
-            setActiveScenario={applyScenario}
-            onReset={handleReset}
-          />
-
-          {/* Urgent PO Alert Banner */}
-          {urgentCount > 0 && activeTab === 'dashboard' && (
-            <div className="bg-amber-50 border border-amber-300 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
-              <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-                  <Bell className="w-5 h-5 text-amber-700" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-extrabold text-amber-900 leading-snug">
-                    {urgentCount} Produk Fast-Moving Memerlukan Otorisasi Reorder
-                  </h4>
-                  <p className="text-xs text-amber-700 mt-0.5 font-medium">
-                    Stok diprediksi habis dalam &lt; 3 hari. Draf Purchase Order telah disiapkan oleh agen AI.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setActiveTab('reorder')}
-                className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0"
-              >
-                <span>Buka Smart Reorder</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto w-full min-w-0">
           {/* ── TAB 1: DASHBOARD UTAMA ── */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-8">
-              {/* Row 0: Agent Rexa (data API) & draf PO yang menunggu 1-Click Approval */}
+            <div className="space-y-6 sm:space-y-8">
+              {/* Row 1: Key Metric Cards (Inventory Health, Modal Terselamatkan, Tingkat Stockout) Berjejer Rapi di Baris Teratas */}
+              <TopKeyMetricsRow kpis={kpis} />
+
+              {/* Urgent PO Alert Banner */}
+              {urgentCount > 0 && (
+                <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                      <Bell className="w-5 h-5 text-amber-700" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-extrabold text-amber-900 leading-snug">
+                        {urgentCount} Produk Fast-Moving Memerlukan Otorisasi Reorder
+                      </h4>
+                      <p className="text-xs text-amber-700 mt-0.5 font-medium">
+                        Stok diprediksi habis dalam &lt; 3 hari. Draf Purchase Order telah disiapkan oleh agen AI.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setActiveTab('reorder')}
+                    className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                  >
+                    <span>Buka Smart Reorder</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Row 2: Agent Rexa (data API) & Draf PO yang Menunggu 1-Click Approval */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
                 <div className="lg:col-span-8 h-full">
                   <AgentRunPanel store={store} onSelesai={handleAgentSelesai} onBukaPo={setSelectedPoId} />
@@ -233,21 +231,7 @@ export default function DashboardApp({ user, onLogout }) {
                 </div>
               </div>
 
-              {/* Row 1: Health Score (left) & Executive KPI Grid (right) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-                <div className="lg:col-span-5 h-full">
-                  <HealthScoreCard
-                    score={kpis.healthScore}
-                    status={kpis.healthStatus}
-                    trend={kpis.healthTrend}
-                  />
-                </div>
-                <div className="lg:col-span-7 h-full">
-                  <KpiGrid kpis={kpis} />
-                </div>
-              </div>
-
-              {/* Row 2: Exploration Budget Card (left) & Capital Reallocation Recommendation (right) */}
+              {/* Row 3: Exploration Budget Card (left) & Capital Reallocation Recommendation (right) */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
                 <div className="lg:col-span-4 h-full">
                   <ExplorationBudgetCard explorationBudget={kpis.explorationBudget} />
@@ -260,7 +244,7 @@ export default function DashboardApp({ user, onLogout }) {
                 </div>
               </div>
 
-              {/* Row 3: Smart Reorder & Predictive Stockout Table */}
+              {/* Row 4: Smart Reorder & Predictive Stockout Table */}
               <div>
                 <SmartReorderTable
                   inventoryList={inventoryList}
@@ -304,17 +288,17 @@ export default function DashboardApp({ user, onLogout }) {
         </main>
 
         {/* Global Footer */}
-        <footer className="py-5 px-8 text-xs text-slate-400 border-t border-slate-200/80 bg-white flex flex-wrap items-center justify-between gap-4 mt-auto">
-          <div className="flex items-center gap-3">
+        <footer className="py-4 sm:py-5 px-4 sm:px-8 text-xs text-slate-400 border-t border-slate-200/80 bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mt-auto">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <span className="font-extrabold text-slate-700">Rexa Inventory &amp; Cash Flow Copilot</span>
-            <span className="text-slate-300">&bull;</span>
+            <span className="text-slate-300 hidden sm:inline">&bull;</span>
             <span>Agentic AI Hackathon 2026</span>
           </div>
-          <div className="flex items-center gap-3 font-medium">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 font-medium">
             <span>Agent: Strands Agents + LLM (Ollama lokal / Amazon Bedrock)</span>
-            <span className="text-slate-300">&bull;</span>
+            <span className="text-slate-300 hidden sm:inline">&bull;</span>
             <span>ERP: tiruan SAP S/4HANA (OData)</span>
-            <span className="text-slate-300">&bull;</span>
+            <span className="text-slate-300 hidden sm:inline">&bull;</span>
             <span>Data simulasi: Bibitor per 31 Des 2016</span>
           </div>
         </footer>
