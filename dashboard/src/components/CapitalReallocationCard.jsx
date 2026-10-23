@@ -134,67 +134,78 @@ export default function CapitalReallocationCard({ onApplyReallocation, isRealloc
         </div>
 
         {/* Business Impact Summary & Action Button */}
-        <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
-            <div className="bg-white rounded-xl p-3 border border-slate-200/70">
+        <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 flex flex-col gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+            <div className="bg-white rounded-xl p-4 border border-slate-200/70 flex-1 w-full min-w-0">
               <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">
                 Cegah Stockout Loss
               </span>
-              <span className="text-sm font-extrabold text-slate-900 mt-0.5 block">
+              <span className="text-base font-extrabold text-slate-900 mt-1 block">
                 Rp 7.200.000
               </span>
-              <span className="text-[10px] text-slate-500">Mencegah pembatalan order</span>
+              <span className="text-xs text-slate-500 mt-0.5 block">
+                Mencegah pembatalan order
+              </span>
             </div>
 
-            <div className="bg-white rounded-xl p-3 border border-slate-200/70">
+            <div className="bg-white rounded-xl p-4 border border-slate-200/70 flex-1 w-full min-w-0">
               <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">
                 Proyeksi Margin Ekstra
               </span>
-              <span className="text-sm font-extrabold text-emerald-700 mt-0.5 block">
+              <span className="text-base font-extrabold text-emerald-700 mt-1 block">
                 +Rp 2.320.000
               </span>
-              <span className="text-[10px] text-emerald-700 font-medium">Dari perputaran cepat</span>
+              <span className="text-xs text-emerald-700 font-medium mt-0.5 block">
+                Dari perputaran cepat
+              </span>
             </div>
 
-            <div className="bg-white rounded-xl p-3 border border-slate-200/70">
+            <div className="bg-white rounded-xl p-4 border border-slate-200/70 flex-1 w-full min-w-0">
               <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">
                 Substitusi Konsumen
               </span>
-              <span className="text-sm font-extrabold text-slate-800 mt-0.5 block">
+              <span className="text-base font-extrabold text-slate-800 mt-1 block">
                 84% Beralih Karamel
               </span>
-              <span className="text-[10px] text-slate-500">Konsumen tidak kecewa</span>
+              <span className="text-xs text-slate-500 mt-0.5 block">
+                Konsumen tidak kecewa
+              </span>
             </div>
           </div>
 
-          <button
-            onClick={handleApply}
-            disabled={isReallocated || executing}
-            className={`px-6 py-4 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2.5 transition-all shadow-md active:scale-95 whitespace-nowrap shrink-0 ${
-              isReallocated
-                ? 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'
-                : 'bg-[#1b4d3e] hover:bg-[#143d31] text-white hover:shadow-lg'
-            }`}
-          >
-            {executing ? (
-              <>
-                <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                <span>Menerapkan Realokasi Modal...</span>
-              </>
-            ) : isReallocated ? (
-              <>
-                <Check className="w-5 h-5 text-emerald-600" />
-                <span>Realokasi Modal Berhasil Diterapkan</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-[#a2d2bf]" />
-                <span>1-Click Terapkan Realokasi Modal</span>
-              </>
-            )}
-          </button>
+          {!isReallocated && (
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={handleApply}
+                disabled={executing}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2.5 transition-all shadow-md active:scale-95 whitespace-nowrap bg-[#1b4d3e] hover:bg-[#143d31] text-white hover:shadow-lg cursor-pointer"
+              >
+                {executing ? (
+                  <>
+                    <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    <span>Menerapkan Realokasi Modal...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-[#a2d2bf]" />
+                    <span>1-Click Terapkan Realokasi Modal</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Floating Toast Notification */}
+      {isReallocated && (
+        <div className="fixed bottom-8 right-8 z-[100] shadow-xl bg-[#1b4d3e] text-white border border-emerald-400/30 px-5 py-3.5 rounded-2xl flex items-center gap-3">
+          <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span className="text-sm font-bold whitespace-nowrap">
+            Realokasi Modal Berhasil Diterapkan
+          </span>
+        </div>
+      )}
     </div>
   );
 }
