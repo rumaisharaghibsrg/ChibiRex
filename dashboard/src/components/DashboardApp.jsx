@@ -373,7 +373,7 @@ export default function DashboardApp({ user, onLogout }) {
             <span>Agentic AI Hackathon 2026</span>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 font-medium">
-            <span>Agent: Strands Agents + LLM (Ollama qwen3)</span>
+            <span>Agent: Strands Agents + Claude Sonnet 4.6 (Amazon Bedrock)</span>
             <span className="text-slate-300 hidden sm:inline">&bull;</span>
             <span>ERP: tiruan SAP S/4HANA (OData)</span>
             <span className="text-slate-300 hidden sm:inline">&bull;</span>

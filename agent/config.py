@@ -32,11 +32,12 @@ KANDIDAT_BEDROCK = [
     ("us-east-1", "us.amazon.nova-2-lite-v1:0"),
     ("us-east-1", "amazon.nova-pro-v1:0"),
 ]
+# Diuji 25 Okt 2026 dengan akun tim: Sonnet 4.6 dan Opus 4.6 bisa dipakai; Sonnet 4.5 butuh formulir use case
+# Anthropic; model 5.5 belum tersedia untuk akun ini. Sonnet 4.6 dipilih: cukup untuk tool use dan lebih hemat.
 KANDIDAT_CLAUDE = [
-    ("ap-southeast-2", "au.anthropic.claude-opus-5-5"),
-    ("ap-southeast-2", "global.anthropic.claude-opus-5-5"),
-    ("us-east-1", "global.anthropic.claude-opus-5-5"),
-    ("us-east-1", "us.anthropic.claude-opus-5-5"),
+    ("ap-southeast-2", "au.anthropic.claude-sonnet-4-6"),
+    ("ap-southeast-2", "global.anthropic.claude-sonnet-4-6"),
+    ("ap-southeast-2", "au.anthropic.claude-opus-4-6-v1"),
 ]
 BEDROCK_REGION = os.environ.get("CHIBIREX_BEDROCK_REGION", KANDIDAT_BEDROCK[0][0])
 BEDROCK_MODEL_ID = os.environ.get("CHIBIREX_BEDROCK_MODEL_ID", KANDIDAT_BEDROCK[0][1])

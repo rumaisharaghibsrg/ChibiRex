@@ -35,7 +35,7 @@
 - AWS Lambda (container image, `ap-southeast-2`) for the Tools API
 - AWS Amplify for dashboard hosting (the only official link; the old Vercel deployment is no longer used)
 - Amazon EFS for persistent SQLite state across Lambda cold starts
-- LLM for the demo and final: Ollama `qwen3:14b` on the presenter's laptop, reached through the queue worker (`python -m agent.worker`). Amazon Bedrock is supported in code (`CHIBIREX_LLM_PROVIDER=bedrock`) but is **not used**: the team account has a Bedrock token quota of 0. Do not plan work that depends on Bedrock or AgentCore.
+- LLM for the demo and final (since 25 Oct 2026): Claude Sonnet 4.6 on Amazon Bedrock (`au.anthropic.claude-sonnet-4-6`, `ap-southeast-2`), authenticated with a Bedrock API key (`AWS_BEARER_TOKEN_BEDROCK` in `.env`). The Strands agent itself still runs on the presenter's laptop through the queue worker (`python -m agent.worker`, auto-started at login). Ollama `qwen3:14b` remains a local fallback (`CHIBIREX_LLM_PROVIDER=ollama`). Available to the team account: Sonnet 4.6 and Opus 4.6; Sonnet 4.5 needs the Anthropic use-case form; 5.5 models are not available. Nova models still have a token quota of 0.
 
 ## Environment Variables
 

@@ -34,7 +34,7 @@ The Strands-based AI agent that drives inventory decisions.
 | `prompt.py` | `SYSTEM_PROMPT` (5-step procedure + rules) and `TUGAS_DEFAULT` task template |
 | `tools.py` | `AlatAgent` class — creates 6 Strands `@tool` functions bound to one HTTP client + run_id; strips API responses to LLM-relevant fields only (for 8K context budget) |
 | `run.py` | `jalankan()` entry point — instantiates Agent, runs it, saves trace to API; CLI: `python -m agent.run --store 74` |
-| `worker.py` | Queue-polling worker for Lambda mode — polls `/agent-runs/antrian/ambil`, runs agent locally with Ollama, streams steps back to API; CLI: `python -m agent.worker` |
+| `worker.py` | Queue-polling worker for Lambda mode — polls `/agent-runs/antrian/ambil`, runs the agent on the laptop with the LLM set in `.env` (Bedrock Claude Sonnet 4.6, or Ollama), streams steps back to API; CLI: `python -m agent.worker` |
 | `cek_llm.py` | Connectivity check for Ollama |
 | `cek_bedrock.py` | Connectivity check + model selection for Bedrock |
 | `reset_demo.py` | Resets demo state data |

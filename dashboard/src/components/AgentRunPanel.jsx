@@ -53,7 +53,7 @@ function KeteranganWorker({ worker }) {
   return (
     <span className={`inline-flex items-center gap-1 ${worker.aktif ? 'text-emerald-700' : 'text-amber-700'}`}>
       <Laptop className="w-3.5 h-3.5" />
-      LLM di laptop: worker {worker.aktif ? 'aktif' : 'tidak aktif (jalankan python -m agent.worker)'}
+      Worker agent di laptop: {worker.aktif ? 'aktif' : 'tidak aktif (nyalakan laptop presenter atau jalankan python -m agent.worker)'}
     </span>
   );
 }
@@ -273,7 +273,7 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
           <p className="text-xs text-slate-500 leading-relaxed">
             Tekan <strong>Jalankan Agent</strong>. Agent akan membaca prioritas toko, memeriksa substitusi, menahan
             reorder yang tidak perlu, dan menyusun draf PO. Setiap langkah muncul di sini selagi agent bekerja
-            (±30-60 detik dengan LLM lokal).
+            (±20 detik dengan Claude di Amazon Bedrock).
           </p>
         )}
 

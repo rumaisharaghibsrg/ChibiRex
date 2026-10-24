@@ -22,4 +22,6 @@ Aturan:
 - Pakai hanya inventory_id yang muncul di hasil tool. Jangan mengarang ID.
 - PO selalu berstatus DRAFT dan disetujui oleh manajer, bukan oleh kamu.
 - Kalau hasil tool berisi 'ditolak' atau 'pelanggaran', laporkan apa adanya. Jangan mengulang dengan cara lain.
-- Tulis dalam Bahasa Indonesia yang singkat dan jelas. Format Rupiah: Rp13.678.880."""
+- Tulis dalam Bahasa Indonesia yang singkat dan jelas. Format Rupiah: Rp13.678.880.
+- Ringkasan ditampilkan di panel dashboard yang hanya mendukung teks biasa dan **tebal**: jangan pakai tabel,
+  judul (#), garis pemisah, atau emoji. Tulis satu baris per SKU yang diawali "- ", dengan nama SKU ditebalkan."""

@@ -22,7 +22,7 @@ npm run dev
 
 - Simpan alamat API di `dashboard/.env.local` (tidak ikut di-commit): `VITE_API_URL=http://127.0.0.1:8000`, lalu baca dengan `import.meta.env.VITE_API_URL`.
 - CORS sudah mengizinkan `http://localhost:5173` dan `http://127.0.0.1:5173`. Origin lain ditambahkan lewat env `CHIBIREX_CORS_ORIGINS` di backend.
-- Tombol "Jalankan agent" butuh Ollama yang sedang berjalan (`qwen3:14b`) dan API di port 8000.
+- Tombol "Jalankan agent" butuh API di port 8000 dan LLM sesuai `.env`: Claude di Amazon Bedrock (`CHIBIREX_LLM_PROVIDER=bedrock` + `AWS_BEARER_TOKEN_BEDROCK`) atau Ollama `qwen3:14b` yang sedang berjalan.
 
 ## Yang sudah tersambung (jangan dikerjakan ulang)
 
@@ -97,7 +97,7 @@ Saran pengelompokan langkah untuk tampilan:
 | ACT | `hold_reorder`, `draft_purchase_order`, `suggest_reallocation` |
 | REVIEW | `output.pelanggaran` atau `output.ditolak` (guardrail menahan aksi), `jawaban` akhir, lalu PO menunggu approval manajer |
 
-Dengan LLM lokal, satu kali jalan butuh ±30-60 detik, jadi tampilkan langkah satu per satu selagi berjalan.
+Satu kali jalan butuh ±20 detik dengan Claude Sonnet 4.6 (±30-60 detik dengan Ollama lokal), jadi tampilkan langkah satu per satu selagi berjalan.
 
 ## Jam simulasi (kontrol tanggal di `Header`)
 
@@ -136,7 +136,7 @@ Belum ada endpoint khusus. Skenario ini cukup berupa urutan panggilan API yang s
 ## Aturan untuk perubahan berikutnya
 
 - Jangan menambah data tiruan atau KPI tanpa sumber. Angka yang belum ada di API dicatat sebagai kebutuhan endpoint baru.
-- Klaim arsitektur yang benar: Strands Agents + LLM (Ollama `qwen3:14b` di laptop lewat worker), FastAPI di Lambda, dan tiruan SAP S/4HANA (OData `API_PURCHASEORDER_PROCESS_SRV`). Bukan SageMaker, bukan SAP BTP, dan Bedrock tidak dipakai (kuota 0). `LandingPage` masih perlu dicek untuk klaim seperti ini.
+- Klaim arsitektur yang benar: Strands Agents (di laptop lewat worker) + Claude Sonnet 4.6 di Amazon Bedrock, FastAPI di Lambda, dan tiruan SAP S/4HANA (OData `API_PURCHASEORDER_PROCESS_SRV`). Bukan SageMaker dan bukan SAP BTP.
 - Chatbot Copilot belum memakai LLM; labelnya harus tetap jujur sampai ada endpoint LLM read-only.
 - Realokasi tidak punya aksi sendiri di backend: dana dipakai saat PO tujuan disetujui, jadi tombolnya membuka draf PO tujuan.
 

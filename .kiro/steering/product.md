@@ -33,7 +33,7 @@ Key domain terms used throughout the codebase (Indonesian):
 
 - Dashboard: AWS Amplify (`main.d30b19xkk8lknt.amplifyapp.com`)
 - Tools API: AWS Lambda (container image, Function URL, `ap-southeast-2`)
-- Agent LLM: Ollama `qwen3:14b` on developer laptop, via queue-polling worker
+- Agent LLM: Claude Sonnet 4.6 on Amazon Bedrock; the Strands agent runs on the presenter's laptop via the queue-polling worker (Ollama `qwen3:14b` as local fallback)
 - Analytics DB: DuckDB deployed with Lambda image
 - Transactional state: SQLite on Amazon EFS (shared across Lambda instances)
 - SAP: OData V2 mock (production SAP optional via `CHIBIREX_SAP_URL`)

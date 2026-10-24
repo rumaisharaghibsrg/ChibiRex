@@ -5,6 +5,7 @@ dengan satu panggilan Converse kecil. Kombinasi pertama yang berhasil disimpan k
 agent otomatis memakainya.
 """
 
+import os
 import sys
 
 import boto3
@@ -28,14 +29,18 @@ def coba_converse(region: str, model_id: str) -> str:
 
 def main() -> None:
     kandidat = KANDIDAT_CLAUDE if "--claude" in sys.argv else KANDIDAT_BEDROCK
-    try:
-        identitas = boto3.client("sts", region_name=kandidat[0][0]).get_caller_identity()
-    except (BotoCoreError, ClientError) as e:
-        print(f"[GAGAL] Kredensial AWS tidak bisa dipakai: {e}\n"
-              "Jalankan `aws login` lalu pilih proyek kalian di browser (langkah 5 di progress.md). "
-              "Kredensial berlaku 12 jam; kalau sudah lewat, jalankan `aws login` lagi.")
-        sys.exit(1)
-    print(f"[ok] Kredensial AWS: {identitas['Arn']}\n")
+    if os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
+        # API key Bedrock di .env: boto3 memakainya untuk bedrock-runtime, tanpa perlu `aws login`.
+        print("[ok] Kredensial: API key Bedrock (AWS_BEARER_TOKEN_BEDROCK di .env)\n")
+    else:
+        try:
+            identitas = boto3.client("sts", region_name=kandidat[0][0]).get_caller_identity()
+        except (BotoCoreError, ClientError) as e:
+            print(f"[GAGAL] Kredensial AWS tidak bisa dipakai: {e}\n"
+                  "Isi AWS_BEARER_TOKEN_BEDROCK (API key Bedrock) di .env, atau jalankan `aws login` lalu pilih "
+                  "proyek kalian di browser. Kredensial `aws login` berlaku 12 jam.")
+            sys.exit(1)
+        print(f"[ok] Kredensial AWS: {identitas['Arn']}\n")
 
     for region, model_id in kandidat:
         print(f"Mencoba {model_id} di {region} ...")

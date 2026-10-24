@@ -65,11 +65,11 @@ sequenceDiagram
 
 ## Posisi sekarang vs target final
 
-| Komponen | Sekarang (22 Okt 2026) | Target final |
+| Komponen | Sekarang (25 Okt 2026) | Target final |
 |---|---|---|
 | Dashboard | **AWS Amplify** (`main.d30b19xkk8lknt.amplifyapp.com`); Vercel dan lokal tetap ada | AWS Amplify |
 | Tools API | AWS Lambda (container image, Function URL, Sydney) di VPC; deploy dari repo (`deploy\deploy_lambda.ps1`) | Lambda (+ API Gateway bila perlu) |
-| Agent | Laptop (Strands + Ollama `qwen3:14b`) lewat worker yang mengambil tugas dari antrian API; kuota Bedrock akun proyek = 0 | Bedrock AgentCore Runtime + Amazon Bedrock |
+| Agent | Strands di laptop lewat worker yang mengambil tugas dari antrian API; LLM **Claude Sonnet 4.6 di Amazon Bedrock** (Ollama `qwen3:14b` sebagai cadangan lokal) | Bedrock AgentCore Runtime + Amazon Bedrock |
 | State transaksi | SQLite di **Amazon EFS** (dipakai bersama semua instance, tidak hilang saat cold start) | Database terkelola (RDS/DynamoDB) |
 | Data analitik | DuckDB ikut di-deploy bersama API | Tetap DuckDB (hanya dibaca), disimpan di S3 |
 | SAP | Tiruan OData V2 `API_PURCHASEORDER_PROCESS_SRV` di dalam API | Tetap tiruan; opsional SAP riil (OData V4 `CE_PURCHASEORDER_0001`) |
