@@ -135,6 +135,18 @@ def atur(con, s: Settings, sekarang: datetime, *, hari: int | None = None, otoma
     return status(con, s, sekarang)
 
 
+def kembali(con, s: Settings, sekarang: datetime) -> dict:
+    """Kembali ke 31 Des 2016 tanpa menghapus PO, hold, jejak agent, atau audit log. Stok kembali ke data awal:
+    barang yang sudah tiba dianggap riwayat (tidak lagi menambah stok), sedangkan barang yang masih di jalan tetap
+    tiba dengan sisa lead time yang sama. Tanggal review hold ikut mundur sejauh hari yang dibatalkan."""
+    hari = hari_ini(con, s, sekarang)
+    for tabel in ("purchase_orders", "holds"):
+        con.execute(f"update {tabel} set hari_tiba = null where hari_tiba <= ?", (hari,))
+        con.execute(f"update {tabel} set hari_tiba = hari_tiba - ? where hari_tiba is not null", (hari,))
+    con.execute("update holds set review_pada = date(review_pada, ?)", (f"-{hari} days",))
+    return atur(con, s, sekarang, hari=0, otomatis=False)
+
+
 def kedatangan(con, store: int | None, inventory_id: str | None) -> list[tuple[str, int, int]]:
     """Barang yang dipesan: PO yang disetujui dan stok uji Hold Reorder aktif, sebagai (inventory_id, hari tiba, qty)."""
     lingkup, params = "", []

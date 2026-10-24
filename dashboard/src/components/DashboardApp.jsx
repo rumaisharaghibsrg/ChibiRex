@@ -86,6 +86,15 @@ export default function DashboardApp({ user, onLogout }) {
     }
   };
 
+  const handleKembaliSimulasi = async () => {
+    try {
+      terimaSim(await api.kembaliSimulasi(penyetuju));
+      showToast({ type: 'info', text: 'Tanggal dan stok kembali ke data awal 31 Des 2016. PO, hold, dan riwayat agent tetap tersimpan.' });
+    } catch (e) {
+      showToast({ type: 'warn', text: e.message });
+    }
+  };
+
   const handleOtomatisSimulasi = async (aktif, detik) => {
     try {
       const s = await api.otomatisSimulasi(aktif, detik, penyetuju);
@@ -221,6 +230,7 @@ export default function DashboardApp({ user, onLogout }) {
           sim={sim}
           onMajuSimulasi={handleMajuSimulasi}
           onOtomatisSimulasi={handleOtomatisSimulasi}
+          onKembaliSimulasi={handleKembaliSimulasi}
           apiOk={!error}
           activeTab={activeTab}
           skenario={skenario}

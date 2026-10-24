@@ -8,7 +8,8 @@ import {
   CalendarClock,
   Play,
   Pause,
-  FastForward
+  FastForward,
+  RotateCcw
 } from 'lucide-react';
 import { tanggal } from '../lib/format';
 
@@ -44,6 +45,7 @@ export default function Header({
   sim,
   onMajuSimulasi,
   onOtomatisSimulasi,
+  onKembaliSimulasi,
   apiOk = true,
   activeTab,
   skenario = [],
@@ -328,12 +330,27 @@ export default function Header({
                 </div>
               </div>
 
-              <p className="text-[10px] text-slate-400 leading-snug border-t border-slate-100 pt-2">
-                {diBatas
-                  ? `Batas ${sim.hari_maks} hari tercapai. `
-                  : `Paling jauh ${sim.hari_maks} hari (satu kuartal). `}
-                Kembali ke 31 Des 2016: <span className="font-mono">python -m agent.reset_demo</span>
-              </p>
+              <div className="border-t border-slate-100 pt-2.5 space-y-2">
+                <button
+                  onClick={() => {
+                    if (window.confirm('Kembalikan tanggal dan stok ke data awal 31 Des 2016? PO, hold, dan riwayat agent tetap tersimpan.')) {
+                      onKembaliSimulasi?.();
+                    }
+                  }}
+                  disabled={sim.hari_ke === 0}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold disabled:opacity-45 disabled:cursor-not-allowed"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Kembali ke 31 Des 2016
+                </button>
+                <p className="text-[10px] text-slate-400 leading-snug">
+                  {diBatas
+                    ? `Batas ${sim.hari_maks} hari tercapai. `
+                    : `Paling jauh ${sim.hari_maks} hari (satu kuartal). `}
+                  Stok kembali ke data awal; PO, hold, dan riwayat agent tetap ada. Hapus semua data demo:{' '}
+                  <span className="font-mono">python -m agent.reset_demo</span>
+                </p>
+              </div>
             </div>
           )}
         </div>

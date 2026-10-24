@@ -24,7 +24,8 @@ from agent.prompt import TUGAS_DEFAULT
 from api import guardrails, sap, simulasi, state
 from api.agent_runner import AgentSedangBerjalan, PenjalanAgent, jalankan_agent_lokal
 from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AgentRunMulai, AgentRunStatus, AgentRunTugas,
-                         AuditEntry, DraftPORequest, Hold, HoldRequest, Keputusan, LangkahAgent, MajuSimulasi,
+                         AuditEntry, DraftPORequest, Hold, HoldRequest, KembaliSimulasi, Keputusan, LangkahAgent,
+                         MajuSimulasi,
                          OtomatisSimulasi, Prioritas, PurchaseOrder, Realokasi, RingkasanToko, Sku, StatusGuardrail,
                          StatusPO, StatusSimulasi, StatusStok, StatusWorker, StokFisik, StokFisikRequest, Substitusi,
                          Toko)
@@ -814,6 +815,18 @@ def _routes(app: FastAPI) -> None:
         with state.transaksi(s.state_db) as con:
             hasil = simulasi.atur(con, s, sekarang, hari=simulasi.hari_ini(con, s, sekarang) + body.hari)
             state.audit(con, sekarang, body.oleh, "simulasi_maju", None, {"hari": body.hari, "hari_ke": hasil["hari_ke"]})
+        return hasil
+
+    @app.post("/simulasi/kembali", response_model=StatusSimulasi, tags=[DASHBOARD])
+    def kembali_simulasi(body: KembaliSimulasi, request: Request):
+        """Kembali ke 31 Des 2016 dan stok data awal, tanpa menghapus PO, hold, jejak agent, atau audit log (berbeda
+        dengan `POST /demo/reset`). Barang yang masih di jalan tetap tiba sesuai sisa lead time-nya."""
+        s = _settings(request)
+        sekarang = s.clock()
+        with state.transaksi(s.state_db) as con:
+            dari = simulasi.hari_ini(con, s, sekarang)
+            hasil = simulasi.kembali(con, s, sekarang)
+            state.audit(con, sekarang, body.oleh, "simulasi_kembali", None, {"dari_hari": dari})
         return hasil
 
     @app.post("/simulasi/otomatis", response_model=StatusSimulasi, tags=[DASHBOARD])

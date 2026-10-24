@@ -96,6 +96,30 @@ def test_batas_hari_maks_dan_validasi(analytics_db, tmp_path):
         assert client.post("/simulasi/otomatis", json={"aktif": True, "detik_per_hari": 1}).status_code == 422
 
 
+def test_kembali_ke_awal_tanpa_menghapus_data(client):
+    tiba = setujui_draf(client, 10, "kembali-po-0001")  # disetujui hari 0, tiba hari 8
+    maju(client, 10)
+    jalan = setujui_draf(client, 30, "kembali-po-0002")  # disetujui hari 10, tiba hari 18
+    hold = client.post("/holds", json={"inventory_id": sku_id(20), "alasan": "Vs turun dan tidak komplementer"},
+                       headers={"Idempotency-Key": "kembali-hold-0001"}).json()
+    assert hold["review_pada"] == "2017-04-10"
+    client.post("/simulasi/otomatis", json={"aktif": True})
+
+    r = client.post("/simulasi/kembali", json={"oleh": "manajer uji"}).json()
+    assert (r["hari_ke"], r["tanggal"], r["otomatis"]) == (0, "2016-12-31", False)
+    # Barang yang sudah tiba menjadi riwayat: stok kembali ke data awal.
+    sku = stok(client, 10)
+    assert (sku["stok_akhir"], sku["stok_dalam_pengiriman"]) == (50, 0)
+    assert client.get(f"/purchase-orders/{tiba['po_id']}").json()["tgl_tiba"] is None
+    # Barang yang masih di jalan tetap tiba dengan sisa lead time 8 hari.
+    assert client.get(f"/purchase-orders/{jalan['po_id']}").json()["tgl_tiba"] == "2017-01-08"
+    assert stok(client, 30)["stok_dalam_pengiriman"] == jalan["qty"]
+    assert client.get("/holds").json()[0]["review_pada"] == "2017-03-31"
+    # PO, hold, dan audit log tidak dihapus.
+    assert len(client.get("/purchase-orders").json()) == 2
+    assert client.get("/audit-log").json()[0]["aksi"] == "simulasi_kembali"
+
+
 def test_reset_demo_mengembalikan_jam(client):
     maju(client, 5)
     client.post("/simulasi/otomatis", json={"aktif": True})

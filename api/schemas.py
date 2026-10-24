@@ -283,6 +283,10 @@ class MajuSimulasi(Request):
     oleh: str = Field(default="manajer", min_length=1, max_length=100)
 
 
+class KembaliSimulasi(Request):
+    oleh: str = Field(default="manajer", min_length=1, max_length=100)
+
+
 class OtomatisSimulasi(Request):
     aktif: bool
     detik_per_hari: float | None = Field(default=None, ge=5, le=3600, description="Kosongkan untuk kecepatan terakhir")

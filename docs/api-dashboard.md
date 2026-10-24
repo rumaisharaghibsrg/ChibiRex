@@ -108,8 +108,9 @@ Data Bibitor berhenti di 31 Des 2016, jadi waktu dimajukan dari tanggal itu (`ap
 - `POST /simulasi/otomatis` body `{"aktif": true, "detik_per_hari": 10|30|60}`: satu hari simulasi tiap N detik nyata; `{"aktif": false}` untuk jeda. Tidak ada proses latar: hari dihitung dari waktu nyata sejak terakhir diatur.
 - Dashboard memeriksa `GET /simulasi` berkala (tiap ≤5 detik saat otomatis, 15 detik saat jeda) dan memuat ulang data setiap hari berganti.
 - Field baru: SKU `stok_dalam_pengiriman` (barang PO disetujui yang belum tiba; reorder memakai stok gudang + dalam pengiriman, jadi SKU yang sedang dikirim tidak dipesan ulang), PO `tgl_tiba`. `ringkasan.per_tanggal` = tanggal simulasi.
+- `POST /simulasi/kembali` body `{"oleh": "..."}`: tombol "Kembali ke 31 Des 2016". Tanggal dan stok kembali ke data awal tanpa menghapus PO, hold, jejak agent, atau audit log. Barang yang sudah tiba menjadi riwayat (PO tetap tercatat, `tgl_tiba` kosong); barang yang masih di jalan tetap tiba dengan sisa lead time yang sama; `review_pada` hold ikut mundur.
 - `GET /stores` tetap memakai data 31 Des 2016 (mensimulasikan 80 toko sekaligus terlalu berat).
-- `POST /demo/reset` (`python -m agent.reset_demo`) mengembalikan jam ke 31 Des 2016.
+- `POST /demo/reset` (`python -m agent.reset_demo`) menghapus semua data demo **dan** mengembalikan jam ke 31 Des 2016.
 
 ## Skenario selisih stok (menu "Skenario Uji" di `Header`)
 
