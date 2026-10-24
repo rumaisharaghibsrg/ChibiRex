@@ -485,7 +485,7 @@ Alur demo yang disarankan (mengikuti skop demo di Bagian 4 proposal: lonjakan SK
 - [ ] Rekam video demo cadangan
 - [x] Kirim pertanyaan mentoring sebelum **Senin 19 Okt 2026, 16.00 WIB** (dikirim 18 Okt, dijawab 19 Okt; ringkasannya di bagian Ketentuan Lomba)
 - [ ] Ikuti Zoom deep-dive teknis 30 menit (diusulkan Rabu 22 Okt 2026 siang/sore WIB, jadwal dari panitia). Bawa diagram arsitektur dan pertanyaan soal database state di Lambda dan AgentCore.
-- [ ] Pakai Kiro secara nyata untuk sebagian pekerjaan (misalnya Tahap 7 atau 8), simpan spec dan steering-nya (`.kiro/`) di repo, dan siapkan cuplikan singkat Kiro untuk demo
+- [ ] Pakai Kiro secara nyata untuk sebagian pekerjaan (misalnya Tahap 7 atau 8), simpan spec dan steering-nya (`.kiro/`) di repo, dan siapkan cuplikan singkat Kiro untuk demo. **Kemajuan 24 Okt:** steering docs (`.kiro/steering/product.md`, `tech.md`, `structure.md`) dibuat lewat fitur "Project steering files" Kiro, lalu dikoreksi (Bedrock tidak dipakai, deploy dashboard hanya ke Amplify, aturan data dashboard). Redesain UI 23 Okt juga memakai Kiro (mode chat). **Sisa:** satu Spec (`.kiro/specs/`) untuk pekerjaan nyata, misalnya menyambungkan dashboard ke API, dan cuplikan layar Kiro untuk demo.
 - [ ] Siapkan deck dan naskah presentasi dalam bahasa Inggris, lalu serahkan demo + slide sebagai artefak pada hari final
 - [ ] Putuskan bahasa output agent dan dashboard untuk demo (presentasi berbahasa Inggris, sedangkan ringkasan agent saat ini berbahasa Indonesia)
 

@@ -90,9 +90,9 @@ Key components:
 
 | Component | Purpose |
 |---|---|
-| `DashboardApp.jsx` | Main dashboard shell; fetches store data; composes all dashboard panels |
-| `AgentRunPanel.jsx` | Trigger agent run; poll for live status |
-| `AgenticPipelineVisualizer.jsx` | Animated step-by-step display of agent tool calls |
+| `DashboardApp.jsx` | Main dashboard shell; composes all dashboard panels. Health Score, KPI, Smart Reorder table, reallocation, scenario bar and copilot still use `mockData.js` and must be wired to the API (see `docs/api-dashboard.md`) |
+| `AgentRunPanel.jsx` | Trigger agent run; poll status (MENUNGGU/BERJALAN/SELESAI/GAGAL); show each tool call live as Plan → Reason → Act → Review; show worker status |
+| `AgenticPipelineVisualizer.jsx` | Static pipeline illustration from the original design (not used) |
 | `SmartReorderTable.jsx` | SKU list with reorder recommendations |
 | `PendingPoCard.jsx` | List of DRAFT POs awaiting 1-Click Approval |
 | `PoApprovalModal.jsx` | Modal for approve/reject with manager comment |
@@ -115,4 +115,5 @@ A self-contained FastAPI mini-app implementing SAP OData V2 `API_PURCHASEORDER_P
 - **Python**: Indonesian throughout — functions, variables, field names, error codes. E.g. `siapkan` (setup), `tutup` (teardown), `galat` (error), `jalankan` (run), `ambil_tugas` (fetch task). Private helpers prefixed with `_`.
 - **JavaScript**: Indonesian camelCase for domain objects (`ringkasan`, `daftarPo`, `mulaiAgent`); English for React/technical terms.
 - **API error shape**: `{"detail": {"kode": "ERROR_CODE", "pesan": "Human readable message"}}` — used consistently by both the JS `ApiError` class and agent tool response handling.
-- **Idempotency keys**: required on all mutating endpoints; format for agent calls: `agent-{run_id}-{action}-{inventory_id}`.
+- **Idempotency keys**: required on `POST /purchase-orders` and `POST /holds` (header `Idempotency-Key`); format for agent calls: `agent-{run_id}-{action}-{inventory_id}`. Approve, reject and reset endpoints don't need one.
+- **Dashboard data rule**: every number on the dashboard must come from the API through `src/lib/api.js`; do not add new mock data or invented KPIs.

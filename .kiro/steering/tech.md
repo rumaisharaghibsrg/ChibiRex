@@ -33,9 +33,9 @@
 ## Infrastructure
 
 - AWS Lambda (container image, `ap-southeast-2`) for the Tools API
-- AWS Amplify for dashboard hosting (primary); Vercel also configured
+- AWS Amplify for dashboard hosting (the only official link; the old Vercel deployment is no longer used)
 - Amazon EFS for persistent SQLite state across Lambda cold starts
-- Amazon Bedrock (Nova / Claude) as production LLM (Ollama for local dev)
+- LLM for the demo and final: Ollama `qwen3:14b` on the presenter's laptop, reached through the queue worker (`python -m agent.worker`). Amazon Bedrock is supported in code (`CHIBIREX_LLM_PROVIDER=bedrock`) but is **not used**: the team account has a Bedrock token quota of 0. Do not plan work that depends on Bedrock or AgentCore.
 
 ## Environment Variables
 
@@ -103,6 +103,6 @@ npm run lint      # oxlint
 # Deploy API to AWS Lambda (from repo root)
 .\deploy\deploy_lambda.ps1
 
-# Deploy dashboard to Amplify/Vercel
+# Deploy dashboard to AWS Amplify (app rexa-dashboard)
 .\deploy\deploy_dashboard.ps1
 ```
