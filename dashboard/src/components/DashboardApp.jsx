@@ -383,7 +383,7 @@ export default function DashboardApp({ user, onLogout }) {
       </div>
 
       {/* ── Copilot (jawaban dari data API) ── */}
-      <AiCopilotWidget data={data} />
+      <AiCopilotWidget data={data} store={store} />
 
       {/* ── Modals ── */}
       <PoApprovalModal

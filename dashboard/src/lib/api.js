@@ -2,6 +2,8 @@
 // Alamat API diatur lewat VITE_API_URL di dashboard/.env.local; default-nya API lokal di port 8000.
 
 export const API_URL = (import.meta.env?.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+// Lambda Copilot (chatbot dengan Claude di Bedrock, copilot/ di repo). Kosong: chatbot menjawab cepat dari data saja.
+export const COPILOT_URL = (import.meta.env?.VITE_COPILOT_URL || '').replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(status, kode, pesan, detail) {
@@ -12,10 +14,10 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path, { method = 'GET', body, headers } = {}) {
+async function request(path, { method = 'GET', body, headers, base = API_URL } = {}) {
   let res;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    res = await fetch(`${base}${path}`, {
       method,
       headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
       body: body ? JSON.stringify(body) : undefined,
@@ -23,7 +25,7 @@ async function request(path, { method = 'GET', body, headers } = {}) {
   } catch {
     // Browser melaporkan API mati dan penolakan CORS dengan galat yang sama, jadi sebutkan keduanya.
     throw new ApiError(0, 'API_TIDAK_TERJANGKAU',
-      `API tidak bisa dihubungi di ${API_URL}. Pastikan API berjalan (lokal: "uvicorn api.main:app") dan domain ` +
+      `API tidak bisa dihubungi di ${base}. Pastikan API berjalan (lokal: "uvicorn api.main:app") dan domain ` +
       `dashboard ini diizinkan lewat CHIBIREX_CORS_ORIGINS di API.`);
   }
   const data = await res.json().catch(() => null);
@@ -86,6 +88,10 @@ export const api = {
   statusGuardrail: (store) => request(`/guardrails/status${query({ store })}`),
   resetBreaker: (oleh, catatan) => request('/guardrails/circuit-breaker/reset', keputusan(oleh, catatan)),
   auditLog: (limit = 50) => request(`/audit-log${query({ limit })}`),
+
+  // Copilot (Lambda terpisah): riwayat = [{peran: 'user'|'assistant', teks}]
+  tanyaCopilot: (store, pertanyaan, riwayat) => request('/tanya',
+    { method: 'POST', body: { store, pertanyaan, riwayat }, base: COPILOT_URL }),
 
   // Agent
   mulaiAgent: (store, tugas) => request('/agent-runs/mulai', { method: 'POST', body: { store, tugas } }),

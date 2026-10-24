@@ -1,5 +1,6 @@
-// Jawaban Copilot dari data API toko yang sedang dibuka (useDataToko). Belum memakai LLM: pertanyaan dicocokkan
-// dengan kata kunci, lalu angkanya diambil dari data yang sama dengan kartu dashboard.
+// Jawaban cepat Copilot dari data dashboard (useDataToko), tanpa LLM: pertanyaan dicocokkan dengan kata kunci, lalu
+// angkanya diambil dari data yang sama dengan kartu dashboard. Dipakai kalau Lambda Copilot (Claude di Bedrock, folder
+// copilot/) belum di-deploy atau sedang gagal.
 import { angka, angka2, rupiah, tanggal } from './format';
 
 export const quickPrompts = [

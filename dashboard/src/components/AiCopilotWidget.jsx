@@ -9,16 +9,25 @@ import {
   RotateCcw,
   ArrowUp
 } from 'lucide-react';
+import { COPILOT_URL, api } from '../lib/api';
 import { quickPrompts, jawab } from '../lib/copilot';
 
-export default function AiCopilotWidget({ data }) {
+// Dengan Lambda Copilot, pertanyaan dijawab Claude di Bedrock yang membaca data toko lewat API (hanya baca).
+// Tanpa Copilot, atau kalau Copilot gagal, jawaban cepat dihitung dari data dashboard (lib/copilot.js).
+const PAKAI_AI = Boolean(COPILOT_URL);
+const SAPAAN = PAKAI_AI
+  ? 'Halo! Saya **Rexa Copilot** (read-only), didukung Claude di Amazon Bedrock. Tanyakan apa saja tentang stok, draf PO, Hold Reorder, realokasi modal, risiko stok habis, atau guardrail toko ini; saya membaca datanya langsung dari sistem.'
+  : 'Halo! Saya **Rexa Copilot** (read-only). Saya menjawab dari data API toko yang sedang dibuka: modal yang diselamatkan, draf PO, Hold Reorder, realokasi, risiko stok habis, dan status guardrail. Ada yang ingin Anda tanyakan?';
+const jam = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+export default function AiCopilotWidget({ data, store }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [inputQuery, setInputQuery] = useState('');
   const [messages, setMessages] = useState([
     {
       sender: 'assistant',
-      text: 'Halo! Saya **Rexa Copilot** (read-only). Saya menjawab dari data API toko yang sedang dibuka: modal yang diselamatkan, draf PO, Hold Reorder, realokasi, risiko stok habis, dan status guardrail. Ada yang ingin Anda tanyakan?',
+      text: SAPAAN,
       tag: 'Siap',
       timestamp: 'Baru saja'
     }
@@ -36,31 +45,41 @@ export default function AiCopilotWidget({ data }) {
     }
   }, [messages, isOpen]);
 
-  const handleSend = (textToSend) => {
-    const query = textToSend || inputQuery;
-    if (!query.trim()) return;
+  const handleSend = async (textToSend) => {
+    const query = (textToSend || inputQuery).trim();
+    if (!query || isTyping) return;
 
-    const userMsg = {
-      sender: 'user',
-      text: query,
-      timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
+    // Riwayat untuk Claude: hanya tanya-jawab sebelumnya (`percakapan`), bukan sapaan atau jawaban cadangan.
+    const riwayat = messages
+      .filter((m) => m.percakapan)
+      .slice(-8)
+      .map((m) => ({ peran: m.sender === 'user' ? 'user' : 'assistant', teks: m.text }));
+    setMessages((prev) => [...prev, { sender: 'user', text: query, timestamp: jam(), percakapan: PAKAI_AI }]);
     setInputQuery('');
     setIsTyping(true);
 
-    setTimeout(() => {
-      const answer = jawab(query, data);
-      const assistantMsg = {
-        sender: 'assistant',
-        text: answer.text,
-        tag: answer.tag,
-        timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-      setIsTyping(false);
-    }, 300);
+    let balasan;
+    if (PAKAI_AI) {
+      try {
+        const r = await api.tanyaCopilot(store, query, riwayat);
+        balasan = {
+          text: r.jawaban,
+          tag: r.alat.length ? `Claude · membaca ${r.alat.length} sumber data` : 'Claude · ringkasan toko',
+          percakapan: true
+        };
+      } catch (e) {
+        const cadangan = jawab(query, data);
+        balasan = {
+          text: `${cadangan.text}\n\n(Copilot AI sedang tidak tersedia: ${e.message} Jawaban ini dihitung dari data dashboard.)`,
+          tag: 'Jawaban cepat dari data'
+        };
+      }
+    } else {
+      const cadangan = jawab(query, data);
+      balasan = { text: cadangan.text, tag: cadangan.tag };
+    }
+    setMessages((prev) => [...prev, { sender: 'assistant', timestamp: jam(), ...balasan }]);
+    setIsTyping(false);
   };
 
   const resetChat = () => {
@@ -93,9 +112,9 @@ export default function AiCopilotWidget({ data }) {
           <div className="text-left leading-tight">
             <div className="font-extrabold text-xs text-white flex items-center gap-1.5">
               <span>Tanya Rexa Copilot</span>
-              <span className="text-[9px] bg-emerald-600/80 px-1.5 py-0.2 rounded font-bold text-white">Data</span>
+              <span className="text-[9px] bg-emerald-600/80 px-1.5 py-0.2 rounded font-bold text-white">{PAKAI_AI ? 'AI' : 'Data'}</span>
             </div>
-            <div className="text-[10px] text-[#a2d2bf] font-medium">Tanya jawab dari data toko</div>
+            <div className="text-[10px] text-[#a2d2bf] font-medium">{PAKAI_AI ? 'Claude membaca data toko Anda' : 'Tanya jawab dari data toko'}</div>
           </div>
         </button>
       )}
@@ -124,7 +143,7 @@ export default function AiCopilotWidget({ data }) {
                 </div>
                 <div className="text-[10px] text-[#a2d2bf] flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  <span>Jawaban dari data API &bull; belum memakai LLM</span>
+                  <span>{PAKAI_AI ? 'Claude di Amazon Bedrock · hanya membaca data' : 'Jawaban dari data API · belum memakai LLM'}</span>
                 </div>
               </div>
             </div>

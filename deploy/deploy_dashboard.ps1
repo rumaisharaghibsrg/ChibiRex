@@ -1,6 +1,8 @@
 <#
 Deploy dashboard React ke AWS Amplify (aplikasi rexa-dashboard, cabang main) tanpa sambungan GitHub.
-Alamat API diambil otomatis dari Function URL Lambda, jadi dashboard selalu mengarah ke API yang benar.
+Alamat API diambil otomatis dari Function URL Lambda, jadi dashboard selalu mengarah ke API yang benar. Kalau Lambda
+Copilot (deploy\deploy_copilot.ps1) sudah ada, chatbot dashboard memakai URL-nya; kalau belum, chatbot menjawab
+cepat dari data saja.
 
 Prasyarat: Node.js, .venv repo (untuk membuat zip), dan login AWS CLI:  aws login --profile rexa
 Jalankan dari mana saja di dalam repo:
@@ -11,7 +13,8 @@ param(
     [string]$Region = "ap-southeast-2",
     [string]$App = "rexa-dashboard",
     [string]$Cabang = "main",
-    [string]$Fungsi = "chibirex-api-function"
+    [string]$Fungsi = "chibirex-api-function",
+    [string]$FungsiCopilot = "rexa-copilot"
 )
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
@@ -28,14 +31,21 @@ $appId = (aws amplify list-apps --profile $Profil --region $Region --query "apps
 Cek "mencari aplikasi Amplify $App"
 $domain = (aws amplify get-app --app-id $appId --profile $Profil --region $Region --query "app.defaultDomain" --output text).Trim()
 
-Write-Host "1. Build dashboard (VITE_API_URL=$apiUrl)"
+$ErrorActionPreference = "Continue"  # Copilot opsional; di PowerShell 5.1, stderr perintah native memicu galat kalau "Stop"
+$copilotUrl = aws lambda get-function-url-config --function-name $FungsiCopilot --profile $Profil --region $Region `
+    --query FunctionUrl --output text 2>$null
+$adaCopilot = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = "Stop"
+
+Write-Host "1. Build dashboard (VITE_API_URL=$apiUrl; Copilot AI: $(if ($adaCopilot) { 'ya' } else { 'belum di-deploy' }))"
 Push-Location dashboard
 try {
     npm ci --no-audit --no-fund; Cek "npm ci"
     $env:VITE_API_URL = $apiUrl
+    if ($adaCopilot) { $env:VITE_COPILOT_URL = $copilotUrl.Trim().TrimEnd("/") }
     npm run build; Cek "npm run build"
 } finally {
-    Remove-Item Env:VITE_API_URL -ErrorAction SilentlyContinue
+    Remove-Item Env:VITE_API_URL, Env:VITE_COPILOT_URL -ErrorAction SilentlyContinue
     Pop-Location
 }
 

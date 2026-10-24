@@ -31,7 +31,7 @@ Per 24 Okt 2026 **semua** bagian dashboard memakai data API; tidak ada lagi data
 - **`src/lib/api.js`**: klien untuk semua endpoint di dokumen ini (`api.ringkasan(store)`, `api.daftarSku(...)`, `api.holds(store)`, dan seterusnya). Pakai klien ini untuk semua panggilan API; jangan memakai `fetch` langsung. Galat dilempar sebagai `ApiError` dengan `message` yang siap ditampilkan. Format angka, Rupiah, dan tanggal ada di `src/lib/format.js`.
 - **`src/lib/useDataToko.js`**: memuat semua data satu toko (ringkasan, SKU REORDER, PO, hold, realokasi, status guardrail, hitung fisik) sekali di `DashboardApp`, lalu dibagikan ke kartu lewat props. Baris tabel Smart Reorder sudah digabung dengan PO dan Hold lewat `inventory_id`. Dimuat ulang setiap toko atau `refreshKey` berubah; setelah ada aksi yang mengubah data, panggil `muatUlang()`.
 - **`src/lib/skenario.js`**: skenario Runaway PO dan selisih stok untuk menu "Skenario Uji" di `Header`.
-- **`src/lib/copilot.js`**: jawaban Copilot dari data API (belum memakai LLM).
+- **Chatbot Copilot**: `AiCopilotWidget` mengirim `POST {VITE_COPILOT_URL}/tanya` body `{"store": 74, "pertanyaan": "...", "riwayat": [{"peran": "user"|"assistant", "teks": "..."}]}` ke Lambda `rexa-copilot` (folder `copilot/`). Jawaban `{"jawaban", "model", "alat", "token_input", "token_output"}` berasal dari Claude Haiku 4.5 di Bedrock yang membaca API ini dengan tool baca saja. Kalau `VITE_COPILOT_URL` kosong atau Copilot gagal, jawaban cepat dihitung dari data dashboard (`src/lib/copilot.js`).
 - **`AgentRunPanel`**, **`PendingPoCard`**, **`PoApprovalModal`**: panel agent, draf PO, dan 1-Click Approval (sejak 20 Okt).
 - **`Header`** (pilihan toko, level otonomi, Skenario Uji, status API), **`Sidebar`** (badge dari ringkasan dan status breaker), **`TopKeyMetricsRow`**, **`KpiGrid`**, **`ExplorationBudgetCard`**, **`CapitalReallocationCard`**, **`SmartReorderTable`**, **`SuppressionDetailModal`**, **`GuardrailsModal`**, **`AiCopilotWidget`**.
 
@@ -137,7 +137,7 @@ Belum ada endpoint khusus. Skenario ini cukup berupa urutan panggilan API yang s
 
 - Jangan menambah data tiruan atau KPI tanpa sumber. Angka yang belum ada di API dicatat sebagai kebutuhan endpoint baru.
 - Klaim arsitektur yang benar: Strands Agents (di laptop lewat worker) + Claude Sonnet 4.6 di Amazon Bedrock, FastAPI di Lambda, dan tiruan SAP S/4HANA (OData `API_PURCHASEORDER_PROCESS_SRV`). Bukan SageMaker dan bukan SAP BTP.
-- Chatbot Copilot belum memakai LLM; labelnya harus tetap jujur sampai ada endpoint LLM read-only.
+- Chatbot Copilot hanya membaca: jangan menambahkan tool yang mengubah data (PO, hold, persetujuan) ke `copilot/inti.py`.
 - Realokasi tidak punya aksi sendiri di backend: dana dipakai saat PO tujuan disetujui, jadi tombolnya membuka draf PO tujuan.
 
 ## Sumber data per modul (untuk label di dashboard)

@@ -12,6 +12,7 @@ Panduan untuk penanggung jawab deploy dan presenter. Kondisi per 22 Okt 2026.
 | Data transaksi (PO, hold, jejak agent, audit) dan tiruan SAP | Amazon EFS `rexa-state`, access point `/rexa`, terpasang di `/mnt/rexa` | Dipakai bersama semua instance Lambda dan tidak hilang saat cold start |
 | Jaringan | Lambda di VPC default dengan security group `rexa-lambda`; EFS hanya menerima NFS dari grup itu (`rexa-efs`) | Lambda tidak butuh akses internet keluar |
 | LLM | **Amazon Bedrock**: Claude Sonnet 4.6 (`au.anthropic.claude-sonnet-4-6`, `ap-southeast-2`), lewat API key Bedrock | Sejak 25 Okt 2026. Ollama `qwen3:14b` di laptop tetap bisa dipakai sebagai cadangan (`CHIBIREX_LLM_PROVIDER=ollama`) |
+| Chatbot Copilot | AWS Lambda `rexa-copilot` (zip, Python 3.12, **di luar VPC**), Function URL publik dengan CORS untuk dashboard | Claude Haiku 4.5 (lebih hemat; agent tetap Sonnet 4.6) lewat IAM role, tanpa API key; membaca data lewat Function URL API, hanya GET. Tidak butuh laptop. Ganti model: `deploy\deploy_copilot.ps1 -Model <id>` |
 | Agent (Strands) | **Laptop**: worker `python -m agent.worker` (otomatis saat login) | Tombol dashboard → antrian di API → worker mengambil tugas, memanggil Claude di Bedrock → setiap langkah dilaporkan ke API |
 
 Kenapa worker masih di laptop: agent belum dipindah ke AWS (butuh deploy agent terpisah). Semua aksi agent tetap lewat API di Lambda, jadi guardrail, persetujuan manajer, dan tiruan SAP berjalan di AWS. Riwayat: sebelum 25 Okt, kuota Bedrock untuk model Nova bernilai 0, sehingga LLM-nya Ollama di laptop (keputusan 22 Okt, `progress.md`).
@@ -54,7 +55,8 @@ Variabel lingkungan Lambda: `CHIBIREX_STATE_DB`, `CHIBIREX_SAP_MOCK_DB` (keduany
 Login CLI berlaku sekitar 12 jam: `aws login --profile rexa`.
 
 - **API**: Docker Desktop menyala, lalu `powershell -ExecutionPolicy Bypass -File deploy\deploy_lambda.ps1` (build, uji di kontainer, push ke ECR, perbarui Lambda; `-UjiSaja` untuk uji tanpa deploy). Konfigurasi VPC, EFS, dan variabel lingkungan tidak ikut berubah.
-- **Dashboard**: `powershell -ExecutionPolicy Bypass -File deploy\deploy_dashboard.ps1` (build dengan alamat API dari Lambda, lalu upload ke Amplify).
+- **Chatbot Copilot**: `powershell -ExecutionPolicy Bypass -File deploy\deploy_copilot.ps1` (zip folder `copilot/`; membuat Lambda `rexa-copilot` kalau belum ada atau memperbaruinya, mengatur Function URL + CORS, lalu menguji satu pertanyaan). Lambda API ada di VPC tanpa internet keluar, jadi tidak bisa memanggil Bedrock; karena itu chatbot berjalan di Lambda terpisah di luar VPC.
+- **Dashboard**: `powershell -ExecutionPolicy Bypass -File deploy\deploy_dashboard.ps1` (build dengan alamat API dan, kalau ada, alamat Copilot dari Lambda, lalu upload ke Amplify). Deploy dashboard setelah Copilot pertama kali dibuat.
 - Jangan deploy dari salinan kode lain selain repo ini, supaya versi terbaru tidak tertimpa.
 
 ## Kalau bermasalah
