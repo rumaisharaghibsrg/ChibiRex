@@ -13,7 +13,7 @@ ChibiRex/
 │   ├── raw/        # Source CSVs from Kaggle (Bibitor, Instacart, backorders, online retail)
 │   └── processed/  # Generated artifacts: chibirex.duckdb, state.sqlite, sap_mock.sqlite
 ├── models/         # Saved ML model artifacts (LightGBM stockout risk model)
-├── deploy/         # PowerShell scripts: deploy_lambda.ps1, deploy_dashboard.ps1
+├── deploy/         # PowerShell scripts: deploy_lambda.ps1, deploy_dashboard.ps1, worker_otomatis.ps1 (worker at Windows login)
 ├── docs/           # Architecture diagrams (arsitektur.md), API contract, PDF proposals
 ├── tests/          # pytest test suite
 ├── .env            # Environment variables (CHIBIREX_* prefixed; not committed)

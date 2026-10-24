@@ -72,6 +72,8 @@ python -m agent.run --store 74 --tugas "Custom instruction"
 
 # Start the queue worker (for Lambda + local LLM mode)
 python -m agent.worker
+# ...or install it to start hidden at Windows login (log: logs\worker.log; -Status / -Hapus)
+.\deploy\worker_otomatis.ps1
 
 # Run tests
 pytest
