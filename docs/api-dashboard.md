@@ -83,7 +83,8 @@ Status di kolom aksi:
 
 Juri meminta loop agent terlihat jelas: **plan → reason → act → review**, dengan persetujuan manusia.
 
-1. `POST /agent-runs/mulai` dengan body `{"store": 74}`. Responsnya `202` dan berisi `run_id` dengan `status: "BERJALAN"`. Kalau agent masih berjalan, responsnya `409 AGENT_SEDANG_BERJALAN`.
+1. `POST /agent-runs/mulai` dengan body `{"store": 74}`. Responsnya `202` dan berisi `run_id` dengan `status: "BERJALAN"` (mode lokal) atau `"MENUNGGU"` (mode antrian, sampai worker mengambilnya). Kalau agent masih berjalan, responsnya `409 AGENT_SEDANG_BERJALAN` dengan `detail.run_id` milik run yang sedang berjalan; panel langsung memantau run itu.
+   Saat panel dibuka atau halaman di-refresh, `GET /agent-runs/aktif` mengembalikan run yang sedang MENUNGGU/BERJALAN (atau `null`). Daftar `GET /agent-runs` membawa `status` dan `pesan` (penyebab kalau GAGAL).
 2. Panggil `GET /agent-runs/{run_id}` setiap 1-2 detik. `langkah[]` bertambah setiap kali agent memanggil tool. Setiap langkah berisi `tool`, `input` (termasuk `alasan` dari agent), `output`, dan `detik`.
 3. Saat `status` menjadi `SELESAI`, tampilkan `jawaban` (ringkasan agent), lalu muat ulang ringkasan, tabel, dan daftar PO. Kalau `GAGAL`, tampilkan `pesan`.
 

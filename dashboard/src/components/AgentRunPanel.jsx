@@ -112,17 +112,24 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
     onSelesaiRef.current = onSelesai;
   });
 
-  // Tampilkan run terakhir toko ini saat panel dibuka, supaya jejak agent tidak hilang kalau halaman di-refresh.
+  // Saat panel dibuka: ikut pantau agent yang sedang berjalan (dimulai sebelum refresh atau dari tab lain); kalau
+  // tidak ada, tampilkan run terakhir toko ini supaya jejak agent tidak hilang.
   useEffect(() => {
     let aktif = true;
-    api.riwayatAgent(20)
-      .then((daftar) => {
-        const terakhir = daftar.find((r) => r.store === store);
-        if (aktif && terakhir) {
-          setRun((r) => r ?? { ...terakhir, status: terakhir.berhasil ? 'SELESAI' : 'GAGAL' });
-        }
-      })
-      .catch(() => {}); // panel tetap bisa dipakai; galat API muncul saat agent dijalankan
+    (async () => {
+      const berjalan = await api.agentAktif().catch(() => null);
+      if (!aktif) return;
+      if (berjalan?.store === store) {
+        mulaiRef.current = Date.now();
+        setRun((r) => r ?? berjalan);
+        return;
+      }
+      const daftar = await api.riwayatAgent(20).catch(() => []); // galat API muncul saat agent dijalankan
+      const terakhir = daftar.find((r) => r.store === store);
+      if (aktif && terakhir) {
+        setRun((r) => r ?? { ...terakhir, status: terakhir.status ?? (terakhir.berhasil ? 'SELESAI' : 'GAGAL') });
+      }
+    })();
     return () => {
       aktif = false;
     };
@@ -164,7 +171,12 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
     try {
       setRun(await api.mulaiAgent(store));
     } catch (e) {
-      setGalat(e.message);
+      // Agent sudah berjalan (diklik dua kali, atau dimulai dari tab lain): ikut pantau run itu, bukan menampilkan galat.
+      const berjalan = e.kode === 'AGENT_SEDANG_BERJALAN' && e.detail?.run_id
+        ? await api.statusAgent(e.detail.run_id).catch(() => null)
+        : null;
+      if (berjalan?.store === store) setRun(berjalan);
+      else setGalat(berjalan ? `Agent sedang berjalan untuk toko ${berjalan.store}; tunggu sampai selesai.` : e.message);
     } finally {
       setMemulai(false);
     }

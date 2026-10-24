@@ -21,7 +21,10 @@ def test_alur_antrian_dari_tombol_sampai_selesai(analytics_db, tmp_path):
                                                            "terakhir_terlihat": None, "nama": None}
         run = client.post("/agent-runs/mulai", json={"store": 1}).json()
         assert run["status"] == "MENUNGGU" and run["langkah"] == []
-        assert client.post("/agent-runs/mulai", json={"store": 1}).status_code == 409
+        # Klik kedua (misalnya dari tab lain) menunjuk run yang sedang berjalan, supaya dashboard bisa memantaunya.
+        kedua = client.post("/agent-runs/mulai", json={"store": 1})
+        assert kedua.status_code == 409 and kedua.json()["detail"]["run_id"] == run["run_id"]
+        assert client.get("/agent-runs/aktif").json()["run_id"] == run["run_id"]
 
         assert client.post("/agent-runs/antrian/ambil").status_code == 401  # tanpa token
         tugas = client.post("/agent-runs/antrian/ambil", params={"nama": "laptop-uji"}, headers=TOKEN).json()
@@ -43,7 +46,8 @@ def test_alur_antrian_dari_tombol_sampai_selesai(analytics_db, tmp_path):
         assert (selesai["status"], selesai["jawaban"], selesai["model"]) == \
             ("SELESAI", "Ringkasan agent", "Ollama qwen3:14b (laptop)")
         assert selesai["mulai_pada"] == SEKARANG.isoformat(timespec="seconds")
-        assert [r["run_id"] for r in client.get("/agent-runs").json()] == [run["run_id"]]
+        assert [(r["run_id"], r["status"]) for r in client.get("/agent-runs").json()] == [(run["run_id"], "SELESAI")]
+        assert client.get("/agent-runs/aktif").json() is None
 
         jam[0] = SEKARANG + timedelta(seconds=60)
         assert client.get("/agent-runs/worker").json()["aktif"] is False
@@ -56,6 +60,9 @@ def test_tugas_tanpa_worker_ditutup_gagal(analytics_db, tmp_path):
         jam[0] = SEKARANG + timedelta(seconds=31)
         gagal = client.get(f"/agent-runs/{run['run_id']}").json()
         assert gagal["status"] == "GAGAL" and "agent.worker" in gagal["pesan"]
+        # Riwayat juga membawa penyebabnya, supaya panel yang baru dibuka tidak hanya menulis "agent gagal".
+        riwayat = client.get("/agent-runs").json()[0]
+        assert riwayat["status"] == "GAGAL" and "agent.worker" in riwayat["pesan"]
         assert client.post("/agent-runs/mulai", json={"store": 1}).json()["status"] == "MENUNGGU"  # bisa dicoba lagi
 
 

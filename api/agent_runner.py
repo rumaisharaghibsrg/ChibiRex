@@ -12,7 +12,9 @@ from uuid import uuid4
 
 
 class AgentSedangBerjalan(Exception):
-    pass
+    def __init__(self, run_id: str):
+        super().__init__(run_id)
+        self.run_id = run_id
 
 
 def jalankan_agent_lokal(tugas: str, store: int, run_id: str, langkah: list) -> dict:
@@ -30,8 +32,8 @@ class PenjalanAgent:
 
     def mulai(self, tugas: str, store: int) -> dict:
         with self._kunci:
-            if any(r["status"] == "BERJALAN" for r in self._runs.values()):
-                raise AgentSedangBerjalan
+            if berjalan := self._berjalan():
+                raise AgentSedangBerjalan(berjalan["run_id"])
             # Run yang sudah selesai tersimpan di state DB, jadi cukup run terakhir yang disimpan di memori.
             self._runs.clear()
             run = {"run_id": uuid4().hex[:12], "status": "BERJALAN", "tugas": tugas, "store": store,
@@ -53,3 +55,12 @@ class PenjalanAgent:
     def status(self, run_id: str) -> dict | None:
         run = self._runs.get(run_id)
         return None if run is None else {**run, "langkah": list(run["langkah"])}
+
+    def aktif(self) -> dict | None:
+        """Run yang sedang berjalan, supaya dashboard yang baru dibuka bisa ikut memantaunya."""
+        with self._kunci:
+            run = self._berjalan()
+        return None if run is None else self.status(run["run_id"])
+
+    def _berjalan(self) -> dict | None:
+        return next((r for r in self._runs.values() if r["status"] == "BERJALAN"), None)

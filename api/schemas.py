@@ -226,9 +226,11 @@ class AgentRunIn(Request):
 
 
 class AgentRun(AgentRunIn):
-    # Respons, bukan request: kolom tambahan dari tabel (status, mulai_pada, pesan) diabaikan, tidak ditolak.
+    # Respons, bukan request: kolom tambahan dari tabel (misalnya mulai_pada) diabaikan, tidak ditolak.
     model_config = ConfigDict(extra="ignore")
     waktu: str
+    status: str | None = Field(default=None, description="SELESAI atau GAGAL; kosong untuk jejak lama")
+    pesan: str | None = Field(default=None, description="Penyebab kalau GAGAL, misalnya tidak ada worker")
 
 
 class AgentRunMulai(Request):

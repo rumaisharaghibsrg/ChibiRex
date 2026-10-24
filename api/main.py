@@ -262,8 +262,9 @@ def _antrikan_agent(s: Settings, tugas: str, store: int) -> dict:
     sekarang = s.clock()
     with state.transaksi(s.state_db) as con:
         _kedaluwarsa_agent(con, s, sekarang)
-        if con.execute("select 1 from agent_runs where status in ('MENUNGGU', 'BERJALAN')").fetchone():
-            raise galat(409, "AGENT_SEDANG_BERJALAN", "Agent masih berjalan; tunggu sampai selesai.")
+        if aktif := con.execute("select run_id from agent_runs where status in ('MENUNGGU', 'BERJALAN')").fetchone():
+            raise galat(409, "AGENT_SEDANG_BERJALAN", "Agent masih berjalan; tunggu sampai selesai.",
+                        run_id=aktif["run_id"])
         run_id = uuid4().hex[:12]
         con.execute(
             """insert into agent_runs (run_id, waktu, tugas, store, model, jawaban, langkah, durasi_dtk, token_input,
@@ -694,8 +695,8 @@ def _routes(app: FastAPI) -> None:
                         "versi lokal (uvicorn + Ollama).")
         try:
             return request.app.state.agent.mulai(tugas, body.store)
-        except AgentSedangBerjalan:
-            raise galat(409, "AGENT_SEDANG_BERJALAN", "Agent masih berjalan; tunggu sampai selesai.")
+        except AgentSedangBerjalan as e:
+            raise galat(409, "AGENT_SEDANG_BERJALAN", "Agent masih berjalan; tunggu sampai selesai.", run_id=e.run_id)
 
     @app.get("/agent-runs/worker", response_model=StatusWorker, tags=[DASHBOARD])
     def status_worker(request: Request):
@@ -707,6 +708,19 @@ def _routes(app: FastAPI) -> None:
         batas = (s.clock() - timedelta(seconds=s.worker_aktif_dtk)).isoformat(timespec="seconds")
         return {"mode": "lokal" if s.agent_runner else s.agent_mode, "aktif": bool(terakhir and terakhir >= batas),
                 "terakhir_terlihat": terakhir, "nama": row["nama"] if row else None}
+
+    @app.get("/agent-runs/aktif", response_model=AgentRunStatus | None, tags=[DASHBOARD])
+    def agent_run_aktif(request: Request):
+        """Agent yang sedang MENUNGGU atau BERJALAN (null kalau tidak ada), supaya dashboard yang baru dibuka atau
+        di-refresh ikut memantau run yang dimulai sebelumnya, bukan menampilkan run lama."""
+        if lokal := request.app.state.agent.aktif():
+            return lokal
+        s = _settings(request)
+        with state.transaksi(s.state_db) as con:
+            _kedaluwarsa_agent(con, s, s.clock())
+            row = con.execute("""select * from agent_runs where status in ('MENUNGGU', 'BERJALAN')
+                                 order by waktu desc limit 1""").fetchone()
+        return _run_dari_baris(row) if row else None
 
     @app.post("/agent-runs/antrian/ambil", response_model=AgentRunTugas, tags=[AGENT],
               responses={204: {"description": "Tidak ada tugas"}})

@@ -73,10 +73,14 @@ def test_jalankan_agent_dari_dashboard(analytics_db, tmp_path):
         # Langkah terlihat selagi agent berjalan, dan agent kedua ditolak.
         sementara = _tunggu(client, run["run_id"], lambda r: r["langkah"])
         assert sementara["status"] == "BERJALAN"
-        assert client.post("/agent-runs/mulai", json={"store": 1}).json()["detail"]["kode"] == "AGENT_SEDANG_BERJALAN"
+        detail = client.post("/agent-runs/mulai", json={"store": 1}).json()["detail"]
+        assert (detail["kode"], detail["run_id"]) == ("AGENT_SEDANG_BERJALAN", run["run_id"])
+        aktif = client.get("/agent-runs/aktif").json()
+        assert (aktif["run_id"], aktif["status"]) == (run["run_id"], "BERJALAN")
         lanjut.set()
         selesai = _tunggu(client, run["run_id"], lambda r: r["status"] == "SELESAI")
         assert [l["tool"] for l in selesai["langkah"]] == ["list_prioritas"]
+        assert client.get("/agent-runs/aktif").json() is None
         assert client.get("/agent-runs/tidak-ada").status_code == 404
 
 
