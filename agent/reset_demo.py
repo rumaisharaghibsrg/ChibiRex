@@ -1,6 +1,7 @@
 """Kosongkan data demo: `python -m agent.reset_demo` (API online, sesuai CHIBIREX_WORKER_API_URL di .env) atau
 `python -m agent.reset_demo --lokal` (API di laptop). Menghapus PO, hold, hitung fisik, jejak agent, audit log,
-dan PO di tiruan SAP, lalu menutup circuit breaker. Jalankan sebelum gladi atau presentasi.
+dan PO di tiruan SAP, menutup circuit breaker, dan mengembalikan jam simulasi ke 31 Des 2016 (mode otomatis
+dimatikan). Jalankan sebelum gladi atau presentasi.
 """
 
 import argparse
@@ -25,7 +26,7 @@ def main() -> None:
         if r.status_code == 401:
             raise SystemExit("Token ditolak. Samakan CHIBIREX_WORKER_TOKEN di .env dengan yang di Lambda.")
         r.raise_for_status()
-    print("Data demo dikosongkan. Nomor PO SAP berikutnya kembali 4500000001.")
+    print("Data demo dikosongkan. Tanggal simulasi kembali ke 31 Des 2016 dan nomor PO SAP berikutnya 4500000001.")
 
 
 if __name__ == "__main__":
