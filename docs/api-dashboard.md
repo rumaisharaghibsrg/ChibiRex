@@ -26,15 +26,16 @@ npm run dev
 
 ## Yang sudah tersambung (jangan dikerjakan ulang)
 
-Inti demo sudah tersambung ke API dan sudah diuji di browser dengan agent asli (20 Okt 2026):
+Per 24 Okt 2026 **semua** bagian dashboard memakai data API; tidak ada lagi data contoh (`src/data/` sudah dihapus). Diuji di browser terhadap API lokal.
 
-- **`src/lib/api.js`**: klien untuk semua endpoint di dokumen ini (`api.ringkasan(store)`, `api.daftarSku(...)`, `api.holds(store)`, dan seterusnya). Pakai klien ini untuk semua panggilan API; jangan memakai `fetch` langsung. Galat dilempar sebagai `ApiError` dengan `message` yang siap ditampilkan. Format Rupiah ada di `src/lib/format.js`.
-- **`AgentRunPanel`**: tombol "Jalankan Agent", empat fase Plan/Reason/Act/Review, langkah agent muncul selagi berjalan, ringkasan akhir, dan run terakhir dimuat ulang setelah refresh.
-- **`PendingPoCard`**: draf PO yang menunggu persetujuan dan PO yang sudah masuk SAP.
-- **`PoApprovalModal`**: menerima `poId`, menampilkan PO asli, alasan agent, hasil guardrail, dan payload SAP, lalu approve/reject lewat API. Nomor PO SAP diambil dari respons.
-- **Footer** `DashboardApp`: klaim arsitektur sudah disesuaikan.
+- **`src/lib/api.js`**: klien untuk semua endpoint di dokumen ini (`api.ringkasan(store)`, `api.daftarSku(...)`, `api.holds(store)`, dan seterusnya). Pakai klien ini untuk semua panggilan API; jangan memakai `fetch` langsung. Galat dilempar sebagai `ApiError` dengan `message` yang siap ditampilkan. Format angka, Rupiah, dan tanggal ada di `src/lib/format.js`.
+- **`src/lib/useDataToko.js`**: memuat semua data satu toko (ringkasan, SKU REORDER, PO, hold, realokasi, status guardrail, hitung fisik) sekali di `DashboardApp`, lalu dibagikan ke kartu lewat props. Baris tabel Smart Reorder sudah digabung dengan PO dan Hold lewat `inventory_id`. Dimuat ulang setiap toko atau `refreshKey` berubah; setelah ada aksi yang mengubah data, panggil `muatUlang()`.
+- **`src/lib/skenario.js`**: skenario Runaway PO dan selisih stok untuk menu "Skenario Uji" di `Header`.
+- **`src/lib/copilot.js`**: jawaban Copilot dari data API (belum memakai LLM).
+- **`AgentRunPanel`**, **`PendingPoCard`**, **`PoApprovalModal`**: panel agent, draf PO, dan 1-Click Approval (sejak 20 Okt).
+- **`Header`** (pilihan toko, level otonomi, Skenario Uji, status API), **`Sidebar`** (badge dari ringkasan dan status breaker), **`TopKeyMetricsRow`**, **`KpiGrid`**, **`ExplorationBudgetCard`**, **`CapitalReallocationCard`**, **`SmartReorderTable`**, **`SuppressionDetailModal`**, **`GuardrailsModal`**, **`AiCopilotWidget`**.
 
-Saat menyambungkan `SmartReorderTable`, buka approval dengan `setSelectedPoId(po.po_id)` (sekarang `onSelectPo` masih menampilkan toast "data contoh"). Toko demo diatur oleh konstanta `DEMO_STORE` di `DashboardApp.jsx`, sampai pilihan cabang di `Header` tersambung ke `GET /stores`. Setelah ada aksi yang mengubah data, panggil `muatUlang()` supaya kartu lain ikut memuat ulang (lewat `refreshKey`).
+`HealthScoreCard`, `FormulaModal`, `ScenarioBar`, `AgenticPipelineVisualizer`, dan `OnboardingBanner` tidak dipakai di dashboard sekarang.
 
 ## Aturan umum
 
@@ -50,7 +51,7 @@ Saat menyambungkan `SmartReorderTable`, buka approval dengan `setSelectedPoId(po
 | Komponen | Endpoint | Field yang dipakai |
 |---|---|---|
 | `Header`: pilihan cabang | `GET /stores` | `store`, `kota`, `sku_aktif`, `perlu_reorder` |
-| `HealthScoreCard` + `FormulaModal` | `GET /stores/{store}/ringkasan` | `health_score`, `komponen[]` (`nama`, `nilai`, `penjelasan`), `rumus`, `per_tanggal` |
+| `TopKeyMetricsRow` (kartu Inventory Health + rincian) | `GET /stores/{store}/ringkasan` | `health_score`, `komponen[]` (`nama`, `nilai`, `penjelasan`), `rumus`, `per_tanggal` |
 | `KpiGrid` | `GET /stores/{store}/ringkasan` | `modal_diselamatkan_idr`, `po_menunggu`, `nilai_po_menunggu_idr`, `sku_risiko_tinggi`, `modal_tertahan_idr`, `nilai_stok_idr` |
 | `ExplorationBudgetCard` | `GET /stores/{store}/ringkasan`, `GET /holds?store=` | `exploration_budget_idr`; per hold: `qty_uji`, `nilai_uji_idr`, `review_pada` |
 | `CapitalReallocationCard` | `GET /stores/{store}/reallocation` | `dana_tersedia_idr`, `sumber[]`, `tujuan[]` (`deskripsi`, `dialokasikan_idr`), `sisa_dana_idr`, `pesan` |
@@ -97,7 +98,7 @@ Saran pengelompokan langkah untuk tampilan:
 
 Dengan LLM lokal, satu kali jalan butuh ±30-60 detik, jadi tampilkan langkah satu per satu selagi berjalan.
 
-## Skenario selisih stok (tombol di `ScenarioBar`)
+## Skenario selisih stok (menu "Skenario Uji" di `Header`)
 
 Mendemokan mitigasi inakurasi data: hasil hitung fisik (simulasi) yang berbeda dari stok sistem menurunkan Data Confidence, dan guardrail menahan PO sampai selisihnya diaudit.
 
@@ -108,7 +109,7 @@ Mendemokan mitigasi inakurasi data: hasil hitung fisik (simulasi) yang berbeda d
 
 Versi terminalnya: `python -m agent.skenario_selisih_stok --store 74`, lalu `--audit-selesai` di akhir demo.
 
-## Skenario uji Runaway PO (tombol di `ScenarioBar`)
+## Skenario uji Runaway PO (menu "Skenario Uji" di `Header`)
 
 Belum ada endpoint khusus. Skenario ini cukup berupa urutan panggilan API yang sama dengan `agent/skenario_runaway.py`:
 
@@ -118,13 +119,12 @@ Belum ada endpoint khusus. Skenario ini cukup berupa urutan panggilan API yang s
 4. Satu PO normal (tanpa `qty`) juga ditahan dengan kode `CIRCUIT_BREAKER`.
 5. Manajer menekan "Reset" (`POST /guardrails/circuit-breaker/reset`). Jangan reset otomatis, karena langkah ini adalah human-in-the-loop yang ingin ditunjukkan.
 
-## Yang perlu diubah dari desain sekarang
+## Aturan untuk perubahan berikutnya
 
-- Ganti semua data di `mockData.js` dan `copilotKnowledge.js` dengan data API.
-- **KPI tanpa sumber data** (stockout 2,1% vs 11,4%, akurasi ML 91,8%, proses PO 2,3 menit, "Termasuk PPN", "Sinkronisasi Real-Time"): ganti dengan angka dari API, atau beri label "Target proposal" kalau tetap ingin ditampilkan.
-- **Sesuaikan klaim arsitektur** di komponen lain (`AgenticPipelineVisualizer`, `GuardrailsModal`, `Sidebar`, `LandingPage`): kita tidak memakai SageMaker. Yang dipakai: Strands Agents + LLM (Ollama lokal sekarang, Amazon Bedrock di final), FastAPI, dan tiruan SAP S/4HANA (OData `API_PURCHASEORDER_PROCESS_SRV`), bukan SAP BTP.
-- **Chatbot Copilot** belum punya endpoint LLM. Sementara ini, ubah jadi tombol pertanyaan cepat yang menjawab dari data API (misalnya "modal diselamatkan" dari ringkasan), atau tandai "segera hadir".
-- Tombol "Terapkan realokasi" tidak punya aksi di backend. Realokasi terjadi lewat persetujuan PO tujuan, jadi arahkan tombolnya ke PO terkait.
+- Jangan menambah data tiruan atau KPI tanpa sumber. Angka yang belum ada di API dicatat sebagai kebutuhan endpoint baru.
+- Klaim arsitektur yang benar: Strands Agents + LLM (Ollama `qwen3:14b` di laptop lewat worker), FastAPI di Lambda, dan tiruan SAP S/4HANA (OData `API_PURCHASEORDER_PROCESS_SRV`). Bukan SageMaker, bukan SAP BTP, dan Bedrock tidak dipakai (kuota 0). `LandingPage` masih perlu dicek untuk klaim seperti ini.
+- Chatbot Copilot belum memakai LLM; labelnya harus tetap jujur sampai ada endpoint LLM read-only.
+- Realokasi tidak punya aksi sendiri di backend: dana dipakai saat PO tujuan disetujui, jadi tombolnya membuka draf PO tujuan.
 
 ## Sumber data per modul (untuk label di dashboard)
 

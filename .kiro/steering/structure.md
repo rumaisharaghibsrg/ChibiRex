@@ -74,12 +74,12 @@ dashboard/
 ├── src/
 │   ├── App.jsx           # 4-page router: landing → auth → onboarding → dashboard
 │   ├── components/       # All React components (flat, no subdirectory grouping)
-│   ├── lib/
-│   │   ├── api.js        # REST client; all API endpoints mapped; ApiError class
-│   │   └── format.js     # Currency (Rupiah) and number formatting helpers
-│   └── data/
-│       ├── mockData.js       # Static mock data for demo mode
-│       └── copilotKnowledge.js  # Static knowledge base for the AI copilot widget
+│   └── lib/
+│       ├── api.js         # REST client; all API endpoints mapped; ApiError class
+│       ├── format.js      # Rupiah, number, and date formatting helpers
+│       ├── useDataToko.js # Hook: loads all data for one store; joins SKU rows with PO/hold by inventory_id
+│       ├── skenario.js    # "Skenario Uji" menu: Runaway PO and stock-count mismatch via real API calls
+│       └── copilot.js     # Copilot answers computed from API data (no LLM yet)
 ├── public/               # Static assets (logos, SVG icons)
 ├── .env.local            # VITE_API_URL (not committed; defaults to localhost:8000)
 ├── package.json
@@ -90,15 +90,19 @@ Key components:
 
 | Component | Purpose |
 |---|---|
-| `DashboardApp.jsx` | Main dashboard shell; composes all dashboard panels. Health Score, KPI, Smart Reorder table, reallocation, scenario bar and copilot still use `mockData.js` and must be wired to the API (see `docs/api-dashboard.md`) |
+| `DashboardApp.jsx` | Main dashboard shell; loads store data with `useDataToko(store, refreshKey)` and passes it to every panel. All panels use API data (no mock data left) |
+| `Header.jsx` | Store selector (`GET /stores`), autonomy level info (only Level 2 active), "Skenario Uji" menu, API status + data date |
+| `TopKeyMetricsRow.jsx` | Inventory Health (score + 3 components), capital saved, stockout-risk SKUs |
 | `AgentRunPanel.jsx` | Trigger agent run; poll status (MENUNGGU/BERJALAN/SELESAI/GAGAL); show each tool call live as Plan → Reason → Act → Review; show worker status |
-| `AgenticPipelineVisualizer.jsx` | Static pipeline illustration from the original design (not used) |
-| `SmartReorderTable.jsx` | SKU list with reorder recommendations |
+| `SmartReorderTable.jsx` | REORDER SKUs joined with PO/hold status; opens PO approval or hold detail |
 | `PendingPoCard.jsx` | List of DRAFT POs awaiting 1-Click Approval |
 | `PoApprovalModal.jsx` | Modal for approve/reject with manager comment |
-| `GuardrailsModal.jsx` | Guardrail status and circuit breaker controls |
-| `KpiGrid.jsx` | Key metric cards |
-| `HealthScoreCard.jsx` | Inventory Health Score display |
+| `SuppressionDetailModal.jsx` | Hold Reorder detail: agent reason, complementarity check, capital saved, test stock |
+| `CapitalReallocationCard.jsx` | Reallocation from held reorders to rising SKUs; button opens the target draft PO |
+| `GuardrailsModal.jsx` | Live guardrail status, manager reset of the circuit breaker, pending stock audits, audit log |
+| `KpiGrid.jsx` | Key metric cards (reallocation tab) |
+| `AiCopilotWidget.jsx` | Quick answers from API data via `lib/copilot.js` (no LLM yet) |
+| `HealthScoreCard.jsx`, `FormulaModal.jsx`, `ScenarioBar.jsx`, `AgenticPipelineVisualizer.jsx` | Leftovers from the original design; not used |
 
 ## engine/
 

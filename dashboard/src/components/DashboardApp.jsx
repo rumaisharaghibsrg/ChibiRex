@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import TopKeyMetricsRow from './TopKeyMetricsRow';
@@ -17,107 +17,38 @@ import {
   CheckCircle,
   AlertTriangle,
   Info,
-  ArrowRight
+  ArrowRight,
+  RefreshCw
 } from 'lucide-react';
-import { initialInventory, initialKpis } from '../data/mockData';
+import { api } from '../lib/api';
+import { rupiah } from '../lib/format';
+import { RASIO_BORONGAN, simulasiSelisihStok, ujiRunawayPo } from '../lib/skenario';
+import { useDataToko } from '../lib/useDataToko';
 
-// Toko demo (Bibitor toko 74). Pilihan cabang di Header belum tersambung ke GET /stores.
+// Toko demo (Bibitor toko 74): SKU demo Bacardi Gold Rum (draf PO) dan Ciroc Apple Vodka (Hold Reorder).
 const DEMO_STORE = 74;
 
 export default function DashboardApp({ user, onLogout }) {
-  const [inventoryList, setInventoryList] = useState(initialInventory);
-  const [kpis, setKpis] = useState(initialKpis);
-  const [activeScenario, setActiveScenario] = useState('NORMAL');
-  const [isReallocated, setIsReallocated] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [currentBranch, setCurrentBranch] = useState('Hub Jakarta Pusat (Flagship)');
-  const [autonomyLevel, setAutonomyLevel] = useState('Level 2 (Draf PO)');
-
-  const [store] = useState(DEMO_STORE);
+  const [store, setStore] = useState(DEMO_STORE);
+  const [stores, setStores] = useState([]);
   const [selectedPoId, setSelectedPoId] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0); // naik setiap ada aksi agent/manajer, memicu muat ulang data API
   const [selectedSuppressionItem, setSelectedSuppressionItem] = useState(null);
   const [isGuardrailsOpen, setIsGuardrailsOpen] = useState(false);
+  const [skenarioBerjalan, setSkenarioBerjalan] = useState(null);
   const [toast, setToast] = useState(null);
+
+  const { data, error, memuat } = useDataToko(store, refreshKey);
+  const penyetuju = user?.name || 'Manajer toko';
+
+  useEffect(() => {
+    api.stores().then(setStores).catch(() => setStores([]));
+  }, []);
 
   const showToast = (msg) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 4000);
-  };
-
-  // ── Scenario Simulator ──
-  const applyScenario = (id) => {
-    setActiveScenario(id);
-    if (id === 'FAST_MOVING') {
-      setInventoryList(prev => prev.map(item =>
-        item.id === 'SKU-001'
-          ? { 
-              ...item, 
-              currentStock: 22, 
-              salesVelocityScore: 2.65, 
-              stockoutDaysRemaining: 1.1,
-              stockoutConfidence: 98.2, 
-              poQuantity: 180, 
-              poTotalValue: 15300000, 
-              agentStatus: 'DRAFT_PO' 
-            }
-          : item
-      ));
-      setKpis(p => ({ 
-        ...p, 
-        healthScore: 78, 
-        healthStatus: 'Waspada Stockout', 
-        stockoutRate: 2.9 
-      }));
-      showToast({ type: 'warn', text: 'Skenario Fast-Moving: Stok SKU-001 menipis kritis — segera otorisasi draf PO SAP!' });
-    } else if (id === 'SLOW_MOVING') {
-      setInventoryList(prev => prev.map(item =>
-        item.id === 'SKU-002'
-          ? { 
-              ...item, 
-              salesVelocityScore: 0.15, 
-              stockoutDaysRemaining: 210, 
-              agentStatus: 'HOLD_REORDER' 
-            }
-          : item
-      ));
-      setKpis(p => ({ 
-        ...p, 
-        healthScore: 86, 
-        healthStatus: 'Arus Kas Terlindungi', 
-        capitalSaved: 54000000 
-      }));
-      showToast({ type: 'info', text: 'Skenario Slow-Moving: Suppression Engine menahan PO barang lambat, hemat modal.' });
-    } else if (id === 'REALLOCATION') {
-      setIsReallocated(true);
-      setInventoryList(prev => prev.map(item =>
-        item.id === 'SKU-001'
-          ? { ...item, poQuantity: 200, agentStatus: 'DRAFT_PO' }
-          : item
-      ));
-      setKpis(p => ({ 
-        ...p, 
-        healthScore: 94, 
-        healthStatus: 'Sangat Prima', 
-        freeCashFlow: 195000000 
-      }));
-      showToast({ type: 'success', text: 'Realokasi Modal Berhasil: Rp 5.5 Jt dialihkan ke SKU Fast-Moving!' });
-    } else {
-      handleReset();
-    }
-  };
-
-  const handleReset = () => {
-    setInventoryList(initialInventory);
-    setKpis(initialKpis);
-    setActiveScenario('NORMAL');
-    setIsReallocated(false);
-    showToast({ type: 'info', text: 'Kondisi operasional berhasil direset ke baseline awal.' });
-  };
-
-  const handleApplyReallocation = () => {
-    setIsReallocated(true);
-    applyScenario('REALLOCATION');
+    setTimeout(() => setToast(null), 5000);
   };
 
   const muatUlang = useCallback(() => setRefreshKey(k => k + 1), []);
@@ -136,12 +67,72 @@ export default function DashboardApp({ user, onLogout }) {
       : { type: 'info', text: `Draf PO ${po.deskripsi} ditolak; tidak ada yang dikirim ke SAP.` });
   };
 
-  // Tabel Smart Reorder masih memakai data contoh (mockData), jadi belum punya PO asli untuk disetujui.
-  const handleSelectPoContoh = () => {
-    showToast({ type: 'info', text: 'Baris ini masih data contoh. Setujui PO asli dari kartu "PO Menunggu Persetujuan".' });
+  // ── Skenario uji guardrail (data asli lewat API) ──
+  const breakerTerbuka = Boolean(data?.guardrail?.circuit_breaker_terbuka);
+  const stokFisik = data?.stokFisik ?? [];
+  const skenario = [
+    {
+      id: 'RUNAWAY',
+      label: 'Uji Runaway PO',
+      desc: breakerTerbuka
+        ? 'Circuit breaker sudah terbuka; reset dulu di Audit & Guardrails.'
+        : `3 PO dengan lonjakan borongan ${RASIO_BORONGAN}x (median Online Retail II) ditahan guardrail 3σ, lalu circuit breaker terbuka.`,
+      disabled: breakerTerbuka || !data
+    },
+    {
+      id: 'SELISIH',
+      label: 'Simulasi selisih stok',
+      desc: stokFisik.length
+        ? 'Sudah ada hitung fisik yang menunggu audit.'
+        : 'Hitung fisik SKU prioritas 25% lebih kecil: Data Confidence turun, PO SKU itu ditahan.',
+      disabled: stokFisik.length > 0 || !data
+    },
+    {
+      id: 'AUDIT',
+      label: 'Audit stok selesai',
+      desc: stokFisik.length
+        ? `${stokFisik.length} hitung fisik menunggu audit manajer.`
+        : 'Tidak ada hitung fisik yang menunggu audit.',
+      disabled: stokFisik.length === 0
+    },
+    {
+      id: 'GUARDRAIL',
+      label: 'Reset circuit breaker (manajer)',
+      desc: breakerTerbuka ? 'Buka Audit & Guardrails untuk mereset.' : 'Circuit breaker sedang tertutup.',
+      disabled: !breakerTerbuka
+    }
+  ];
+
+  const handleSkenario = async (id) => {
+    if (id === 'GUARDRAIL') {
+      setIsGuardrailsOpen(true);
+      return;
+    }
+    setSkenarioBerjalan(id);
+    try {
+      if (id === 'RUNAWAY') {
+        const po = await ujiRunawayPo(store);
+        const ditahan = po.filter((p) => p.status === 'DITAHAN_GUARDRAIL').length;
+        showToast({ type: 'warn', text: `Runaway PO: ${ditahan} dari ${po.length} PO ditahan guardrail. Reset circuit breaker setelah diperiksa.` });
+        setIsGuardrailsOpen(true);
+      } else if (id === 'SELISIH') {
+        const hasil = await simulasiSelisihStok(store, penyetuju);
+        showToast({ type: 'warn', text: `${hasil.deskripsi}: hitung fisik ${hasil.stok_fisik} vs sistem ${hasil.stok_sistem}. Jalankan agent untuk melihat PO-nya ditahan.` });
+      } else if (id === 'AUDIT') {
+        for (const c of stokFisik) await api.auditStokSelesai(c.inventory_id, penyetuju);
+        showToast({ type: 'success', text: 'Audit stok selesai; Data Confidence kembali normal.' });
+      }
+    } catch (e) {
+      showToast({ type: 'warn', text: e.message });
+    } finally {
+      setSkenarioBerjalan(null);
+      muatUlang();
+    }
   };
 
-  const urgentCount = inventoryList.filter(i => i.agentStatus === 'DRAFT_PO').length;
+  const ringkasan = data?.ringkasan ?? null;
+  const holdsAktif = (data?.holds ?? []).filter((h) => h.status === 'AKTIF');
+  const urgentCount = ringkasan?.po_menunggu ?? 0;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col lg:flex-row font-sans antialiased text-slate-800">
@@ -166,35 +157,58 @@ export default function DashboardApp({ user, onLogout }) {
         setActiveTab={setActiveTab}
         openGuardrailsModal={() => setIsGuardrailsOpen(true)}
         urgentCount={urgentCount}
+        modalDiselamatkan={ringkasan?.modal_diselamatkan_idr ?? 0}
+        explorationBudget={ringkasan?.exploration_budget_idr ?? 0}
+        jumlahHold={holdsAktif.length}
+        breakerTerbuka={breakerTerbuka}
         user={user}
         onLogout={onLogout}
       />
 
       {/* ── Right Content Area ── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header with Embedded Scenario Dropdown in Top-Right */}
+        {/* Top Header: pilihan toko, level otonomi, skenario uji */}
         <Header
-          currentBranch={currentBranch}
-          setCurrentBranch={setCurrentBranch}
-          autonomyLevel={autonomyLevel}
-          setAutonomyLevel={setAutonomyLevel}
-          openGuardrailsModal={() => setIsGuardrailsOpen(true)}
-          urgentCount={urgentCount}
+          stores={stores}
+          store={store}
+          setStore={setStore}
+          perTanggal={ringkasan?.per_tanggal}
+          apiOk={!error}
           activeTab={activeTab}
-          activeScenario={activeScenario}
-          setActiveScenario={applyScenario}
-          onResetScenario={handleReset}
+          skenario={skenario}
+          onSkenario={handleSkenario}
+          skenarioBerjalan={skenarioBerjalan}
         />
 
         {/* Main Body */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto w-full min-w-0">
+          {/* API tidak terjangkau */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-extrabold text-red-900">Data toko gagal dimuat</h4>
+                  <p className="text-xs text-red-700 mt-0.5 leading-relaxed">{error.message}</p>
+                </div>
+              </div>
+              <button
+                onClick={muatUlang}
+                className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${memuat ? 'animate-spin' : ''}`} />
+                Coba lagi
+              </button>
+            </div>
+          )}
+
           {/* ── TAB 1: DASHBOARD UTAMA ── */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6 sm:space-y-8">
-              {/* Row 1: Key Metric Cards (Inventory Health, Modal Terselamatkan, Tingkat Stockout) Berjejer Rapi di Baris Teratas */}
-              <TopKeyMetricsRow kpis={kpis} />
+              {/* Row 1: Key Metric Cards (Inventory Health, Modal Terselamatkan, Risiko Stok Habis) */}
+              <TopKeyMetricsRow ringkasan={ringkasan} jumlahHold={holdsAktif.length} />
 
-              {/* Urgent PO Alert Banner */}
+              {/* Draf PO menunggu 1-Click Approval */}
               {urgentCount > 0 && (
                 <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
                   <div className="flex items-center gap-3.5">
@@ -203,10 +217,10 @@ export default function DashboardApp({ user, onLogout }) {
                     </div>
                     <div>
                       <h4 className="text-sm font-extrabold text-amber-900 leading-snug">
-                        {urgentCount} Produk Fast-Moving Memerlukan Otorisasi Reorder
+                        {urgentCount} Draf PO Menunggu 1-Click Approval
                       </h4>
                       <p className="text-xs text-amber-700 mt-0.5 font-medium">
-                        Stok diprediksi habis dalam &lt; 3 hari. Draf Purchase Order telah disiapkan oleh agen AI.
+                        Disusun agent Rexa, total {rupiah(ringkasan.nilai_po_menunggu_idr)}. Tidak ada yang dikirim ke SAP sebelum Anda setujui.
                       </p>
                     </div>
                   </div>
@@ -234,12 +248,13 @@ export default function DashboardApp({ user, onLogout }) {
               {/* Row 3: Exploration Budget Card (left) & Capital Reallocation Recommendation (right) */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
                 <div className="lg:col-span-4 h-full">
-                  <ExplorationBudgetCard explorationBudget={kpis.explorationBudget} />
+                  <ExplorationBudgetCard holds={data?.holds} />
                 </div>
                 <div className="lg:col-span-8 h-full">
                   <CapitalReallocationCard
-                    onApplyReallocation={handleApplyReallocation}
-                    isReallocated={isReallocated}
+                    realokasi={data?.realokasi}
+                    poList={data?.poList}
+                    onBukaPo={setSelectedPoId}
                   />
                 </div>
               </div>
@@ -247,9 +262,12 @@ export default function DashboardApp({ user, onLogout }) {
               {/* Row 4: Smart Reorder & Predictive Stockout Table */}
               <div>
                 <SmartReorderTable
-                  inventoryList={inventoryList}
-                  onSelectPo={handleSelectPoContoh}
-                  onViewSuppression={item => setSelectedSuppressionItem(item)}
+                  baris={data?.baris}
+                  memuat={memuat}
+                  batas={8}
+                  onLihatSemua={() => setActiveTab('reorder')}
+                  onSelectPo={setSelectedPoId}
+                  onViewSuppression={setSelectedSuppressionItem}
                 />
               </div>
             </div>
@@ -260,9 +278,10 @@ export default function DashboardApp({ user, onLogout }) {
             <div className="space-y-8">
               <PendingPoCard store={store} refreshKey={refreshKey} onBukaPo={setSelectedPoId} />
               <SmartReorderTable
-                inventoryList={inventoryList}
-                onSelectPo={handleSelectPoContoh}
-                onViewSuppression={item => setSelectedSuppressionItem(item)}
+                baris={data?.baris}
+                memuat={memuat}
+                onSelectPo={setSelectedPoId}
+                onViewSuppression={setSelectedSuppressionItem}
               />
             </div>
           )}
@@ -271,16 +290,17 @@ export default function DashboardApp({ user, onLogout }) {
           {activeTab === 'reallocation' && (
             <div className="space-y-8">
               <CapitalReallocationCard
-                onApplyReallocation={handleApplyReallocation}
-                isReallocated={isReallocated}
+                realokasi={data?.realokasi}
+                poList={data?.poList}
+                onBukaPo={setSelectedPoId}
               />
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
                 <div className="lg:col-span-5 h-full">
-                  <ExplorationBudgetCard explorationBudget={kpis.explorationBudget} />
+                  <ExplorationBudgetCard holds={data?.holds} />
                 </div>
                 <div className="lg:col-span-7 h-full">
-                  <KpiGrid kpis={kpis} />
+                  <KpiGrid ringkasan={ringkasan} jumlahHold={holdsAktif.length} />
                 </div>
               </div>
             </div>
@@ -295,7 +315,7 @@ export default function DashboardApp({ user, onLogout }) {
             <span>Agentic AI Hackathon 2026</span>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 font-medium">
-            <span>Agent: Strands Agents + LLM (Ollama lokal / Amazon Bedrock)</span>
+            <span>Agent: Strands Agents + LLM (Ollama qwen3)</span>
             <span className="text-slate-300 hidden sm:inline">&bull;</span>
             <span>ERP: tiruan SAP S/4HANA (OData)</span>
             <span className="text-slate-300 hidden sm:inline">&bull;</span>
@@ -304,19 +324,20 @@ export default function DashboardApp({ user, onLogout }) {
         </footer>
       </div>
 
-      {/* ── AI Operational Assistant (Slide-over Chatbot Copilot) ── */}
-      <AiCopilotWidget inventoryList={inventoryList} kpis={kpis} />
+      {/* ── Copilot (jawaban dari data API) ── */}
+      <AiCopilotWidget data={data} />
 
       {/* ── Modals ── */}
       <PoApprovalModal
         key={selectedPoId}
         poId={selectedPoId}
-        penyetuju={user?.name || 'Manajer toko'}
+        penyetuju={penyetuju}
         onClose={() => setSelectedPoId(null)}
         onSelesai={handlePoDiputuskan}
       />
 
       <SuppressionDetailModal
+        key={selectedSuppressionItem?.sku.inventory_id}
         item={selectedSuppressionItem}
         onClose={() => setSelectedSuppressionItem(null)}
       />
@@ -324,6 +345,11 @@ export default function DashboardApp({ user, onLogout }) {
       <GuardrailsModal
         isOpen={isGuardrailsOpen}
         onClose={() => setIsGuardrailsOpen(false)}
+        guardrail={data?.guardrail}
+        stokFisik={stokFisik}
+        jumlahHold={holdsAktif.length}
+        penyetuju={penyetuju}
+        onBerubah={muatUlang}
       />
     </div>
   );

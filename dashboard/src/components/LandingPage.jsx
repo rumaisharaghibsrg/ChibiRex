@@ -128,7 +128,7 @@ export default function LandingPage({ onLogin, onRegister, onDemo }) {
 
       {/* Footer */}
       <footer className="text-center py-6 text-xs text-slate-400 border-t border-slate-200/80 bg-white">
-        © 2026 Rexa Copilot &bull; AWS Bedrock &amp; SAP BTP S/4HANA Integration &bull; Agentic AI Hackathon
+        © 2026 Rexa Copilot &bull; Strands Agents di AWS &amp; tiruan SAP S/4HANA (OData) &bull; Agentic AI Hackathon
       </footer>
     </div>
   );

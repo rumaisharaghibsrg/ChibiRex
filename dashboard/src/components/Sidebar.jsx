@@ -6,16 +6,22 @@ import {
   ShieldCheck, 
   Compass, 
   LogOut, 
-  CheckCircle2 
+  CheckCircle2,
+  AlertOctagon
 } from 'lucide-react';
+import { rupiahRingkas } from '../lib/format';
 
-export default function Sidebar({ 
-  activeTab, 
-  setActiveTab, 
-  openGuardrailsModal, 
-  urgentCount = 0, 
-  user, 
-  onLogout 
+export default function Sidebar({
+  activeTab,
+  setActiveTab,
+  openGuardrailsModal,
+  urgentCount = 0,
+  modalDiselamatkan = 0,
+  explorationBudget = 0,
+  jumlahHold = 0,
+  breakerTerbuka = false,
+  user,
+  onLogout
 }) {
   const navItems = [
     {
@@ -35,10 +41,16 @@ export default function Sidebar({
       id: "reallocation",
       label: "Realokasi Modal",
       icon: ArrowRightLeft,
-      badge: "Hemat Rp 5.5Jt",
+      badge: modalDiselamatkan > 0 ? rupiahRingkas(modalDiselamatkan) : null,
       badgeColor: 'bg-emerald-100 text-emerald-800'
     }
   ];
+
+  // Status guardrail: merah selama circuit breaker terbuka (menunggu reset manajer).
+  const guardrailBadge = breakerTerbuka
+    ? { text: 'Breaker terbuka', className: 'text-red-700 bg-red-50 border-red-200' }
+    : { text: 'Aktif', className: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+  const GuardrailIcon = breakerTerbuka ? AlertOctagon : ShieldCheck;
 
   return (
     <aside className="w-full lg:w-64 shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-slate-200/80 lg:h-screen lg:sticky lg:top-0 flex flex-col select-none z-20 shadow-xs overflow-x-hidden">
@@ -82,7 +94,6 @@ export default function Sidebar({
                 {user?.business || 'Retail Nusantara Group'}
               </p>
             </div>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Koneksi SAP Aktif" />
           </div>
 
           {/* Navigation Section */}
@@ -129,11 +140,11 @@ export default function Sidebar({
                   className="flex-1 sm:flex-initial lg:hidden flex items-center justify-between px-3 py-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <ShieldCheck className="w-4 h-4 text-[#4e8a6e] shrink-0" />
+                    <GuardrailIcon className={`w-4 h-4 shrink-0 ${breakerTerbuka ? 'text-red-600' : 'text-[#4e8a6e]'}`} />
                     <span className="truncate">Audit &amp; Guardrails</span>
                   </div>
-                  <span className="whitespace-nowrap text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-bold ml-1.5 shrink-0">
-                    Aktif
+                  <span className={`whitespace-nowrap text-xs border px-2 py-0.5 rounded-full font-bold ml-1.5 shrink-0 ${guardrailBadge.className}`}>
+                    {guardrailBadge.text}
                   </span>
                 </button>
               </div>
@@ -149,11 +160,11 @@ export default function Sidebar({
                 className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <ShieldCheck className="w-4 h-4 text-[#4e8a6e] shrink-0" />
+                  <GuardrailIcon className={`w-4 h-4 shrink-0 ${breakerTerbuka ? 'text-red-600' : 'text-[#4e8a6e]'}`} />
                   <span className="truncate">Audit &amp; Guardrails</span>
                 </div>
-                <span className="whitespace-nowrap text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-bold ml-1.5 shrink-0">
-                  Aktif
+                <span className={`whitespace-nowrap text-xs border px-2 py-0.5 rounded-full font-bold ml-1.5 shrink-0 ${guardrailBadge.className}`}>
+                  {guardrailBadge.text}
                 </span>
               </button>
             </div>
@@ -170,21 +181,14 @@ export default function Sidebar({
                 Exploration Budget
               </span>
               <span className="text-[10px] font-bold bg-[#1b4d3e]/10 text-[#1b4d3e] px-1.5 py-0.5 rounded">
-                Q4 2026
+                {jumlahHold} SKU uji
               </span>
             </div>
-            <div className="flex justify-between items-center text-[11px] text-slate-600 mb-2">
-              <span>Terpakai: <strong>Rp 4,2 Jt</strong></span>
-              <span className="font-bold text-[#1b4d3e]">Sisa: Rp 10,8 Jt</span>
+            <div className="text-[11px] text-slate-600 mb-1">
+              Stok uji: <strong className="text-[#1b4d3e]">{rupiahRingkas(explorationBudget)}</strong>
             </div>
-            <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-[#1b4d3e] to-[#4e8a6e] rounded-full" 
-                style={{ width: '28%' }} 
-              />
-            </div>
-            <div className="text-[10px] text-slate-500 mt-2 leading-tight">
-              Pencegah bias algoritma: uji stok berkala untuk produk di-hold.
+            <div className="text-[10px] text-slate-500 mt-1 leading-tight">
+              10% dari setiap reorder yang ditahan tetap dibeli untuk menguji permintaan pasar.
             </div>
           </div>
 
@@ -192,7 +196,7 @@ export default function Sidebar({
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>SAP BTP S/4HANA</span>
+              <span>Tiruan SAP S/4HANA (OData)</span>
             </div>
             <button
               onClick={onLogout}

@@ -58,6 +58,13 @@ export const api = {
   sku: (inventoryId) => request(`/sku/${encodeURIComponent(inventoryId)}`),
   substitusi: (inventoryId) => request(`/sku/${encodeURIComponent(inventoryId)}/substitution`),
 
+  // Hitung fisik (stock opname) dan audit selisihnya
+  stokFisik: (store) => request(`/stores/${store}/stok-fisik`),
+  catatStokFisik: (inventoryId, body) => request(`/sku/${encodeURIComponent(inventoryId)}/stok-fisik`,
+    { method: 'POST', body }),
+  auditStokSelesai: (inventoryId, oleh) => request(`/sku/${encodeURIComponent(inventoryId)}/stok-fisik${query({ oleh })}`,
+    { method: 'DELETE' }),
+
   // Purchase order dan 1-Click Approval
   daftarPo: (params) => request(`/purchase-orders${query(params)}`),
   po: (poId) => request(`/purchase-orders/${poId}`),

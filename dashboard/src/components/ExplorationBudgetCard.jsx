@@ -1,36 +1,26 @@
 import React, { useState } from 'react';
-import { 
-  Compass, 
-  HelpCircle, 
-  ShieldCheck, 
-  CheckCircle2, 
-  RefreshCw, 
-  Sparkles,
-  Info
+import {
+  Compass,
+  HelpCircle,
+  ShieldCheck,
+  Sparkles
 } from 'lucide-react';
+import { angka, rupiah, rupiahRingkas, tanggal } from '../lib/format';
 
-export default function ExplorationBudgetCard({ explorationBudget }) {
+// Exploration budget = stok uji dari setiap Hold Reorder aktif (GET /holds): 10% PO tetap dibeli dan hold ditinjau
+// ulang tiap kuartal, supaya produk yang ditahan tidak dianggap mati selamanya.
+export default function ExplorationBudgetCard({ holds = [] }) {
   const [showExplanation, setShowExplanation] = useState(false);
 
-  const budget = explorationBudget || {
-    allocated: 15000000,
-    utilized: 4200000,
-    remaining: 10800000,
-    validationRate: "78% akurasi demand riil"
-  };
-
-  const formatRupiah = (val) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      maximumFractionDigits: 0
-    }).format(val);
-  };
-
-  const percentageUsed = Math.round((budget.utilized / budget.allocated) * 100);
+  const aktif = holds.filter((h) => h.status === 'AKTIF');
+  const nilaiUji = aktif.reduce((t, h) => t + h.nilai_uji_idr, 0);
+  const unitUji = aktif.reduce((t, h) => t + h.qty_uji, 0);
+  const modalDitahan = aktif.reduce((t, h) => t + h.modal_ditahan_idr, 0);
+  const porsi = modalDitahan ? Math.round((nilaiUji / modalDitahan) * 100) : 0;
+  const reviewBerikut = aktif.map((h) => h.review_pada).sort()[0];
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 flex flex-col justify-between">
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 flex flex-col justify-between h-full">
       {/* Header */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -68,34 +58,34 @@ export default function ExplorationBudgetCard({ explorationBudget }) {
               Jika produk yang melambat di-hold terus-menerus, penjualan akan menjadi <strong>nol</strong> karena barang kosong di rak. Algoritma konvensional akan mengira produk itu <em>mati selamanya</em> (Death Spiral).
             </p>
             <p className="leading-relaxed text-slate-600 text-[11px]">
-              Rexa mengalokasikan budget kuartalan terkontrol ini untuk memesan stok uji sampel berkala, menguji apakah permintaan pasar bangkit kembali tanpa mempertaruhkan modal besar.
+              Karena itu setiap Hold Reorder tetap membeli 10% dari jumlah PO sebagai stok uji, dan hold ditinjau ulang tiap kuartal untuk melihat apakah permintaan bangkit kembali.
             </p>
           </div>
         )}
 
         {/* Progress Numbers */}
         <div className="grid grid-cols-2 gap-3 mt-4">
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-              Budget Tersedia (Q4)
+              Nilai Stok Uji
             </span>
-            <span className="text-lg font-extrabold text-slate-900 mt-0.5 block font-mono">
-              {formatRupiah(budget.remaining)}
+            <span className="text-lg font-extrabold text-slate-900 mt-0.5 block font-mono truncate">
+              {rupiahRingkas(nilaiUji)}
             </span>
             <span className="text-[10px] text-slate-400">
-              Dari total alokasi {formatRupiah(budget.allocated)}
+              {angka(unitUji)} unit · {rupiah(nilaiUji)}
             </span>
           </div>
 
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-              Telah Diuji Coba
+              Reorder Ditahan
             </span>
-            <span className="text-lg font-extrabold text-purple-700 mt-0.5 block font-mono">
-              {formatRupiah(budget.utilized)}
+            <span className="text-lg font-extrabold text-purple-700 mt-0.5 block font-mono truncate">
+              {rupiahRingkas(modalDitahan)}
             </span>
             <span className="text-[10px] text-slate-400">
-              {percentageUsed}% kuota kuartal ini
+              Nilai PO tidak dibeli penuh
             </span>
           </div>
         </div>
@@ -103,27 +93,35 @@ export default function ExplorationBudgetCard({ explorationBudget }) {
         {/* Progress Bar */}
         <div className="mt-4">
           <div className="flex justify-between items-center text-xs font-semibold text-slate-600 mb-1.5">
-            <span>Alokasi Uji Sampel Kuartal Ini</span>
-            <span className="text-purple-700 font-bold font-mono">{percentageUsed}% Terpakai</span>
+            <span>Porsi stok uji dari reorder ditahan</span>
+            <span className="text-purple-700 font-bold font-mono">{porsi}%</span>
           </div>
           <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-gradient-to-r from-purple-600 to-[#1b4d3e] rounded-full transition-all duration-700"
-              style={{ width: `${percentageUsed}%` }}
+              style={{ width: `${porsi}%` }}
             />
           </div>
         </div>
+
+        {aktif.length === 0 && (
+          <p className="mt-4 text-[11px] text-slate-500 leading-relaxed">
+            Belum ada Hold Reorder di toko ini. Jalankan agent: setiap reorder yang ditahan menyisakan stok uji di sini.
+          </p>
+        )}
       </div>
 
       {/* Footer Insight */}
-      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-500">
         <span className="flex items-center gap-1.5 font-medium">
           <ShieldCheck className="w-3.5 h-3.5 text-purple-700" />
-          <span>4 SKU uji coba pasar aktif</span>
+          <span>{aktif.length} SKU uji pasar aktif</span>
         </span>
-        <span className="font-bold text-slate-700">
-          Validasi: {budget.validationRate}
-        </span>
+        {reviewBerikut && (
+          <span className="font-bold text-slate-700 text-right">
+            Review: {tanggal(reviewBerikut)}
+          </span>
+        )}
       </div>
     </div>
   );

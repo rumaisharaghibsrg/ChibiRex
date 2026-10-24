@@ -1,55 +1,52 @@
 import React from 'react';
-import { 
-  Lock, 
-  AlertTriangle, 
-  Clock, 
-  Compass, 
-  ArrowUpRight,
-  ShieldCheck
+import {
+  Lock,
+  Clock,
+  Compass,
+  PackageX,
+  ArrowUpRight
 } from 'lucide-react';
+import { angka, rupiah, rupiahRingkas } from '../lib/format';
 
-export default function KpiGrid({ kpis }) {
-  const formatRupiah = (val) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      maximumFractionDigits: 0
-    }).format(val);
-  };
+export default function KpiGrid({ ringkasan, jumlahHold = 0 }) {
+  if (!ringkasan) return null;
+
+  const persenTertahan = ringkasan.nilai_stok_idr ? (ringkasan.modal_tertahan_idr / ringkasan.nilai_stok_idr) * 100 : 0;
+  const menumpuk = (ringkasan.jumlah_status?.OVERSTOCK ?? 0) + (ringkasan.jumlah_status?.DEADSTOCK ?? 0);
 
   const cards = [
     {
       title: "Modal Terselamatkan",
-      value: formatRupiah(kpis.capitalSaved),
-      subtitle: `Hemat carrying cost simpan: ${formatRupiah(kpis.carryingCostSaved)}/thn`,
-      trend: "+Rp 14.5 Jt bln ini",
+      value: rupiah(ringkasan.modal_diselamatkan_idr),
+      subtitle: `Dari ${jumlahHold} Hold Reorder aktif`,
+      trend: "Siap dialihkan",
       icon: Lock,
       iconColor: "text-[#1b4d3e]",
       bgColor: "bg-emerald-50/70"
     },
     {
-      title: "Tingkat Kejadian Stockout",
-      value: `${kpis.stockoutRate}%`,
-      subtitle: `Baseline industri: ${kpis.stockoutBaseline}% (Turun 81%)`,
-      trend: "-9.3% risiko kehilangan pelanggan",
-      icon: AlertTriangle,
+      title: "Modal Tertahan",
+      value: rupiahRingkas(ringkasan.modal_tertahan_idr),
+      subtitle: `${angka(menumpuk)} SKU overstock/deadstock`,
+      trend: `${angka(persenTertahan)}% nilai stok`,
+      icon: PackageX,
       iconColor: "text-amber-600",
       bgColor: "bg-amber-50/70"
     },
     {
-      title: "Waktu Proses Reorder PO",
-      value: `${kpis.poProcessingTimeMinutes} Menit`,
-      subtitle: `Manual sebelumnya: ${kpis.poProcessingTimeBaselineHours} jam kerja tim`,
-      trend: "98.5% lebih cepat ke SAP",
+      title: "PO Menunggu Approval",
+      value: `${ringkasan.po_menunggu} PO`,
+      subtitle: `Nilai ${rupiah(ringkasan.nilai_po_menunggu_idr)}`,
+      trend: `${ringkasan.po_disetujui} disetujui · ${ringkasan.po_ditahan_guardrail} ditahan`,
       icon: Clock,
       iconColor: "text-blue-600",
       bgColor: "bg-blue-50/70"
     },
     {
-      title: "Exploration Budget (Q4)",
-      value: formatRupiah(kpis.explorationBudget?.remaining || 10800000),
-      subtitle: `Total kuartalan: ${formatRupiah(kpis.explorationBudget?.allocated || 15000000)} (Terpakai 28%)`,
-      trend: "Pencegah death spiral aktif",
+      title: "Exploration Budget",
+      value: rupiah(ringkasan.exploration_budget_idr),
+      subtitle: "Stok uji 10% dari reorder yang ditahan",
+      trend: "Pencegah death spiral",
       icon: Compass,
       iconColor: "text-purple-600",
       bgColor: "bg-purple-50/70"
@@ -61,8 +58,8 @@ export default function KpiGrid({ kpis }) {
       {cards.map((card, idx) => {
         const Icon = card.icon;
         return (
-          <div 
-            key={idx} 
+          <div
+            key={idx}
             className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs flex flex-col justify-between hover:shadow-md hover:border-slate-300 transition-all"
           >
             <div>
@@ -77,13 +74,13 @@ export default function KpiGrid({ kpis }) {
               </div>
 
               {/* Big Number */}
-              <div className="text-3xl lg:text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
+              <div className="text-2xl lg:text-2xl font-extrabold text-slate-900 tracking-tight leading-tight tabular-nums">
                 {card.value}
               </div>
             </div>
 
             {/* Bottom Insight */}
-            <div className="pt-4 mt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <div className="pt-4 mt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
               <span className="truncate pr-2 font-medium">{card.subtitle}</span>
               <span className="flex items-center text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md whitespace-nowrap shrink-0">
                 <ArrowUpRight className="w-3 h-3 mr-0.5" />

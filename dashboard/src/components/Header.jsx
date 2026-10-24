@@ -1,90 +1,71 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ChevronDown, 
-  MapPin, 
+import React from 'react';
+import {
+  ChevronDown,
+  MapPin,
   SlidersHorizontal,
   FlaskConical,
-  RotateCcw,
-  Check
+  Check,
+  Database
 } from 'lucide-react';
+import { angka, tanggal } from '../lib/format';
 
-export default function Header({ 
-  currentBranch, 
-  setCurrentBranch, 
-  autonomyLevel, 
-  setAutonomyLevel, 
-  openGuardrailsModal,
-  urgentCount = 0,
+// Hanya Level 2 yang dijalankan sistem sekarang; Level 3 baru masuk Fase 3 proposal.
+const levelOtonomi = [
+  {
+    level: "Level 1",
+    title: "Preskriptif",
+    desc: "Agen hanya menyajikan analisis dan rekomendasi di layar.",
+    status: "Belum aktif"
+  },
+  {
+    level: "Level 2",
+    title: "Draf + Persetujuan",
+    desc: "Agen menyusun draf PO; PO baru dikirim ke SAP setelah 1-Click Approval manajer.",
+    status: "Aktif"
+  },
+  {
+    level: "Level 3",
+    title: "Otomatis Penuh",
+    desc: "PO otomatis untuk SKU rutin bernilai rendah di bawah batas belanja.",
+    status: "Segera hadir"
+  }
+];
+
+export default function Header({
+  stores = [],
+  store,
+  setStore,
+  perTanggal,
+  apiOk = true,
   activeTab,
-  activeScenario = 'NORMAL',
-  setActiveScenario,
-  onResetScenario
+  skenario = [],
+  onSkenario,
+  skenarioBerjalan
 }) {
-  const [timeStr, setTimeStr] = useState('');
-
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setTimeStr(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB');
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const branches = [
-    "Hub Jakarta Pusat (Flagship)",
-    "Gudang Surabaya Barat",
-    "Central Roastery Bandung",
-    "Semua Cabang (Konsolidasi)"
-  ];
-
-  const scenarios = [
-    { 
-      id: "NORMAL",        
-      label: "Normal",         
-      desc: "Kondisi operasional stabil" 
-    },
-    { 
-      id: "FAST_MOVING",   
-      label: "Produk Laris",    
-      desc: "Stok SKU-001 menipis kritis" 
-    },
-    { 
-      id: "SLOW_MOVING",   
-      label: "Produk Lambat",   
-      desc: "Suppression Engine tahan PO SKU-002" 
-    },
-    { 
-      id: "REALLOCATION",  
-      label: "Realokasi Dana",  
-      desc: "Alihkan modal Rp 5.5 Jt ke fast-moving" 
-    },
-  ];
-
-  const currentScenarioObj = scenarios.find(s => s.id === activeScenario) || scenarios[0];
+  const tokoAktif = stores.find((s) => s.store === store);
+  const labelToko = tokoAktif ? `Toko ${tokoAktif.store} · ${tokoAktif.kota}` : `Toko ${store}`;
 
   const getPageInfo = () => {
     switch (activeTab) {
       case 'dashboard':
         return {
           title: "Executive Inventory Dashboard",
-          subtitle: "Pantauan real-time kesehatan inventaris, efisiensi modal kas, & perputaran barang"
+          subtitle: "Kesehatan inventaris, modal kas, dan tindakan agent Rexa untuk toko yang dipilih"
         };
       case 'reorder':
         return {
           title: "Smart Reorder & Predictive Stockout",
-          subtitle: "Tabel pengadaan preskriptif, prediksi tanggal kehabisan stok, & 1-Click PO SAP"
+          subtitle: "SKU yang perlu reorder, prediksi tanggal habis, dan 1-Click Approval PO ke SAP"
         };
       case 'reallocation':
         return {
           title: "Capital Reallocation Engine",
-          subtitle: "Rekomendasi pengalihan likuiditas dari deadstock ke produk fast-moving beromzet tinggi"
+          subtitle: "Modal dari reorder yang ditahan dialihkan ke SKU yang penjualannya naik"
         };
       default:
         return {
           title: "Rexa Inventory Copilot",
-          subtitle: "Sistem Agentic AI pengaman rantai pasok dan likuiditas kas usaha"
+          subtitle: "Agentic AI untuk stok dan arus kas usaha"
         };
     }
   };
@@ -105,125 +86,109 @@ export default function Header({
 
       {/* Right Controls (Wrap rapi tanpa terpotong di HP/tablet) */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full md:w-auto justify-start md:justify-end">
-        {/* Branch Selector */}
+        {/* Branch Selector (GET /stores) */}
         <div className="relative group">
           <button className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-xs font-bold text-slate-800 hover:bg-slate-100 transition-colors">
             <MapPin className="w-3.5 h-3.5 text-[#1b4d3e] shrink-0" />
-            <span className="truncate max-w-[130px] sm:max-w-none">{currentBranch}</span>
+            <span className="truncate max-w-[150px] sm:max-w-none">{labelToko}</span>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:rotate-180 transition-transform shrink-0" />
           </button>
 
-          <div className="absolute left-0 sm:left-auto right-0 mt-2 w-64 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.12)] border border-slate-200 py-2 hidden group-hover:block z-50">
+          <div className="absolute left-0 sm:left-auto right-0 mt-2 w-72 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.12)] border border-slate-200 py-2 hidden group-hover:block z-50">
             <div className="px-4 py-1.5 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-              Pilih Cabang Gudang
+              Pilih Toko ({stores.length} toko Bibitor)
             </div>
-            {branches.map((b) => (
-              <button
-                key={b}
-                onClick={() => setCurrentBranch(b)}
-                className={`w-full text-left px-4 py-2.5 text-xs font-semibold transition-colors ${
-                  currentBranch === b ? 'text-[#1b4d3e] font-bold bg-[#eaf4ef]' : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                {b}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Autonomy Level Pill */}
-        <div className="relative group/auto">
-          <button className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-[#eaf4ef] border border-emerald-200 text-xs font-bold text-[#1b4d3e] hover:bg-[#d8ece2] transition-colors">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-[#1b4d3e] shrink-0" />
-            <span>{autonomyLevel}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-[#4e8a6e] group-hover/auto:rotate-180 transition-transform shrink-0" />
-          </button>
-
-          <div className="absolute left-0 sm:left-auto right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.12)] border border-slate-200 p-3 hidden group-hover/auto:block z-50">
-            <div className="text-xs font-bold text-slate-900 mb-2 px-1 flex items-center justify-between">
-              <span>Tingkat Otonomi Agen</span>
-              <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">Proposal Guardrails</span>
-            </div>
-            <div className="space-y-1">
-              {[
-                { 
-                  level: "Level 1", 
-                  title: "Preskriptif", 
-                  desc: "Agen hanya menyajikan analisis dan rekomendasi pasif di layar." 
-                },
-                { 
-                  level: "Level 2", 
-                  title: "Draf + Persetujuan (Default)", 
-                  desc: "Agen menyusun draf PO ke SAP BTP, namun eksekusi wajib 1-Click Approval Manajer." 
-                },
-                { 
-                  level: "Level 3", 
-                  title: "Otomatis Penuh", 
-                  desc: "PO otomatis berlaku khusus SKU rutin bernilai rendah di bawah batas spending." 
-                }
-              ].map((item) => (
+            <div className="max-h-80 overflow-y-auto">
+              {stores.map((s) => (
                 <button
-                  key={item.level}
-                  onClick={() => setAutonomyLevel(item.level)}
-                  className={`w-full text-left p-2.5 rounded-xl text-xs transition-colors ${
-                    autonomyLevel.includes(item.level)
-                      ? 'bg-[#1b4d3e] text-white font-bold'
-                      : 'hover:bg-slate-50 text-slate-700'
+                  key={s.store}
+                  onClick={() => setStore(s.store)}
+                  className={`w-full text-left px-4 py-2 text-xs transition-colors flex items-center justify-between gap-3 ${
+                    store === s.store ? 'text-[#1b4d3e] font-bold bg-[#eaf4ef]' : 'text-slate-700 font-semibold hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold">{item.level}: {item.title}</span>
-                  </div>
-                  <div className={`text-[10px] mt-0.5 leading-snug ${autonomyLevel.includes(item.level) ? 'text-[#a2d2bf]' : 'text-slate-500'}`}>
-                    {item.desc}
-                  </div>
+                  <span className="truncate">Toko {s.store} · {s.kota}{s.store === 74 ? ' (demo)' : ''}</span>
+                  <span className="text-[10px] text-slate-400 font-medium shrink-0">
+                    {angka(s.perlu_reorder)} perlu reorder
+                  </span>
                 </button>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Coba Skenario Dropdown */}
-        {setActiveScenario && (
+        {/* Autonomy Level Pill (informasi; hanya Level 2 yang berjalan) */}
+        <div className="relative group/auto">
+          <button className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-[#eaf4ef] border border-emerald-200 text-xs font-bold text-[#1b4d3e] hover:bg-[#d8ece2] transition-colors">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[#1b4d3e] shrink-0" />
+            <span>Level 2 (Draf PO)</span>
+            <ChevronDown className="w-3.5 h-3.5 text-[#4e8a6e] group-hover/auto:rotate-180 transition-transform shrink-0" />
+          </button>
+
+          <div className="absolute left-0 sm:left-auto right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.12)] border border-slate-200 p-3 hidden group-hover/auto:block z-50">
+            <div className="text-xs font-bold text-slate-900 mb-2 px-1">
+              Tingkat Otonomi Agen
+            </div>
+            <div className="space-y-1">
+              {levelOtonomi.map((item) => {
+                const aktif = item.status === 'Aktif';
+                return (
+                  <div
+                    key={item.level}
+                    className={`w-full text-left p-2.5 rounded-xl text-xs ${
+                      aktif ? 'bg-[#1b4d3e] text-white font-bold' : 'text-slate-500'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold">{item.level}: {item.title}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        aktif ? 'bg-white/15 text-[#a2d2bf]' : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {item.status}
+                      </span>
+                    </div>
+                    <div className={`text-[10px] mt-0.5 leading-snug ${aktif ? 'text-[#a2d2bf]' : 'text-slate-400'}`}>
+                      {item.desc}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Skenario Uji Guardrail (memanggil API sungguhan) */}
+        {onSkenario && (
           <div className="relative group/scenario">
             <button className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-xs font-bold text-slate-800 hover:bg-slate-100 transition-colors">
-              <FlaskConical className="w-3.5 h-3.5 text-[#1b4d3e] shrink-0" />
-              <span>Skenario: <span className="text-[#1b4d3e] font-extrabold">{currentScenarioObj.label}</span></span>
+              {skenarioBerjalan ? (
+                <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-[#1b4d3e] border-t-transparent rounded-full shrink-0" />
+              ) : (
+                <FlaskConical className="w-3.5 h-3.5 text-[#1b4d3e] shrink-0" />
+              )}
+              <span>Skenario Uji</span>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover/scenario:rotate-180 transition-transform shrink-0" />
             </button>
 
-            <div className="absolute left-0 sm:left-auto right-0 mt-2 w-72 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.12)] border border-slate-200 p-2.5 hidden group-hover/scenario:block z-50">
-              <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center justify-between border-b border-slate-100 pb-2 mb-1.5">
-                <span>Pilih Skenario Demo</span>
-                {onResetScenario && (
-                  <button 
-                    onClick={onResetScenario}
-                    className="text-[10px] text-slate-500 hover:text-slate-900 flex items-center gap-1 font-semibold hover:underline"
-                    title="Reset ke kondisi awal"
-                  >
-                    <RotateCcw className="w-2.5 h-2.5" />
-                    Reset
-                  </button>
-                )}
+            <div className="absolute left-0 sm:left-auto right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.12)] border border-slate-200 p-2.5 hidden group-hover/scenario:block z-50">
+              <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 tracking-wider border-b border-slate-100 pb-2 mb-1.5">
+                Uji guardrail dengan data asli
               </div>
               <div className="space-y-1">
-                {scenarios.map((sc) => {
-                  const isCurrent = activeScenario === sc.id;
+                {skenario.map((sc) => {
+                  const nonaktif = sc.disabled || Boolean(skenarioBerjalan);
                   return (
                     <button
                       key={sc.id}
-                      onClick={() => setActiveScenario(sc.id)}
-                      className={`w-full text-left p-2.5 rounded-xl text-xs transition-colors ${
-                        isCurrent
-                          ? 'bg-[#1b4d3e] text-white font-bold'
-                          : 'text-slate-700 hover:bg-slate-50'
-                      }`}
+                      onClick={() => onSkenario(sc.id)}
+                      disabled={nonaktif}
+                      className="w-full text-left p-2.5 rounded-xl text-xs transition-colors text-slate-700 hover:bg-slate-50 disabled:opacity-45 disabled:hover:bg-transparent disabled:cursor-not-allowed"
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-bold">{sc.label}</span>
-                        {isCurrent && <Check className="w-3.5 h-3.5 text-[#a2d2bf]" />}
+                        {skenarioBerjalan === sc.id && <Check className="w-3.5 h-3.5 text-[#1b4d3e]" />}
                       </div>
-                      <div className={`text-[10px] mt-0.5 leading-snug ${isCurrent ? 'text-[#a2d2bf]' : 'text-slate-400'}`}>
+                      <div className="text-[10px] mt-0.5 leading-snug text-slate-400">
                         {sc.desc}
                       </div>
                     </button>
@@ -234,12 +199,16 @@ export default function Header({
           </div>
         )}
 
-        {/* Live Status Pill & Waktu */}
-        <div className="flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-xs font-semibold text-slate-700">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-          <span className="hidden sm:inline">Live Sync</span>
-          <span className="text-slate-300 hidden sm:inline">|</span>
-          <span className="text-slate-500 font-mono text-[11px]">{timeStr || '14:21 WIB'}</span>
+        {/* Status API & tanggal data */}
+        <div
+          className="flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-xs font-semibold text-slate-700"
+          title={apiOk ? 'API Rexa terhubung' : 'API Rexa tidak bisa dihubungi'}
+        >
+          <span className={`w-2 h-2 rounded-full shrink-0 ${apiOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
+          <Database className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
+          <span className="text-slate-500 text-[11px]">
+            Data simulasi{perTanggal ? ` · ${tanggal(perTanggal)}` : ''}
+          </span>
         </div>
       </div>
     </header>

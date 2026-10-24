@@ -7,21 +7,19 @@ import {
   Maximize2, 
   Minimize2, 
   RotateCcw,
-  ArrowUp,
-  MessageSquare
+  ArrowUp
 } from 'lucide-react';
-import { quickPrompts, getCopilotAnswer } from '../data/copilotKnowledge';
+import { quickPrompts, jawab } from '../lib/copilot';
 
-export default function AiCopilotWidget({ inventoryList, kpis }) {
+export default function AiCopilotWidget({ data }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [inputQuery, setInputQuery] = useState('');
   const [messages, setMessages] = useState([
     {
       sender: 'assistant',
-      text: 'Halo! Saya **Rexa AI Copilot** (Read-Only Secure Assistant). Saya dapat menganalisis kondisi kas gudang, mendeteksi modal tertahan pada deadstock, serta merekomendasikan tindakan restock secara real-time. Ada yang ingin Anda tanyakan?',
-      tag: 'System Ready',
-      confidence: 99.8,
+      text: 'Halo! Saya **Rexa Copilot** (read-only). Saya menjawab dari data API toko yang sedang dibuka: modal yang diselamatkan, draf PO, Hold Reorder, realokasi, risiko stok habis, dan status guardrail. Ada yang ingin Anda tanyakan?',
+      tag: 'Siap',
       timestamp: 'Baru saja'
     }
   ]);
@@ -53,26 +51,24 @@ export default function AiCopilotWidget({ inventoryList, kpis }) {
     setIsTyping(true);
 
     setTimeout(() => {
-      const answer = getCopilotAnswer(query, inventoryList, kpis);
+      const answer = jawab(query, data);
       const assistantMsg = {
         sender: 'assistant',
         text: answer.text,
         tag: answer.tag,
-        confidence: answer.confidence,
         timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       };
       setMessages((prev) => [...prev, assistantMsg]);
       setIsTyping(false);
-    }, 600);
+    }, 300);
   };
 
   const resetChat = () => {
     setMessages([
       {
         sender: 'assistant',
-        text: 'Riwayat percakapan telah dibersihkan. Silakan tanyakan informasi lain terkait stok barang atau arus kas bisnis Anda.',
-        tag: 'System Ready',
-        confidence: 99.8,
+        text: 'Riwayat percakapan telah dibersihkan. Silakan tanyakan informasi lain terkait stok barang atau arus kas toko ini.',
+        tag: 'Siap',
         timestamp: 'Baru saja'
       }
     ]);
@@ -97,9 +93,9 @@ export default function AiCopilotWidget({ inventoryList, kpis }) {
           <div className="text-left leading-tight">
             <div className="font-extrabold text-xs text-white flex items-center gap-1.5">
               <span>Tanya Rexa Copilot</span>
-              <span className="text-[9px] bg-emerald-600/80 px-1.5 py-0.2 rounded font-bold text-white">AI</span>
+              <span className="text-[9px] bg-emerald-600/80 px-1.5 py-0.2 rounded font-bold text-white">Data</span>
             </div>
-            <div className="text-[10px] text-[#a2d2bf] font-medium">Asisten Operasional Kas</div>
+            <div className="text-[10px] text-[#a2d2bf] font-medium">Tanya jawab dari data toko</div>
           </div>
         </button>
       )}
@@ -128,7 +124,7 @@ export default function AiCopilotWidget({ inventoryList, kpis }) {
                 </div>
                 <div className="text-[10px] text-[#a2d2bf] flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  <span>Secure LLM Sandbox &bull; AWS Bedrock</span>
+                  <span>Jawaban dari data API &bull; belum memakai LLM</span>
                 </div>
               </div>
             </div>
@@ -180,11 +176,6 @@ export default function AiCopilotWidget({ inventoryList, kpis }) {
                         {!isUser && msg.tag && (
                           <div className="flex items-center justify-between text-[10px] font-bold text-[#1b4d3e] mb-1.5 pb-1 border-b border-slate-100">
                             <span className="uppercase tracking-wider">{msg.tag}</span>
-                            {msg.confidence && (
-                              <span className="text-slate-400 font-medium">
-                                {msg.confidence}% Akurasi
-                              </span>
-                            )}
                           </div>
                         )}
 
@@ -218,7 +209,7 @@ export default function AiCopilotWidget({ inventoryList, kpis }) {
                     <span className="inline-block w-2 h-2 rounded-full bg-[#1b4d3e] animate-bounce [animation-delay:0.2s]" />
                     <span className="inline-block w-2 h-2 rounded-full bg-[#1b4d3e] animate-bounce [animation-delay:0.4s]" />
                     <span className="text-[11px] text-[#1b4d3e] font-bold ml-1">
-                      Rexa sedang menganalisis data inventaris...
+                      Rexa sedang membaca data toko...
                     </span>
                   </div>
                 )}
@@ -228,9 +219,9 @@ export default function AiCopilotWidget({ inventoryList, kpis }) {
               {/* Quick Prompts Carousel */}
               <div className="p-2.5 bg-white border-t border-slate-200 overflow-x-auto whitespace-nowrap">
                 <div className="flex items-center gap-2 px-1">
-                  {quickPrompts.map((p, idx) => (
+                  {quickPrompts.map((p) => (
                     <button
-                      key={idx}
+                      key={p.id}
                       onClick={() => handleSend(p.query)}
                       className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-full bg-slate-50 hover:bg-[#eaf4ef] text-slate-700 hover:text-[#1b4d3e] border border-slate-200 transition-colors shrink-0"
                     >
@@ -246,7 +237,7 @@ export default function AiCopilotWidget({ inventoryList, kpis }) {
                 <div className="flex items-center gap-2 bg-slate-50 rounded-xl border border-slate-300 px-3 py-1.5 focus-within:ring-2 focus-within:ring-[#1b4d3e]/30 focus-within:bg-white focus-within:border-[#1b4d3e] transition-all">
                   <input
                     type="text"
-                    placeholder="Tanya kueri data inventaris / arus kas..."
+                    placeholder="Tanya soal modal, PO, hold, risiko stok..."
                     value={inputQuery}
                     onChange={(e) => setInputQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
@@ -266,7 +257,7 @@ export default function AiCopilotWidget({ inventoryList, kpis }) {
                 </div>
 
                 <div className="mt-2 text-center text-[10px] text-slate-400">
-                  Rexa Copilot read-only secure: seluruh draf PO wajib disetujui via tombol otorisasi REST API.
+                  Copilot read-only: tidak bisa membuat atau menyetujui PO. Persetujuan hanya lewat 1-Click Approval.
                 </div>
               </div>
             </>
