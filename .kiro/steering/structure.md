@@ -54,6 +54,7 @@ The FastAPI application. All agent actions and dashboard calls go through here; 
 | `settings.py` | `Settings` dataclass — guardrail thresholds, agent mode (`lokal`/`antrian`/`mati`), CORS origins, SAP config, worker timeouts |
 | `guardrails.py` | Guardrail check helpers called by route handlers |
 | `state.py` | SQLite connection helpers: `transaksi()` and `baca()` context managers |
+| `simulasi.py` | Simulation clock from 31 Dec 2016: daily demand depletes stock, approved POs arrive after lead time. `terapkan()` builds a per-request temp table named `sku_metrics` that shadows the read-only DuckDB table, so existing queries read simulated stock unchanged |
 | `sap.py` | SAP OData V2 integration helpers (CSRF fetch + PO POST) |
 | `agent_runner.py` | `PenjalanAgent` — runs agent in local thread or queue mode; `jalankan_agent_lokal()` |
 | `lambda_handler.py` | `handler = Mangum(app)` — AWS Lambda entry point |

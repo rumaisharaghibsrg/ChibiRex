@@ -45,6 +45,9 @@ class Settings:
     exploration_review_hari: int = 90  # hold ditinjau ulang tiap kuartal
     tren_naik_min: float = 1.2  # SKU tujuan pengalihan modal minimal naik 20%
 
+    # Jam simulasi (api/simulasi.py): waktu maju dari 31 Des 2016 lewat tombol dashboard atau otomatis.
+    simulasi_hari_maks: int = 90  # satu kuartal, sama dengan siklus review Hold Reorder
+
     # SAP: PO yang disetujui manajer dikirim ke URL ini. Default-nya tiruan SAP yang ikut ter-mount di
     # API ini (/sap); ganti lewat CHIBIREX_SAP_URL untuk SAP lain (misalnya tiruan di port terpisah).
     sap_base_url: str = os.environ.get("CHIBIREX_SAP_URL", "http://127.0.0.1:8000/sap" + SERVICE)

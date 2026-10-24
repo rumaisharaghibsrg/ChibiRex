@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import TopKeyMetricsRow from './TopKeyMetricsRow';
@@ -21,7 +21,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { rupiah } from '../lib/format';
+import { rupiah, tanggal } from '../lib/format';
 import { RASIO_BORONGAN, simulasiSelisihStok, ujiRunawayPo } from '../lib/skenario';
 import { useDataToko } from '../lib/useDataToko';
 
@@ -52,6 +52,52 @@ export default function DashboardApp({ user, onLogout }) {
   };
 
   const muatUlang = useCallback(() => setRefreshKey(k => k + 1), []);
+
+  // ── Jam simulasi: setiap hari simulasi berganti (tombol, mode otomatis, atau dari tab lain), data dimuat ulang ──
+  const [sim, setSim] = useState(null);
+  const hariSimRef = useRef(null);
+  const terimaSim = useCallback((s) => {
+    setSim(s);
+    if (hariSimRef.current !== null && hariSimRef.current !== s.hari_ke) muatUlang();
+    hariSimRef.current = s.hari_ke;
+  }, [muatUlang]);
+
+  const simOtomatis = Boolean(sim?.otomatis);
+  const detikPerHari = sim?.detik_per_hari ?? 60;
+  useEffect(() => {
+    let aktif = true;
+    const cek = () => api.simulasi().then((s) => aktif && terimaSim(s)).catch(() => {});
+    cek();
+    // Mode otomatis dicek lebih sering supaya pergantian hari cepat terlihat.
+    const ulang = setInterval(cek, simOtomatis ? Math.min(5000, detikPerHari * 500) : 15000);
+    return () => {
+      aktif = false;
+      clearInterval(ulang);
+    };
+  }, [terimaSim, simOtomatis, detikPerHari]);
+
+  const handleMajuSimulasi = async (hari) => {
+    try {
+      const s = await api.majuSimulasi(hari, penyetuju);
+      terimaSim(s);
+      showToast({ type: 'info', text: `Waktu simulasi maju ke ${tanggal(s.tanggal)} (hari +${s.hari_ke}).` });
+    } catch (e) {
+      showToast({ type: 'warn', text: e.message });
+    }
+  };
+
+  const handleOtomatisSimulasi = async (aktif, detik) => {
+    try {
+      const s = await api.otomatisSimulasi(aktif, detik, penyetuju);
+      terimaSim(s);
+      showToast({
+        type: 'info',
+        text: aktif ? `Waktu simulasi berjalan otomatis: 1 hari tiap ${s.detik_per_hari} detik.` : 'Waktu simulasi dijeda.',
+      });
+    } catch (e) {
+      showToast({ type: 'warn', text: e.message });
+    }
+  };
 
   const handleAgentSelesai = useCallback((run) => {
     muatUlang();
@@ -172,7 +218,9 @@ export default function DashboardApp({ user, onLogout }) {
           stores={stores}
           store={store}
           setStore={setStore}
-          perTanggal={ringkasan?.per_tanggal}
+          sim={sim}
+          onMajuSimulasi={handleMajuSimulasi}
+          onOtomatisSimulasi={handleOtomatisSimulasi}
           apiOk={!error}
           activeTab={activeTab}
           skenario={skenario}
@@ -241,7 +289,7 @@ export default function DashboardApp({ user, onLogout }) {
                   <AgentRunPanel store={store} onSelesai={handleAgentSelesai} onBukaPo={setSelectedPoId} />
                 </div>
                 <div className="lg:col-span-4 h-full">
-                  <PendingPoCard store={store} refreshKey={refreshKey} onBukaPo={setSelectedPoId} />
+                  <PendingPoCard store={store} refreshKey={refreshKey} tanggalSim={sim?.tanggal} onBukaPo={setSelectedPoId} />
                 </div>
               </div>
 
@@ -276,7 +324,7 @@ export default function DashboardApp({ user, onLogout }) {
           {/* ── TAB 2: SMART REORDER & STOK ── */}
           {activeTab === 'reorder' && (
             <div className="space-y-8">
-              <PendingPoCard store={store} refreshKey={refreshKey} onBukaPo={setSelectedPoId} />
+              <PendingPoCard store={store} refreshKey={refreshKey} tanggalSim={sim?.tanggal} onBukaPo={setSelectedPoId} />
               <SmartReorderTable
                 baris={data?.baris}
                 memuat={memuat}

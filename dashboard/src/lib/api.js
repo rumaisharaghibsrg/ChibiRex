@@ -47,6 +47,12 @@ function query(params = {}) {
 const keputusan = (oleh, catatan) => ({ method: 'POST', body: { oleh, catatan } });
 
 export const api = {
+  // Jam simulasi: waktu maju dari 31 Des 2016 (data terakhir Bibitor)
+  simulasi: () => request('/simulasi'),
+  majuSimulasi: (hari, oleh) => request('/simulasi/maju', { method: 'POST', body: { hari, oleh } }),
+  otomatisSimulasi: (aktif, detikPerHari, oleh) => request('/simulasi/otomatis',
+    { method: 'POST', body: { aktif, detik_per_hari: detikPerHari ?? null, oleh } }),
+
   // Toko dan ringkasan
   stores: () => request('/stores'),
   ringkasan: (store) => request(`/stores/${store}/ringkasan`),

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { ClipboardCheck, Send, CheckCircle2 } from 'lucide-react';
 import { api } from '../lib/api';
-import { rupiah } from '../lib/format';
+import { rupiah, tanggal } from '../lib/format';
 
-// Draf PO dari agent yang menunggu 1-Click Approval, plus PO terakhir yang sudah masuk SAP.
-export default function PendingPoCard({ store, refreshKey, onBukaPo }) {
+// Draf PO dari agent yang menunggu 1-Click Approval, plus PO terakhir yang sudah masuk SAP beserta status
+// kedatangannya menurut jam simulasi (`tanggalSim`, ISO).
+export default function PendingPoCard({ store, refreshKey, tanggalSim, onBukaPo }) {
   const [draf, setDraf] = useState([]);
   const [disetujui, setDisetujui] = useState([]);
 
@@ -100,7 +101,14 @@ export default function PendingPoCard({ store, refreshKey, onBukaPo }) {
                 <div key={po.po_id} className="flex items-center justify-between gap-2 text-xs py-1 px-2 rounded-lg bg-slate-50 border border-slate-100">
                   <span className="flex items-center gap-1.5 text-slate-700 min-w-0">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span className="truncate font-medium">{po.deskripsi}</span>
+                    <span className="min-w-0">
+                      <span className="truncate font-medium block">{po.deskripsi}</span>
+                      {po.tgl_tiba && (
+                        <span className="text-[10px] text-slate-400 block">
+                          {tanggalSim && po.tgl_tiba <= tanggalSim ? 'Sudah tiba' : 'Dalam pengiriman, tiba'} {tanggal(po.tgl_tiba)}
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <span className="font-mono text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
                     SAP {po.sap_po_number}

@@ -11,7 +11,7 @@ import math
 import secrets
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 import duckdb
@@ -21,12 +21,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 from agent.prompt import TUGAS_DEFAULT
-from api import guardrails, sap, state
+from api import guardrails, sap, simulasi, state
 from api.agent_runner import AgentSedangBerjalan, PenjalanAgent, jalankan_agent_lokal
 from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AgentRunMulai, AgentRunStatus, AgentRunTugas,
-                         AuditEntry, DraftPORequest, Hold, HoldRequest, Keputusan, LangkahAgent, Prioritas,
-                         PurchaseOrder, Realokasi, RingkasanToko, Sku, StatusGuardrail, StatusPO, StatusStok,
-                         StatusWorker, StokFisik, StokFisikRequest, Substitusi, Toko)
+                         AuditEntry, DraftPORequest, Hold, HoldRequest, Keputusan, LangkahAgent, MajuSimulasi,
+                         OtomatisSimulasi, Prioritas, PurchaseOrder, Realokasi, RingkasanToko, Sku, StatusGuardrail,
+                         StatusPO, StatusSimulasi, StatusStok, StatusWorker, StokFisik, StokFisikRequest, Substitusi,
+                         Toko)
 from api.settings import Settings
 from engine import basket, config
 from engine.format import angka, rupiah
@@ -190,6 +191,7 @@ def _po(con, po_id: str) -> dict:
         raise galat(404, "PO_TIDAK_ADA", f"PO {po_id} tidak ditemukan.")
     po = dict(row)
     po["pelanggaran"] = json.loads(po["pelanggaran"])
+    po["tgl_tiba"] = simulasi.tanggal(po["hari_tiba"]) if po["hari_tiba"] is not None else None
     return po
 
 
@@ -285,6 +287,8 @@ def _routes(app: FastAPI) -> None:
     def list_sku(request: Request, store: int | None = None, status_stok: StatusStok | None = None,
                  limit: int = Query(20, ge=1, le=200), cur=Depends(_duck)):
         """Daftar SKU, bisa difilter per toko dan status stok. Diurutkan dari nilai PO yang disarankan terbesar."""
+        s = _settings(request)
+        simulasi.terapkan(cur, s, store=store)
         where, params = [], []
         if store is not None:
             where.append("s.store = ?")
@@ -295,7 +299,6 @@ def _routes(app: FastAPI) -> None:
         sql = SKU_SQL + (" where " + " and ".join(where) if where else "")
         rel = cur.execute(sql + " order by s.nilai_saran_po_idr desc nulls last, s.inventory_id limit ?", params + [limit])
         cols = [d[0] for d in rel.description]
-        s = _settings(request)
         skus = [_dengan_arah(dict(zip(cols, row)), s) for row in rel.fetchall()]
         with state.baca(s.state_db) as con:
             catatan = _stok_fisik(con, [k["inventory_id"] for k in skus])
@@ -305,6 +308,7 @@ def _routes(app: FastAPI) -> None:
     def get_sku_metrics(request: Request, inventory_id: str = InventoryIdPath, cur=Depends(_duck)):
         """Metrik satu SKU di satu toko: stok, Vs, tren, lead time, reorder point, saran PO, dan Data Confidence Score."""
         s = _settings(request)
+        simulasi.terapkan(cur, s, inventory_id=inventory_id)
         return _dengan_arah(_sku_terkini(cur, s, inventory_id), s)
 
     @app.get("/stores/{store}/prioritas", response_model=Prioritas, tags=[TOOLS], operation_id="list_prioritas")
@@ -313,6 +317,7 @@ def _routes(app: FastAPI) -> None:
         """SKU yang perlu reorder di sebuah toko, dikelompokkan oleh kode: `naik` (penjualan naik, kandidat draf PO,
         urut dari tren × laju penjualan) dan `turun` (penjualan turun, kandidat Hold Reorder, urut dari nilai PO)."""
         s = _settings(request)
+        simulasi.terapkan(cur, s, store=store)
         dasar = (SKU_SQL + " where s.store = ? and s.perlu_reorder and s.beli_jan_sep >= ?"
                  " and s.data_confidence >= ? and s.nilai_saran_po_idr > 0")
         params = [store, config.TREN_BASIS_MIN, s.data_confidence_min]
@@ -342,6 +347,7 @@ def _routes(app: FastAPI) -> None:
         """Susun draf PO. Status selalu DRAFT (menunggu 1-Click Approval) atau DITAHAN_GUARDRAIL kalau ada guardrail
         yang dilanggar: circuit breaker, Data Confidence rendah, qty > batas 3σ, atau batas nominal PO harian."""
         s = _settings(request)
+        simulasi.terapkan(cur, s, inventory_id=body.inventory_id)
         sku = _ambil_sku(cur, body.inventory_id)
         qty = body.qty if body.qty is not None else sku["saran_qty_po"]
         if qty <= 0:
@@ -424,7 +430,7 @@ def _routes(app: FastAPI) -> None:
             if po["status"] != "DRAFT":
                 raise galat(409, "STATUS_TIDAK_VALID",
                             f"PO {po_id} berstatus {po['status']}; hanya PO DRAFT yang bisa diputuskan.")
-            sap_po = None
+            sap_po = hari_tiba = None
             if status_baru == "APPROVED":
                 # Hitung fisik bisa dicatat setelah draf dibuat: draf tetap ada, tetapi baru bisa disetujui
                 # setelah selisih stoknya diaudit.
@@ -441,11 +447,13 @@ def _routes(app: FastAPI) -> None:
                         sap_po = sap.kirim_po(klien, sap.payload_po(po, sekarang))["PurchaseOrder"]
                 except sap.SapError as e:
                     raise galat(502, "SAP_GAGAL", f"PO belum disetujui karena gagal dikirim ke SAP. {e}")
+                # Barang masuk gudang setelah lead time vendor, dihitung dari hari simulasi saat disetujui.
+                hari_tiba = simulasi.hari_ini(con, s, sekarang) + math.ceil(sku["lead_time_rata"])
             con.execute(
                 """update purchase_orders set status = ?, diputuskan_oleh = ?, diputuskan_pada = ?,
-                   catatan_keputusan = ?, sap_po_number = ?, sap_dikirim_pada = ? where po_id = ?""",
+                   catatan_keputusan = ?, sap_po_number = ?, sap_dikirim_pada = ?, hari_tiba = ? where po_id = ?""",
                 (status_baru, body.oleh, sekarang.isoformat(timespec="seconds"), body.catatan, sap_po,
-                 sekarang.isoformat(timespec="seconds") if sap_po else None, po_id))
+                 sekarang.isoformat(timespec="seconds") if sap_po else None, hari_tiba, po_id))
             state.audit(con, sekarang, body.oleh, f"po_{status_baru.lower()}", po_id,
                         {"catatan": body.catatan, "sap_po_number": sap_po})
             return _po(con, po_id)
@@ -470,6 +478,7 @@ def _routes(app: FastAPI) -> None:
         komplementer, dan Data Confidence cukup. 10% PO tetap dibeli sebagai stok uji (exploration budget) dan
         hold ditinjau ulang tiap kuartal, supaya produk tidak dianggap mati selamanya (Death Spiral)."""
         s = _settings(request)
+        simulasi.terapkan(cur, s, inventory_id=body.inventory_id)
         sku = _ambil_sku(cur, body.inventory_id)
         substitusi = basket.cek_peran_komplementer(cur, body.inventory_id)
         sekarang = s.clock()
@@ -495,13 +504,17 @@ def _routes(app: FastAPI) -> None:
                 harga = sku["harga_beli_usd"] * config.KURS_USD_IDR
                 modal_ditahan = round(qty * harga)
                 nilai_uji = round(qty_uji * harga)
-                review = date.fromisoformat(config.AS_OF) + timedelta(days=s.exploration_review_hari)
+                hari = simulasi.hari_ini(con, s, sekarang)
+                review = simulasi.tanggal(hari + s.exploration_review_hari)
                 hold_id = f"HOLD-{uuid4().hex[:10].upper()}"
                 con.execute(
-                    """insert into holds values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'AKTIF', ?, ?, ?)""",
+                    """insert into holds (hold_id, inventory_id, store, deskripsi, qty_ditahan, modal_ditahan_idr,
+                           qty_uji, nilai_uji_idr, modal_diselamatkan_idr, review_pada, status, alasan, dibuat_oleh,
+                           dibuat_pada, hari_tiba)
+                       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'AKTIF', ?, ?, ?, ?)""",
                     (hold_id, sku["inventory_id"], sku["store"], sku["deskripsi"], qty, modal_ditahan, qty_uji,
                      nilai_uji, modal_ditahan - nilai_uji, review.isoformat(), body.alasan, body.dibuat_oleh,
-                     sekarang.isoformat(timespec="seconds")))
+                     sekarang.isoformat(timespec="seconds"), hari + math.ceil(sku["lead_time_rata"])))
                 _simpan_idempotency(con, idempotency_key, "hold_reorder", request_hash, hold_id, sekarang)
                 state.audit(con, sekarang, body.dibuat_oleh, "hold_reorder", hold_id,
                             {"inventory_id": sku["inventory_id"], "modal_diselamatkan_idr": modal_ditahan - nilai_uji,
@@ -525,6 +538,7 @@ def _routes(app: FastAPI) -> None:
         """Sarankan pengalihan modal: dana dari reorder yang ditahan dialokasikan ke SKU di toko yang sama yang
         penjualannya naik dan perlu reorder, diurutkan dari tren × laju penjualan tertinggi."""
         s = _settings(request)
+        simulasi.terapkan(cur, s, store=store)
         with state.baca(s.state_db) as con:
             sumber = [dict(r) for r in con.execute(
                 "select * from holds where store = ? and status = 'AKTIF' order by dibuat_pada", (store,))]
@@ -585,8 +599,9 @@ def _routes(app: FastAPI) -> None:
 
     @app.post("/demo/reset", status_code=204, tags=[GUARDRAIL])
     def reset_demo(request: Request, token: str | None = WorkerToken):
-        """Kosongkan data transaksi demo (PO, hold, hitung fisik, jejak agent, audit log) dan PO di tiruan SAP, lalu
-        tutup circuit breaker. Untuk gladi dan sebelum presentasi; butuh token worker kalau API mengaturnya."""
+        """Kosongkan data transaksi demo (PO, hold, hitung fisik, jejak agent, audit log) dan PO di tiruan SAP, tutup
+        circuit breaker, dan kembalikan jam simulasi ke 31 Des 2016. Untuk gladi dan sebelum presentasi; butuh token
+        worker kalau API mengaturnya."""
         s = _settings(request)
         _cek_worker(s, token)
         sekarang = s.clock()
@@ -595,6 +610,7 @@ def _routes(app: FastAPI) -> None:
                 con.execute(f"delete from {tabel}")
             con.execute("update circuit_breaker set terbuka = 0, alasan = null, berubah_pada = ? where id = 1",
                         (sekarang.isoformat(timespec="seconds"),))
+            simulasi.atur(con, s, sekarang, hari=0, otomatis=False)
             state.audit(con, sekarang, "reset demo", "reset_demo", None, {})
         if s.sap_mock_db.exists():
             sap_db = sqlite3.connect(s.sap_mock_db, timeout=10)
@@ -614,6 +630,7 @@ def _routes(app: FastAPI) -> None:
         Data Confidence menjadi 1 - |selisih| / stok sistem. Di bawah ambang, draf PO baru ditahan guardrail dan draf
         yang sudah ada tidak bisa disetujui sampai selisihnya diaudit (`DELETE` catatan ini)."""
         s = _settings(request)
+        simulasi.terapkan(cur, s, inventory_id=inventory_id)
         sku = _ambil_sku(cur, inventory_id)
         sekarang = s.clock()
         confidence = guardrails.confidence_hitung_fisik(sku["stok_akhir"], body.stok_fisik)
@@ -631,6 +648,7 @@ def _routes(app: FastAPI) -> None:
     def list_stok_fisik(store: int, request: Request, cur=Depends(_duck)):
         """Hasil hitung fisik yang belum diaudit di satu toko."""
         s = _settings(request)
+        simulasi.terapkan(cur, s, store=store)
         with state.baca(s.state_db) as con:
             daftar = list(con.execute("select * from stok_fisik where store = ? order by dicatat_pada desc", (store,)))
         return [_ringkas_stok_fisik(_ambil_sku(cur, c["inventory_id"]), c, s) for c in daftar]
@@ -780,9 +798,39 @@ def _routes(app: FastAPI) -> None:
 
     # ---------------------------------------------------------------- dashboard
 
+    @app.get("/simulasi", response_model=StatusSimulasi, tags=[DASHBOARD])
+    def status_simulasi(request: Request):
+        """Hari simulasi sekarang. Data Bibitor berhenti di 31 Des 2016; stok bergerak mengikuti jam ini."""
+        s = _settings(request)
+        with state.baca(s.state_db) as con:
+            return simulasi.status(con, s, s.clock())
+
+    @app.post("/simulasi/maju", response_model=StatusSimulasi, tags=[DASHBOARD])
+    def maju_simulasi(body: MajuSimulasi, request: Request):
+        """Majukan waktu simulasi: stok berkurang sesuai permintaan harian, dan barang dari PO yang disetujui tiba
+        setelah lead time vendor. Paling jauh `hari_maks` hari (satu kuartal)."""
+        s = _settings(request)
+        sekarang = s.clock()
+        with state.transaksi(s.state_db) as con:
+            hasil = simulasi.atur(con, s, sekarang, hari=simulasi.hari_ini(con, s, sekarang) + body.hari)
+            state.audit(con, sekarang, body.oleh, "simulasi_maju", None, {"hari": body.hari, "hari_ke": hasil["hari_ke"]})
+        return hasil
+
+    @app.post("/simulasi/otomatis", response_model=StatusSimulasi, tags=[DASHBOARD])
+    def otomatis_simulasi(body: OtomatisSimulasi, request: Request):
+        """Jalankan atau jeda waktu simulasi otomatis: satu hari simulasi tiap `detik_per_hari` detik nyata."""
+        s = _settings(request)
+        sekarang = s.clock()
+        with state.transaksi(s.state_db) as con:
+            hasil = simulasi.atur(con, s, sekarang, otomatis=body.aktif, detik_per_hari=body.detik_per_hari)
+            state.audit(con, sekarang, body.oleh, "simulasi_otomatis", None,
+                        {"aktif": body.aktif, "detik_per_hari": hasil["detik_per_hari"], "hari_ke": hasil["hari_ke"]})
+        return hasil
+
     @app.get("/stores", response_model=list[Toko], tags=[DASHBOARD])
     def list_toko(cur=Depends(_duck)):
-        """Daftar toko untuk pilihan cabang di dashboard."""
+        """Daftar toko untuk pilihan cabang di dashboard. Angkanya dari data per 31 Des 2016 (tanpa jam simulasi),
+        karena mensimulasikan 80 toko sekaligus terlalu berat untuk satu request."""
         rows = cur.execute("""
             select store, any_value(kota) as kota, count(*) filter (where status_stok <> 'TIDAK_AKTIF') as sku_aktif,
                 count(*) filter (where perlu_reorder) as perlu_reorder
@@ -794,6 +842,7 @@ def _routes(app: FastAPI) -> None:
     def ringkasan_toko(store: int, request: Request, cur=Depends(_duck)):
         """Inventory Health Score dan angka KPI satu toko untuk dashboard. Health Score dan nilai stok dihitung dari
         data per tanggal simulasi; PO dan modal yang diselamatkan berasal dari tindakan agent dan manajer."""
+        hari = simulasi.terapkan(cur, _settings(request), store=store)
         rel = cur.execute(HEALTH_SQL, [store])
         h = dict(zip([d[0] for d in rel.description], rel.fetchone()))
         jumlah_status = dict(cur.execute("select status_stok, count(*) from sku_metrics where store = ? group by 1",
@@ -812,7 +861,7 @@ def _routes(app: FastAPI) -> None:
             diselamatkan, uji = con.execute(
                 """select coalesce(sum(modal_diselamatkan_idr), 0), coalesce(sum(nilai_uji_idr), 0) from holds
                    where store = ? and status = 'AKTIF'""", (store,)).fetchone()
-        return {"store": store, "kota": h["kota"] or "", "per_tanggal": config.AS_OF,
+        return {"store": store, "kota": h["kota"] or "", "per_tanggal": simulasi.tanggal(hari),
                 "health_score": round(sum(nilai.values()) / len(nilai) * 100),
                 "rumus": "Rata-rata tiga komponen dengan bobot sama", "komponen": komponen,
                 "sku_aktif": h["sku_aktif"], "jumlah_status": jumlah_status, "nilai_stok_idr": h["nilai_stok"],

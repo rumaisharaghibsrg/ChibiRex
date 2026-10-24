@@ -28,7 +28,8 @@ class Sku(BaseModel):
     vendor_number: int | None
     vendor_name: str | None
     status_stok: StatusStok
-    stok_akhir: int
+    stok_akhir: int = Field(description="Stok di gudang pada hari simulasi (lihat GET /simulasi)")
+    stok_dalam_pengiriman: int = Field(default=0, description="Barang dari PO yang disetujui yang belum tiba")
     permintaan_harian: float
     sigma_harian: float
     lead_time_rata: float
@@ -127,6 +128,7 @@ class PurchaseOrder(BaseModel):
     catatan_keputusan: str | None
     sap_po_number: str | None = Field(default=None, description="Nomor PO di SAP setelah disetujui")
     sap_dikirim_pada: str | None = None
+    tgl_tiba: date | None = Field(default=None, description="Tanggal simulasi barang masuk gudang (PO disetujui)")
 
 
 class Keputusan(Request):
@@ -266,6 +268,25 @@ class AgentRunStatus(BaseModel):
     token_input: int | None = None
     token_output: int | None = None
     pesan: str | None = Field(default=None, description="Penyebab kalau GAGAL")
+
+
+class StatusSimulasi(BaseModel):
+    hari_ke: int = Field(description="Hari simulasi sejak 31 Des 2016 (data terakhir Bibitor)")
+    tanggal: date
+    otomatis: bool = Field(description="Waktu maju sendiri, satu hari tiap `detik_per_hari` detik")
+    detik_per_hari: float
+    hari_maks: int
+
+
+class MajuSimulasi(Request):
+    hari: int = Field(ge=1, le=30)
+    oleh: str = Field(default="manajer", min_length=1, max_length=100)
+
+
+class OtomatisSimulasi(Request):
+    aktif: bool
+    detik_per_hari: float | None = Field(default=None, ge=5, le=3600, description="Kosongkan untuk kecepatan terakhir")
+    oleh: str = Field(default="manajer", min_length=1, max_length=100)
 
 
 class Toko(BaseModel):

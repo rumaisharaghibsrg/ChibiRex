@@ -99,6 +99,17 @@ create table if not exists worker_status (
 );
 insert or ignore into worker_status values (1, null, null);
 
+-- Jam simulasi (api/simulasi.py): hari ke-n sejak 31 Des 2016. Dalam mode otomatis, hari dihitung dari waktu nyata
+-- sejak `acuan` (satu hari simulasi tiap `detik_per_hari` detik), jadi tidak perlu proses yang terus berjalan.
+create table if not exists simulasi (
+    id integer primary key check (id = 1),
+    hari_ke integer not null,
+    otomatis integer not null,
+    detik_per_hari real not null,
+    acuan text
+);
+insert or ignore into simulasi values (1, 0, 0, 60, null);
+
 create table if not exists audit_log (
     id integer primary key autoincrement,
     waktu text not null,
@@ -118,7 +129,9 @@ def connect(path: Path) -> sqlite3.Connection:
 
 # Kolom yang ditambahkan setelah tabel pertama kali dibuat; ditambahkan otomatis ke database lama.
 KOLOM_TAMBAHAN = {
-    "purchase_orders": [("sap_po_number", "text"), ("sap_dikirim_pada", "text")],
+    # hari_tiba: hari simulasi saat barang PO yang disetujui (atau stok uji hold) masuk gudang.
+    "purchase_orders": [("sap_po_number", "text"), ("sap_dikirim_pada", "text"), ("hari_tiba", "integer")],
+    "holds": [("hari_tiba", "integer")],
     # Mode antrian: MENUNGGU -> BERJALAN -> SELESAI/GAGAL. Baris lama (tanpa status) dibaca dari `berhasil`.
     "agent_runs": [("status", "text"), ("mulai_pada", "text"), ("pesan", "text")],
 }

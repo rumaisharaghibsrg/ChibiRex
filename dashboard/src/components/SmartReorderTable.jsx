@@ -215,6 +215,11 @@ export default function SmartReorderTable({
                       <span className="text-[11px] text-slate-400 mt-1 block font-medium">
                         ROP: {angka(sku.reorder_point)} unit
                       </span>
+                      {sku.stok_dalam_pengiriman > 0 && (
+                        <span className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-bold block w-fit mt-1">
+                          +{angka(sku.stok_dalam_pengiriman)} dalam pengiriman
+                        </span>
+                      )}
                       {sku.stok_fisik !== null && sku.stok_fisik !== undefined && (
                         <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold block w-fit mt-1">
                           Hitung fisik: {angka(sku.stok_fisik)} · DC {angka2(sku.data_confidence)}
@@ -287,6 +292,11 @@ export default function SmartReorderTable({
                           <FileText className="w-3.5 h-3.5 text-emerald-600" />
                           <span>PO SAP #{po.sap_po_number}</span>
                         </button>
+                      )}
+                      {status === 'APPROVED' && po.tgl_tiba && (
+                        <span className="block text-[10px] text-slate-400 mt-1">
+                          {sku.stok_dalam_pengiriman > 0 ? `Tiba ${tanggal(po.tgl_tiba)}` : `Sudah tiba ${tanggal(po.tgl_tiba)}`}
+                        </span>
                       )}
 
                       {status === 'BELUM' && (

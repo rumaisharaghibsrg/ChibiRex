@@ -31,10 +31,11 @@ Variabel lingkungan Lambda: `CHIBIREX_STATE_DB`, `CHIBIREX_SAP_MOCK_DB` (keduany
 ## Urutan demo
 
 1. Nyalakan Ollama, lalu panaskan model supaya run pertama tidak lambat: `ollama run qwen3:14b "halo"`.
-2. Bersihkan data demo (nomor PO SAP kembali ke 4500000001): `python -m agent.reset_demo`.
+2. Bersihkan data demo (nomor PO SAP kembali ke 4500000001, tanggal simulasi kembali ke 31 Des 2016): `python -m agent.reset_demo`.
 3. Pastikan worker berjalan. Kalau sudah dipasang otomatis: `powershell -ExecutionPolicy Bypass -File deploy\worker_otomatis.ps1 -Status` harus menampilkan "worker AKTIF". Kalau belum dipasang, jalankan `python -m agent.worker` dan biarkan terminalnya terbuka.
 4. Buka dashboard Amplify. Pastikan di panel agent tertulis **"LLM di laptop: worker aktif"**. Buka dashboard sekali beberapa menit sebelum presentasi, supaya cold start Lambda (±5–8 detik) tidak terjadi saat tampil.
 5. Klik **Jalankan Agent**. Langkah agent tampil dalam ±40–60 detik. Setelah itu lakukan **1-Click Approval** untuk satu draf PO dan tunjukkan nomor PO SAP.
+   Lalu majukan waktu lewat kontrol tanggal di kanan atas (**+7 hari**, atau **Otomatis 1 hari / 10 dtk**): stok berkurang, PO yang disetujui berstatus "Dalam pengiriman" lalu "Sudah tiba", dan Health Score serta daftar prioritas berubah. Jalankan agent lagi untuk menunjukkan ia bereaksi ke kondisi baru. Jeda mode otomatis sebelum menjelaskan angka.
 6. Skenario tambahan dari menu **Skenario Uji** di header dashboard: **Uji Runaway PO** (circuit breaker terbuka; manajer mereset di **Audit & Guardrails**), **Simulasi selisih stok** (lalu jalankan agent lagi), dan **Audit stok selesai**. Versi terminalnya, diarahkan ke API online:
    ```powershell
    $env:CHIBIREX_API_URL = "<Function URL Lambda>"

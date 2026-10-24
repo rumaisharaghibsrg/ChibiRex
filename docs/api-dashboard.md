@@ -99,6 +99,18 @@ Saran pengelompokan langkah untuk tampilan:
 
 Dengan LLM lokal, satu kali jalan butuh ±30-60 detik, jadi tampilkan langkah satu per satu selagi berjalan.
 
+## Jam simulasi (kontrol tanggal di `Header`)
+
+Data Bibitor berhenti di 31 Des 2016, jadi waktu dimajukan dari tanggal itu (`api/simulasi.py`). Setiap hari simulasi, stok setiap SKU berkurang sesuai permintaan harian dari data (acak tetapi sama untuk SKU dan hari yang sama), dan barang dari PO yang disetujui serta stok uji Hold Reorder tiba setelah lead time vendor. Status stok, prediksi habis, saran PO, Health Score, realokasi, dan prioritas agent ikut berubah.
+
+- `GET /simulasi` → `hari_ke`, `tanggal`, `otomatis`, `detik_per_hari`, `hari_maks` (90 hari).
+- `POST /simulasi/maju` body `{"hari": 1-30, "oleh": "..."}`: tombol "+1 hari" dan "+7 hari".
+- `POST /simulasi/otomatis` body `{"aktif": true, "detik_per_hari": 10|30|60}`: satu hari simulasi tiap N detik nyata; `{"aktif": false}` untuk jeda. Tidak ada proses latar: hari dihitung dari waktu nyata sejak terakhir diatur.
+- Dashboard memeriksa `GET /simulasi` berkala (tiap ≤5 detik saat otomatis, 15 detik saat jeda) dan memuat ulang data setiap hari berganti.
+- Field baru: SKU `stok_dalam_pengiriman` (barang PO disetujui yang belum tiba; reorder memakai stok gudang + dalam pengiriman, jadi SKU yang sedang dikirim tidak dipesan ulang), PO `tgl_tiba`. `ringkasan.per_tanggal` = tanggal simulasi.
+- `GET /stores` tetap memakai data 31 Des 2016 (mensimulasikan 80 toko sekaligus terlalu berat).
+- `POST /demo/reset` (`python -m agent.reset_demo`) mengembalikan jam ke 31 Des 2016.
+
 ## Skenario selisih stok (menu "Skenario Uji" di `Header`)
 
 Mendemokan mitigasi inakurasi data: hasil hitung fisik (simulasi) yang berbeda dari stok sistem menurunkan Data Confidence, dan guardrail menahan PO sampai selisihnya diaudit.

@@ -118,7 +118,8 @@ def test_sku_metrics_memuat_semua_kolom_untuk_api(con):
     kolom = {d[0] for d in con.execute("select * from sku_metrics limit 0").description}
     # dari brand_jenis, risiko_stockout, atau dihitung API
     dihitung_api = {"jenis", "status_komplementer", "arah_tren", "risiko_stockout", "skor_risiko", "level_risiko",
-                    "stok_fisik", "stok_fisik_dicatat_pada"}  # dua terakhir dari state API (hitung fisik)
+                    "stok_fisik", "stok_fisik_dicatat_pada",  # dari state API (hitung fisik)
+                    "stok_dalam_pengiriman"}  # dari jam simulasi API (PO disetujui yang belum tiba)
     assert set(Sku.model_fields) - dihitung_api <= kolom
 
 

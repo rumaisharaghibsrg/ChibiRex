@@ -206,5 +206,15 @@ def test_satu_draf_per_sku(client):
     assert kedua.status_code == 200
     assert kedua.headers["Existing-Draft"] == "true"
     assert kedua.json()["po_id"] == pertama["po_id"]
-    client.post(f"/purchase-orders/{pertama['po_id']}/approve", json={"oleh": "manajer"})
+    client.post(f"/purchase-orders/{pertama['po_id']}/reject", json={"oleh": "manajer"})
     assert draft(client, 10, "sesi3-0001").json()["po_id"] != pertama["po_id"]  # setelah diputuskan, boleh lagi
+
+
+def test_tidak_pesan_ulang_selagi_barang_di_jalan(client):
+    po = draft(client, 10, "jalan-0001").json()
+    client.post(f"/purchase-orders/{po['po_id']}/approve", json={"oleh": "manajer"})
+    sku = client.get(f"/sku/{sku_id(10)}").json()
+    # Stok gudang belum berubah, tetapi posisi stok (gudang + dalam pengiriman) sudah di atas reorder point.
+    assert (sku["stok_akhir"], sku["stok_dalam_pengiriman"], sku["perlu_reorder"]) == (50, 70, False)
+    ulang = draft(client, 10, "jalan-0002")
+    assert ulang.status_code == 422 and ulang.json()["detail"]["kode"] == "TIDAK_PERLU_REORDER"

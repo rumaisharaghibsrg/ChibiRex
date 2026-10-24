@@ -18,7 +18,8 @@ DASAR = dict(
     store=1, kota="KOTA", ukuran="750mL", kategori="spirits", vendor_number=7, vendor_name="VENDOR A",
     status_stok="REORDER", stok_akhir=50, permintaan_harian=5.0, sigma_harian=4.0, lead_time_rata=8.0,
     safety_stock=20.0, reorder_point=60.0, target_stok=120.0, hari_cukup=10.0, tgl_perkiraan_habis=date(2017, 1, 10),
-    perlu_reorder=True, saran_qty_po=70, harga_beli_usd=10.0, margin_pct=0.3, nilai_stok_idr=8_000_000.0,
+    perlu_reorder=True, saran_qty_po=70, kelebihan_unit=0.0, harga_beli_usd=10.0, margin_pct=0.3,
+    nilai_stok_idr=8_000_000.0,
     modal_berlebih_idr=0.0, vs_jan=0.01, vs_tahun=0.02, tren_beli=1.0, beli_jan_sep=900, beli_q4=300,
     hari_stok_kosong_jan=0, data_confidence=1.0,
 )
