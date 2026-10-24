@@ -56,7 +56,23 @@ Write-Host "3. Upload ke Amplify ($App/$Cabang)"
 $dep = aws amplify create-deployment --app-id $appId --branch-name $Cabang --profile $Profil --region $Region `
     --output json | ConvertFrom-Json
 Cek "create-deployment"
-Invoke-WebRequest -Uri $dep.zipUploadUrl -Method Put -InFile $zip -ContentType "application/zip" -UseBasicParsing | Out-Null
+# Alamat upload (S3) mewajibkan TLS 1.2; Windows PowerShell 5.1 tidak selalu mengaktifkannya di proses baru.
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+for ($coba = 1; ; $coba++) {
+    try {
+        Invoke-WebRequest -Uri $dep.zipUploadUrl -Method Put -InFile $zip -ContentType "application/zip" -UseBasicParsing | Out-Null
+        break
+    } catch {
+        if ($coba -ge 3) {
+            # Job yang dibuat tapi tidak pernah dimulai memblokir deploy berikutnya, jadi batalkan dulu.
+            aws amplify stop-job --app-id $appId --branch-name $Cabang --job-id $dep.jobId --profile $Profil `
+                --region $Region --output text | Out-Null
+            throw "Gagal upload zip ke Amplify: $($_.Exception.Message)"
+        }
+        Write-Host "   Upload gagal ($($_.Exception.Message)); coba lagi ($coba/3)..."
+        Start-Sleep -Seconds 3
+    }
+}
 aws amplify start-deployment --app-id $appId --branch-name $Cabang --job-id $dep.jobId --profile $Profil `
     --region $Region --query "jobSummary.status" --output text
 Cek "start-deployment"
