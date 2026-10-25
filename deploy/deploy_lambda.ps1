@@ -90,7 +90,8 @@ $env:Path = ($pathAsli -split ";" | Where-Object {
     -not (Test-Path (Join-Path $_ "docker-credential-desktop.exe"))
 }) -join ";"
 try {
-    aws ecr get-login-password --profile $Profil --region $Region | & $docker login --username AWS --password-stdin $registry
+    # Pipe lewat cmd: pipe PowerShell 5.1 antar program native mengubah token ECR yang panjang (login 400 Bad Request).
+    cmd /c "aws ecr get-login-password --profile $Profil --region $Region | `"$docker`" login --username AWS --password-stdin $registry"
     Cek "docker login ke ECR"
     & $docker push $image; Cek "docker push"
 } finally {
