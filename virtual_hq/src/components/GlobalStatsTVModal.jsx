@@ -12,32 +12,37 @@
  *     - Player dibekukan.
  *     - Menampilkan 4 kartu KPI, grafik toko dengan Health terendah, status SKU, dan status agent/guardrail.
  *     - Semua angka dari API Rexa (ringkasan toko, /jaringan/ringkasan, guardrail, worker, hitung fisik).
+ *     - Data dibaca sekali per toko lalu disimpan; data baru hanya lewat tombol "Muat Ulang". Pemain tidak dibekukan:
+ *       panel tertutup saat pemain pergi, menekan ✕, atau Esc.
  *     - Penutupan via tombol [X] atau tombol keyboard [ESC] mengembalikan kontrol gerak pemain.
  *  3. KONTEN RELATIF KANVAS GAME:
  *     - 100% position: absolute di dalam container viewport game aktif, tidak pernah meluber ke letterbox.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../context/StoreContext';
+import { useTimeSimulation } from '../context/TimeSimulationContext';
 import { EventBus } from '../game/EventBus';
-import { api, DATA_BERUBAH } from '../lib/api';
+import { api } from '../lib/api';
 import { angka, rupiahRingkas, statusHealth } from '../lib/format';
 
 const WARNA_STATUS = { AMAN: '#34d399', REORDER: '#fbbf24', OVERSTOCK: '#38bdf8', DEADSTOCK: '#f87171' };
 
 export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
     const { currentStore, switchStore } = useStore();
+    const { formattedDate } = useTimeSimulation();
     const [hoveredBar, setHoveredBar] = useState(null);
-    const [data, setData] = useState(null);
+    const [cache, setCache] = useState({}); // toko -> {ringkasan, jaringan, guard, worker, fisik, tanggal}
+    const [memuat, setMemuat] = useState(false);
     const [galat, setGalat] = useState(null);
+    const dicobaRef = useRef(new Set());
     const terbuka = mode !== 'hidden';
     const storeId = currentStore?.id || 74;
+    const data = cache[storeId] || null;
 
-    // Muat data saat TV terlihat, saat toko diganti, dan setiap data toko berubah (hari simulasi, agent, PO).
-    useEffect(() => {
-        if (!terbuka) return undefined;
-        let aktif = true;
-        const muat = () => Promise.all([
+    const muat = useCallback(() => {
+        setMemuat(true);
+        Promise.all([
             api.ringkasan(storeId),
             api.jaringan().catch(() => null), // statistik jaringan opsional (API lama belum punya)
             api.statusGuardrail(storeId),
@@ -45,18 +50,21 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
             api.stokFisik(storeId).catch(() => []),
         ])
             .then(([ringkasan, jaringan, guard, worker, fisik]) => {
-                if (!aktif) return;
-                setData({ ringkasan, jaringan, guard, worker, fisik });
+                setCache((c) => ({ ...c, [storeId]: { ringkasan, jaringan, guard, worker, fisik, tanggal: formattedDate } }));
                 setGalat(null);
             })
-            .catch((e) => aktif && setGalat(e.message));
-        muat();
-        EventBus.on(DATA_BERUBAH, muat);
-        return () => {
-            aktif = false;
-            EventBus.removeListener(DATA_BERUBAH, muat);
-        };
-    }, [terbuka, storeId]);
+            .catch((e) => setGalat(e.message))
+            .finally(() => setMemuat(false));
+    }, [storeId, formattedDate]);
+
+    // Dibaca sekali per toko saat TV pertama kali terlihat; sesudahnya hanya lewat "Muat Ulang".
+    useEffect(() => {
+        if (terbuka && !dicobaRef.current.has(storeId)) {
+            dicobaRef.current.add(storeId);
+            muat();
+        }
+    }, [terbuka, storeId, muat]);
+    const usang = data && data.tanggal !== formattedDate;
 
     const r = data?.ringkasan;
     const j = data?.jaringan;
@@ -81,8 +89,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
             const isInputTarget = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
             if (isInputTarget) return;
 
-            if ((e.key === 'Escape' || e.key.toLowerCase() === 'e') && mode === 'inspect') {
-                e.preventDefault();
+            if (e.key === 'Escape' && mode === 'inspect') {
                 if (onClose) onClose();
             } else if ((e.key === 'e' || e.key === 'E') && mode === 'peek') {
                 e.preventDefault();
@@ -302,10 +309,33 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                     COMMAND CENTER
                                 </h3>
                                 <span style={{ fontSize: '9px', color: '#38bdf8', fontFamily: 'monospace' }}>
-                                    STORE #{currentStore?.id || 74} ({currentStore?.city || 'PAENTMARWY'}) • Telemetry
+                                    STORE #{storeId} ({currentStore?.city || 'PAENTMARWY'}){data ? ` • data ${data.tanggal}` : ''}
                                 </span>
                             </div>
                         </div>
+
+                        {/* Muat Ulang: ambil data terbaru dari API */}
+                        <button
+                            onClick={muat}
+                            disabled={memuat}
+                            style={{
+                                marginLeft: 'auto',
+                                marginRight: '6px',
+                                padding: '4px 8px',
+                                borderRadius: '8px',
+                                border: '1px solid rgba(56, 189, 248, 0.4)',
+                                background: 'rgba(2, 132, 199, 0.2)',
+                                color: '#7dd3fc',
+                                fontSize: '10px',
+                                fontWeight: '700',
+                                fontFamily: 'monospace',
+                                cursor: memuat ? 'not-allowed' : 'pointer',
+                                whiteSpace: 'nowrap',
+                            }}
+                            title="Ambil data terbaru dari API"
+                        >
+                            {memuat ? 'Memuat...' : '↻ Muat Ulang'}
+                        </button>
 
                         {/* Tombol Tutup [X] */}
                         <button
@@ -355,6 +385,13 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                         {!r && (
                             <div style={{ fontSize: '11px', color: galat ? '#f87171' : '#94a3b8', lineHeight: 1.5 }}>
                                 {galat ? `Data toko tidak bisa dibaca: ${galat}` : 'Memuat data toko...'}
+                            </div>
+                        )}
+                        {r && (usang || galat) && (
+                            <div style={{ fontSize: '10px', color: '#fbbf24', lineHeight: 1.5, background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px', padding: '6px 8px' }}>
+                                {galat
+                                    ? `Muat ulang terakhir gagal: ${galat}`
+                                    : `Data ${data.tanggal}; tanggal simulasi sekarang ${formattedDate}. Tekan Muat Ulang.`}
                             </div>
                         )}
 

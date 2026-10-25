@@ -8,11 +8,13 @@
  *  - Maya: SKU yang penjualannya naik dengan risiko stok habis TINGGI.
  *  - Citra: lebih dari 40% nilai stok tertahan di SKU overstock/deadstock (komponen stabilitas kas < 60).
  * Aksi resolusinya juga aksi asli: reset breaker oleh manajer, menugaskan Agent Rexa, atau membuka laporan Citra.
+ * Hasil pemeriksaan terakhir disimpan per toko (hasilTerakhir) supaya panel Doni bisa dibuka lagi tanpa memeriksa ulang.
  */
 
 import { EventBus } from './EventBus';
 import { api } from '../lib/api';
 import { angka, rupiah, rupiahRingkas } from '../lib/format';
+import { formatIndonesianDate } from '../utils/TimeEngine';
 
 // Kunci lama (cheat U+R+1..4 di MainScene) dipetakan ke NPC sumber krisisnya.
 const KUNCI_KE_NPC = {
@@ -25,8 +27,13 @@ const KUNCI_KE_NPC = {
 const AMBANG_HEALTH = 65;
 const AMBANG_STABILITAS_KAS = 60;
 
+const hasilPerToko = new Map(); // toko -> {krisis, ringkas, tanggal}
+
+/** Hasil pemeriksaan terakhir untuk toko ini, atau null kalau belum pernah diperiksa. */
+export const hasilTerakhir = (store) => hasilPerToko.get(store?.id || 74) || null;
+
 /**
- * Memeriksa data toko. Mengembalikan {krisis: [...], ringkas: string}; krisis kosong berarti tidak ada kondisi darurat.
+ * Memeriksa data toko. Mengembalikan {krisis: [...], ringkas, tanggal}; krisis kosong berarti tidak ada kondisi darurat.
  * Melempar ApiError kalau API tidak terjangkau.
  */
 export async function deteksiKrisis(store) {
@@ -106,7 +113,13 @@ export async function deteksiKrisis(store) {
 
     const ringkas = `Health Score ${r.health_score}/100, circuit breaker ${g.circuit_breaker_terbuka ? 'terbuka' : 'tertutup'}, ` +
         `${angka(r.jumlah_status.REORDER ?? 0)} SKU perlu reorder, modal tertahan ${persenTertahan}% nilai stok.`;
-    return { krisis: krisis.map((k) => ({ ...k, isCrisis: true, severity: 'CRITICAL', store: s })), ringkas };
+    const hasil = {
+        krisis: krisis.map((k) => ({ ...k, isCrisis: true, severity: 'CRITICAL', store: s })),
+        ringkas,
+        tanggal: formatIndonesianDate(r.per_tanggal),
+    };
+    hasilPerToko.set(s, hasil);
+    return hasil;
 }
 
 // Inisialisasi Default State

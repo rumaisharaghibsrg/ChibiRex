@@ -1,11 +1,13 @@
 /**
- * NPCDialogModal.jsx — Interactive Persona Dialog Hub & Graceful Fallback Showcase
+ * NPCDialogModal.jsx — Panel laporan staf (Maya, Citra, Rian, Pak Budi)
+ *
+ * Panel melayang, bukan modal: pemain tetap bisa bergerak, dan panel tertutup saat pemain pergi, menekan ✕, atau Esc.
+ * Laporan tersimpan di App per (staf, toko) dan muncul lagi saat panel dibuka; "Muat Ulang" mengambil data baru.
  *
  * Menampilkan pesan dialog langsung dari NPC (Maya, Citra, Rian, Pak Budi, Rexa)
  * berdasarkan data API Rexa (src/lib/npc.js):
  * - Titik akhir putih: laporan dari data API.
  * - Titik akhir merah (#ef4444): API tidak terjangkau; teksnya menjelaskan galat, bukan angka pengganti.
- * - Menjamin unfreeze player saat modal ditutup.
  */
 
 import React, { useEffect, useCallback } from 'react';
@@ -43,35 +45,27 @@ export function SentenceWithDot({ text, isFallback }) {
 export function NPCDialogModal({
     isOpen,
     npcId = 'maya',
-    dialogue,
-    metrics,
-    isFallback = false,
+    laporan,
     isLoading = false,
+    tanggalSekarang,
+    onMuatUlang,
     onClose,
 }) {
     const npcConfig = PERSONA[npcId] || PERSONA.maya;
-    const activeText = dialogue;
-    const activeMetrics = metrics;
+    const activeText = laporan?.dialogue;
+    const activeMetrics = laporan?.metrics;
+    const isFallback = Boolean(laporan?.gagal);
+    const usang = laporan && tanggalSekarang && laporan.tanggal !== tanggalSekarang;
 
-    // Handler penutupan modal dengan jaminan mutlak unfreeze pemain
     const handleClose = useCallback(() => {
-        // Broadcast sinyal unfreeze ke Phaser & Window
-        EventBus.emit('unfreeze-player');
-        window.dispatchEvent(new CustomEvent('unfreeze-player'));
-
-        if (onClose) {
-            onClose();
-        }
+        if (onClose) onClose();
     }, [onClose]);
 
-    // Listener tombol ESC & Universal E Toggle (Directive v4.8)
+    // Esc menutup panel (E dipakai untuk membuka panel staf lain di dekat pemain)
     useEffect(() => {
         const handleKeyDown = (e) => {
             const isInputTarget = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
-            if ((e.key === 'Escape' || e.key.toLowerCase() === 'e') && isOpen && !isInputTarget) {
-                e.preventDefault();
-                handleClose();
-            }
+            if (e.key === 'Escape' && isOpen && !isInputTarget) handleClose();
         };
 
         if (isOpen) {
@@ -102,13 +96,11 @@ export function NPCDialogModal({
     if (!isOpen) return null;
 
     return (
-        <div className="npc-dialog-overlay" onClick={handleClose}>
+        <div className="npc-panel-bebas">
             <div
                 className="npc-dialog-card"
-                onClick={(e) => e.stopPropagation()}
                 role="dialog"
-                aria-modal="true"
-                aria-label={`Dialog ${npcConfig.name}`}
+                aria-label={`Laporan ${npcConfig.name}`}
             >
                 {/* ── Top Header Banner ────────────────────────────────────── */}
                 <div className="npc-dialog-header">
@@ -146,10 +138,15 @@ export function NPCDialogModal({
                     >
                         <div className="npc-speech-label">
                             <span>💬</span>
-                            <span>Laporan Langsung {npcConfig.name}:</span>
+                            <span>Laporan {npcConfig.name}{laporan?.tanggal ? ` · data ${laporan.tanggal}` : ''}:</span>
                         </div>
+                        {usang && !isLoading && (
+                            <div className="npc-usang">
+                                Tanggal simulasi sekarang {tanggalSekarang}. Tekan Muat Ulang untuk data terbaru.
+                            </div>
+                        )}
                         <p className="npc-speech-text">
-                            {isLoading ? (
+                            {isLoading && !activeText ? (
                                 <span style={{ color: '#94a3b8' }}>
                                     {npcConfig.name} sedang membaca data toko...
                                 </span>
@@ -160,7 +157,7 @@ export function NPCDialogModal({
                     </div>
 
                     {/* Supporting Metrics Grid */}
-                    {activeMetrics && activeMetrics.length > 0 && (
+                    {activeMetrics && activeMetrics.length > 0 && !(isLoading && !activeText) && (
                         <div className="npc-metrics-grid">
                             {activeMetrics.map((m, idx) => (
                                 <div key={idx} className="npc-metric-item">
@@ -179,19 +176,22 @@ export function NPCDialogModal({
 
                 {/* ── Action Footer ───────────────────────────────────────── */}
                 <div className="npc-dialog-footer">
+                    <span className="npc-petunjuk">Pergi, ✕, atau Esc untuk menutup; laporan tetap tersimpan.</span>
                     <button
                         onClick={handleContactViaChat}
                         className="npc-btn-secondary"
-                        title="Telepon NPC ini lewat interkom Smartphone Rexa"
+                        title="Telepon staf ini lewat interkom Smartphone Rexa"
                     >
                         <span>📱</span>
-                        <span>Hubungi via Interkom</span>
+                        <span>Interkom</span>
                     </button>
                     <button
-                        onClick={handleClose}
+                        onClick={onMuatUlang}
+                        disabled={isLoading}
                         className="npc-btn-primary"
+                        title="Ambil data terbaru dari API"
                     >
-                        <span>Tutup Dialog (ESC)</span>
+                        <span>{isLoading ? 'Memuat...' : '↻ Muat Ulang'}</span>
                     </button>
                 </div>
             </div>

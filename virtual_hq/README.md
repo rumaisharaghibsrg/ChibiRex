@@ -21,6 +21,12 @@ masing-masing mewakili satu bagian dashboard. Semua angka dibaca dari API Rexa y
 Kalau API tidak terjangkau, game tetap bisa dimainkan, tetapi setiap panel menuliskan galatnya. Tidak ada angka atau
 hasil pengganti.
 
+Panel laporan (bubble agent Rexa, Maya, Citra, Rian, Pak Budi, Doni, Smart TV) tidak membekukan pemain dan tidak
+tertutup sendiri. Panel tertutup saat pemain pergi (bergeser dari posisinya saat panel dibuka), menekan ✕, atau Esc;
+isinya tetap tersimpan per toko dan muncul lagi saat dibuka. Data baru hanya diambil lewat **Muat Ulang** (Doni:
+**Periksa Ulang**), dan agent hanya dijalankan lagi lewat **Jalankan Ulang**. Kalau tanggal simulasi sudah berubah sejak
+laporan dibaca, panel menampilkan peringatan. Meja Approval, Ganti Cabang, Simulasi Waktu, dan Panduan tetap modal.
+
 ## Menjalankan
 
 1. API dari root repo: `uvicorn api.main:app` (port 8000). CORS bawaan API sudah mengizinkan `http://localhost:8080`.

@@ -1530,7 +1530,7 @@ export class MainScene extends Phaser.Scene {
         if (distMaya < PROXIMITY_DIST || forceContext === 'maya') {
             if (this._mayaIsCalling) return;
             if (this._mayaPrompt) this._mayaPrompt.setVisible(false);
-            this._freezePlayer();
+            // Panel laporan tidak membekukan pemain; pergi dari staf menutup panelnya.
             const npcPayload = { npcId: 'maya' };
             EventBus.emit('open-npc-dialog-modal', npcPayload);
             if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open-npc-dialog-modal', { detail: npcPayload }));
@@ -1540,7 +1540,6 @@ export class MainScene extends Phaser.Scene {
         } else if (distCitra < PROXIMITY_DIST || forceContext === 'citra') {
             if (this._citraIsCalling) return;
             if (this._citraPrompt) this._citraPrompt.setVisible(false);
-            this._freezePlayer();
             const npcPayload = { npcId: 'citra' };
             EventBus.emit('open-npc-dialog-modal', npcPayload);
             if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open-npc-dialog-modal', { detail: npcPayload }));
@@ -1550,7 +1549,6 @@ export class MainScene extends Phaser.Scene {
         } else if (distRian < PROXIMITY_DIST || forceContext === 'rian') {
             if (this._rianIsCalling) return;
             if (this._rianPrompt) this._rianPrompt.setVisible(false);
-            this._freezePlayer();
             const npcPayload = { npcId: 'rian' };
             EventBus.emit('open-npc-dialog-modal', npcPayload);
             if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open-npc-dialog-modal', { detail: npcPayload }));
@@ -1559,7 +1557,6 @@ export class MainScene extends Phaser.Scene {
         } else if (distBudi < PROXIMITY_DIST || forceContext === 'budi') {
             if (this._budiIsCalling) return;
             if (this._budiPrompt) this._budiPrompt.setVisible(false);
-            this._freezePlayer();
             const npcPayload = { npcId: 'budi' };
             EventBus.emit('open-npc-dialog-modal', npcPayload);
             if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open-npc-dialog-modal', { detail: npcPayload }));
@@ -1581,7 +1578,6 @@ export class MainScene extends Phaser.Scene {
             if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open-global-tv-modal'));
         } else if (distDoni < PROXIMITY_DIST || forceContext === 'doni') {
             if (this._doniPrompt) this._doniPrompt.setVisible(false);
-            this._freezePlayer();
             EventBus.emit('open-crisis-hub-modal');
             if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open-crisis-hub-modal'));
         } else if (distCoffee < PROXIMITY_DIST || forceContext === 'coffee') {

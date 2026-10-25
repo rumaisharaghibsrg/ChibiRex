@@ -23,6 +23,42 @@
     to { opacity: 1; }
 }
 
+/* Panel melayang tanpa latar: pemain tetap bisa bergerak di belakangnya. */
+.crisis-panel-bebas {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    width: min(520px, calc(100vw - 32px));
+    z-index: 900;
+}
+
+.crisis-panel-bebas .crisis-modal-card {
+    max-height: calc(100vh - 90px);
+}
+
+@media (max-width: 767px) {
+    .crisis-panel-bebas {
+        top: 58px;
+        bottom: auto;
+        left: 8px;
+        width: calc(100vw - 16px);
+    }
+
+    .crisis-panel-bebas .crisis-modal-card {
+        max-height: 60vh;
+    }
+}
+
+.crisis-usang {
+    margin: 0 20px 10px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
 .crisis-modal-card {
     position: relative;
     width: 100%;

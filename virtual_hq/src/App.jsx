@@ -71,31 +71,35 @@ function App() {
     const [isCrisisModalOpen, setIsCrisisModalOpen] = useState(false);
     const [isCrisisActive, setIsCrisisActive]       = useState(false);
 
-    // ── Status NPC Quick Dialog Modal (Graceful Degradation & Fallback) ───────
+    // ── Panel laporan staf (Maya, Citra, Rian, Pak Budi) ─────────────────────
+    // Laporan disimpan per (staf, toko) setelah dibaca dan ditampilkan lagi setiap panel dibuka; data baru hanya
+    // diambil lewat tombol "Muat Ulang".
     const [isNpcModalOpen, setIsNpcModalOpen] = useState(false);
     const [activeNpcId, setActiveNpcId]       = useState('maya');
-    const [npcDialogue, setNpcDialogue]       = useState('');
-    const [npcMetrics, setNpcMetrics]         = useState([]);
-    const [isNpcFallback, setIsNpcFallback]   = useState(false);
-    const [isNpcLoading, setIsNpcLoading]     = useState(false);
+    const [laporanStaf, setLaporanStaf]       = useState({}); // `${staf}:${toko}` -> {dialogue, metrics, gagal, tanggal}
+    const [memuatStaf, setMemuatStaf]         = useState({}); // `${staf}:${toko}` -> true selama dibaca
+    const laporanStafRef = useRef({});
+    const memuatStafRef  = useRef(new Set());
+    const tanggalSimRef  = useRef(formattedDate);
+    useEffect(() => { laporanStafRef.current = laporanStaf; }, [laporanStaf]);
+    useEffect(() => { tanggalSimRef.current = formattedDate; }, [formattedDate]);
 
-    // ── Deteksi Apakah Ada Modal / Sheet yang Sedang Terbuka (Directive v5.3) ──
+    // ── Modal yang memblokir permainan (formulir aksi). Panel laporan (bubble agent, staf, Doni, Smart TV) tidak
+    //    termasuk: pemain tetap bebas bergerak selama panel itu terbuka (Directive v5.3) ──
     const isAnyModalOpen = Boolean(
         isHelpModalOpen ||
         isRegionalModalOpen ||
         isTimeModalOpen ||
         isApprovalModalOpen ||
-        isCrisisModalOpen ||
-        isNpcModalOpen ||
         isChatOpen ||
-        tvMode === 'inspect' ||
         isDrawerOpen
     );
 
     // ── Status Sesi AI Agent Rexa ─────────────────────────────────────────────
-    // agentRunning = run sedang berjalan. Hasil run terakhir (status, langkah, ringkasan) tetap tersimpan setelah run
-    // selesai; bubble tidak pernah tertutup otomatis, hanya oleh pemain (bergeser, ✕, atau Esc), dan bisa dibuka lagi
-    // dari header. Run terakhir toko yang diawasi dibaca dari API, jadi hasilnya tetap ada setelah halaman dimuat ulang.
+    // Alur agent: jalankan -> pemain tetap bebas bergerak (agent menganalisis di latar) -> selesai -> log (langkah,
+    // ringkasan atau alasan gagal) bisa dilihat kapan saja -> agent baru dijalankan lagi hanya lewat "Jalankan Ulang".
+    // Bubble tidak pernah tertutup otomatis; pergi (bergeser), ✕, atau Esc hanya menyembunyikannya, lognya tetap.
+    // Log terakhir toko yang diawasi dibaca dari API, jadi tetap ada setelah halaman dimuat ulang.
     const [agentRunning, setAgentRunning]   = useState(false);
     const [agentStatus, setAgentStatus]     = useState(''); // 'MEMULAI', 'BERJALAN', 'SELESAI', 'GAGAL'
     const [currentStep, setCurrentStep]     = useState(null);
@@ -103,19 +107,30 @@ function App() {
     const [summary, setSummary]             = useState('');
     const [errorMessage, setErrorMessage]   = useState('');
     const [bubbleTerbuka, setBubbleTerbuka] = useState(false);
+    const [tokoLog, setTokoLog]             = useState(null); // toko pemilik log agent yang ditampilkan
     const adaHasil = agentStatus === 'SELESAI' || agentStatus === 'GAGAL';
 
     const pollingTimerRef = useRef(null);
-    // "Geser untuk menutup": posisi pemain terakhir dan posisinya saat hasil agent mulai terlihat.
+    // Panel laporan (bubble agent, staf, Doni, Smart TV) tidak membekukan pemain. Begitu pemain pergi (bergeser lebih
+    // dari setengah petak dari posisinya saat panel dibuka), panel ditutup; isinya tetap tersimpan.
     const posisiPemainRef  = useRef(null);
     const jangkarRef       = useRef(null);
-    const bubbleTerbukaRef = useRef(false);
+    const adaPanelRef      = useRef(false);
     const agentRunningRef  = useRef(false);
+    const adaPanel = bubbleTerbuka || isNpcModalOpen || isCrisisModalOpen || tvMode === 'inspect';
+    const [versiPanel, setVersiPanel] = useState(0); // naik setiap panel dibuka: titik acuan "pergi" diatur ulang
+    const tandaiPanelDibuka = useCallback(() => setVersiPanel((v) => v + 1), []);
+    useEffect(() => { agentRunningRef.current = agentRunning; }, [agentRunning]);
     useEffect(() => {
-        bubbleTerbukaRef.current = bubbleTerbuka;
-        agentRunningRef.current = agentRunning;
-        jangkarRef.current = bubbleTerbuka && !agentRunning ? posisiPemainRef.current : null;
-    }, [bubbleTerbuka, agentRunning]);
+        adaPanelRef.current = adaPanel;
+        jangkarRef.current = adaPanel ? posisiPemainRef.current : null;
+    }, [adaPanel, versiPanel]);
+    const tutupPanel = useCallback(() => {
+        setBubbleTerbuka(false);
+        setIsNpcModalOpen(false);
+        setIsCrisisModalOpen(false);
+        setTvMode((m) => (m === 'inspect' ? (isNearTVRef.current ? 'peek' : 'hidden') : m));
+    }, []);
 
     const clearAllTimers = useCallback(() => {
         if (pollingTimerRef.current) {
@@ -124,12 +139,8 @@ function App() {
         }
     }, []);
 
-    // Run selesai atau gagal: pemain dicairkan, bubble dibiarkan seperti apa adanya sampai pemain menutupnya.
-    const selesaiRun = useCallback(() => {
-        setAgentRunning(false);
-        EventBus.emit('unfreeze-player');
-        window.dispatchEvent(new CustomEvent('unfreeze-player'));
-    }, []);
+    // Run selesai atau gagal: bubble dibiarkan seperti apa adanya sampai pemain menutupnya.
+    const selesaiRun = useCallback(() => setAgentRunning(false), []);
 
     // Tampilkan run dari API (GET /agent-runs/{id} atau GET /agent-runs) di state bubble.
     const terapkanRun = useCallback((run) => {
@@ -170,17 +181,15 @@ function App() {
         }, 2000);
     }, [clearAllTimers, terapkanRun, selesaiRun]);
 
-    // ── Eksekusi Pemanggilan API saat Tombol 'E' Ditekan di Rexa (atau "Jalankan Ulang") ─────────
+    // ── Jalankan agent (pertama kali, "Jalankan Ulang", atau "Tugaskan Agent" dari Crisis Hub) ─────────
     const handleTriggerAgent = useCallback(async ({ store } = {}) => {
-        if (agentRunning || isApprovalModalOpen) return; // Cegah pemanggilan ganda
+        if (agentRunning) return; // Cegah pemanggilan ganda
 
         const activeStoreId = parseInt(store || currentStore?.id || 74, 10);
 
-        // 1. Bekukan gerakan pemain selama agent bekerja (Esc atau ✕ melepaskannya)
-        EventBus.emit('freeze-player');
-
-        // 2. Inisialisasi tampilan ThoughtBubble
+        // Pemain tidak dibekukan: agent bekerja di latar, bubble menampilkan langkahnya selama pemain di dekat Rexa.
         clearAllTimers();
+        setTokoLog(activeStoreId);
         setAgentRunning(true);
         setAgentStatus('MEMULAI');
         setCurrentStep(null);
@@ -188,6 +197,7 @@ function App() {
         setSummary('');
         setErrorMessage('');
         setBubbleTerbuka(true);
+        tandaiPanelDibuka();
 
         try {
             // 3. Antrikan agent di API (mode antrian: worker di laptop mengambilnya), lalu pantau langkahnya.
@@ -206,14 +216,20 @@ function App() {
             setErrorMessage(err.message);
             selesaiRun();
         }
-    }, [agentRunning, isApprovalModalOpen, clearAllTimers, startPolling, terapkanRun, selesaiRun, currentStore]);
+    }, [agentRunning, clearAllTimers, startPolling, terapkanRun, selesaiRun, currentStore, tandaiPanelDibuka]);
 
-    // ── Tutup bubble agent (bergeser, ✕, Esc): hasil tetap tersimpan; kalau agent masih bekerja, ia lanjut di latar ──
-    const handleTutupBubble = useCallback(() => {
-        setBubbleTerbuka(false);
-        EventBus.emit('unfreeze-player');
-        window.dispatchEvent(new CustomEvent('unfreeze-player'));
-    }, []);
+    // ── Interaksi dengan Rexa (E atau tombol di dekatnya): kalau sudah ada log, bukakan lognya; kalau belum, jalankan ──
+    const bukaBubble = useCallback(() => {
+        setBubbleTerbuka(true);
+        tandaiPanelDibuka();
+    }, [tandaiPanelDibuka]);
+    const handleRexa = useCallback(() => {
+        if (agentRunning || adaHasil) bukaBubble();
+        else handleTriggerAgent();
+    }, [agentRunning, adaHasil, bukaBubble, handleTriggerAgent]);
+
+    // ── Tutup bubble agent (bergeser, ✕, Esc): log tetap tersimpan; kalau agent masih bekerja, ia lanjut di latar ──
+    const handleTutupBubble = useCallback(() => setBubbleTerbuka(false), []);
 
     // ── Run terakhir toko yang diawasi (saat dibuka dan setiap ganti toko) ─────────────────────────
     const storeIdAktif = currentStore?.id || 74;
@@ -225,8 +241,9 @@ function App() {
             setBubbleTerbuka(false);
             setSummary('');
             setErrorMessage('');
+            setTokoLog(storeIdAktif);
             if (jalan && jalan.store === storeIdAktif) {
-                // Agent untuk toko ini sedang berjalan (misalnya dari dashboard): pantau tanpa membekukan pemain.
+                // Agent untuk toko ini sedang berjalan (misalnya dari dashboard): ikut dipantau.
                 setAgentRunning(true);
                 terapkanRun(jalan);
                 startPolling(jalan.run_id);
@@ -248,10 +265,9 @@ function App() {
 
     // ── Buka Modal Approval saat Tombol 'E' Ditekan di Meja Manajer ───────────
     const handleOpenApprovalModal = useCallback(() => {
-        if (agentRunning) return;
         EventBus.emit('freeze-player');
         setIsApprovalModalOpen(true);
-    }, [agentRunning]);
+    }, []);
 
     // ── Tutup Modal Approval & Kembalikan Kontrol Gerak Karakter ──────────────
     const handleCloseApprovalModal = useCallback(() => {
@@ -269,16 +285,14 @@ function App() {
         });
     }, []);
 
-    // ── Buka State Inspect (1/4 Layar Sidebar): Membekukan pergerakan player ──
+    // ── Buka State Inspect (1/4 Layar Sidebar): pemain tetap bisa bergerak; pergi = tutup ──
     const handleOpenTVInspect = useCallback(() => {
-        if (agentRunning) return;
-        EventBus.emit('freeze-player');
         setTvMode('inspect');
-    }, [agentRunning]);
+        tandaiPanelDibuka();
+    }, [tandaiPanelDibuka]);
 
-    // ── Tutup State Inspect: Kembalikan gerak pemain & switch ke peek/hidden ────
+    // ── Tutup State Inspect: switch ke peek/hidden ────
     const handleCloseTV = useCallback(() => {
-        EventBus.emit('unfreeze-player');
         setTvMode(isNearTVRef.current ? 'peek' : 'hidden');
     }, []);
 
@@ -299,23 +313,23 @@ function App() {
         setIsChatOpen(false);
     }, []);
 
-    // ── Kontrol Buka/Tutup Emergency Crisis Hub Modal (Doni) ──────────────────
+    // ── Kontrol Buka/Tutup Crisis Hub Doni (panel laporan, tanpa membekukan pemain) ──────────────
     const handleOpenCrisisModal = useCallback(() => {
-        EventBus.emit('freeze-player');
+        setIsNpcModalOpen(false);
         setIsCrisisModalOpen(true);
-    }, []);
+        tandaiPanelDibuka();
+    }, [tandaiPanelDibuka]);
 
     const handleCloseCrisisModal = useCallback(() => {
         setIsCrisisModalOpen(false);
-        EventBus.emit('unfreeze-player');
     }, []);
 
     // ── Kontrol Buka/Tutup Regional Command Center (80 Cabang) ────────────────
     const handleOpenRegionalModal = useCallback(() => {
-        if (agentRunning || isWarping) return;
+        if (isWarping) return;
         EventBus.emit('freeze-player');
         setIsRegionalModalOpen(true);
-    }, [agentRunning, isWarping]);
+    }, [isWarping]);
 
     const handleCloseRegionalModal = useCallback(() => {
         setIsRegionalModalOpen(false);
@@ -325,10 +339,10 @@ function App() {
 
     // ── Kontrol Buka/Tutup Time Simulation Modal (+1 Hari, +7 Hari, Reset) ───
     const handleOpenTimeModal = useCallback(() => {
-        if (agentRunning || isWarping) return;
+        if (isWarping) return;
         EventBus.emit('freeze-player');
         setIsTimeModalOpen(true);
-    }, [agentRunning, isWarping]);
+    }, [isWarping]);
 
     const handleCloseTimeModal = useCallback(() => {
         setIsTimeModalOpen(false);
@@ -340,10 +354,10 @@ function App() {
 
     // ── Kontrol Buka/Tutup Help Controls Modal (Panduan Navigasi & Pintasan) ──
     const handleOpenHelpModal = useCallback(() => {
-        if (agentRunning || isWarping) return;
+        if (isWarping) return;
         EventBus.emit('freeze-player');
         setIsHelpModalOpen(true);
-    }, [agentRunning, isWarping]);
+    }, [isWarping]);
 
     const handleCloseHelpModal = useCallback(() => {
         setIsHelpModalOpen(false);
@@ -358,41 +372,53 @@ function App() {
                 window.dispatchEvent(new CustomEvent('unfreeze-player'));
                 return false;
             } else {
-                if (agentRunning || isWarping) return false;
+                if (isWarping) return false;
                 EventBus.emit('freeze-player');
                 return true;
             }
         });
-    }, [agentRunning, isWarping]);
+    }, [isWarping]);
 
-    // ── Kontrol Buka/Tutup NPC Quick Dialog Modal (Graceful Fallback) ─────────
+    // ── Panel laporan staf: tersimpan per (staf, toko); "Muat Ulang" mengambil data baru ─────────
     const handleCloseNpcModal = useCallback(() => {
         setIsNpcModalOpen(false);
-        EventBus.emit('unfreeze-player');
-        window.dispatchEvent(new CustomEvent('unfreeze-player'));
     }, []);
 
-    const handleOpenNpcModal = useCallback(async (payload) => {
-        const id = (payload?.npcId || payload?.npc || 'maya').toLowerCase();
-        setActiveNpcId(id);
-        setIsNpcModalOpen(true);
-        setIsNpcLoading(true);
-        EventBus.emit('freeze-player');
-
+    const muatLaporanStaf = useCallback(async (id, store) => {
+        const kunci = `${id}:${store}`;
+        if (memuatStafRef.current.has(kunci)) return; // event buka sering terkirim ganda dalam satu tekan E
+        memuatStafRef.current.add(kunci);
+        setMemuatStaf((m) => ({ ...m, [kunci]: true }));
         try {
-            const laporan = await laporanNpc(id, currentStore?.id || 74);
-            setIsNpcFallback(false);
-            setNpcDialogue(laporan.dialogue);
-            setNpcMetrics(laporan.metrics);
+            const laporan = await laporanNpc(id, store);
+            setLaporanStaf((c) => ({ ...c, [kunci]: { ...laporan, gagal: false, tanggal: tanggalSimRef.current } }));
         } catch (err) {
             console.warn(`[App] Laporan ${id} tidak bisa dibaca:`, err);
-            setIsNpcFallback(true);
-            setNpcDialogue(`Data toko belum bisa dibaca, jadi saya belum bisa melapor. ${err.message}`);
-            setNpcMetrics([]);
+            setLaporanStaf((c) => ({
+                ...c,
+                [kunci]: {
+                    dialogue: `Data toko belum bisa dibaca, jadi saya belum bisa melapor. ${err.message}`,
+                    metrics: [],
+                    gagal: true,
+                    tanggal: tanggalSimRef.current,
+                },
+            }));
         } finally {
-            setIsNpcLoading(false);
+            memuatStafRef.current.delete(kunci);
+            setMemuatStaf((m) => ({ ...m, [kunci]: false }));
         }
-    }, [currentStore]);
+    }, []);
+
+    const handleOpenNpcModal = useCallback((payload) => {
+        const id = (payload?.npcId || payload?.npc || 'maya').toLowerCase();
+        const store = currentStore?.id || 74;
+        setActiveNpcId(id);
+        setIsCrisisModalOpen(false);
+        setIsNpcModalOpen(true);
+        tandaiPanelDibuka();
+        // Laporan yang sudah pernah dibaca langsung ditampilkan lagi; baru dibaca dari API kalau belum ada.
+        if (!laporanStafRef.current[`${id}:${store}`]) muatLaporanStaf(id, store);
+    }, [currentStore, muatLaporanStaf, tandaiPanelDibuka]);
 
     // ── Universal Proximity Interaction Handler (Directive v5.6) ─────────────
     // Dipanggil serentak oleh Keyboard Desktop ('E') dan Smart Action Button Mobile
@@ -405,10 +431,7 @@ function App() {
 
         // 2. Jika ada modal yang sedang terbuka, tuts 'E' bertindak sebagai Universal Toggle untuk menutupnya
         if (isAnyModalOpen) {
-            if (isNpcModalOpen) handleCloseNpcModal();
-            else if (isApprovalModalOpen) handleCloseApprovalModal();
-            else if (isCrisisModalOpen) handleCloseCrisisModal();
-            else if (tvMode === 'inspect') handleCloseTV();
+            if (isApprovalModalOpen) handleCloseApprovalModal();
             else if (isHelpModalOpen) handleCloseHelpModal();
             else if (isTimeModalOpen) handleCloseTimeModal();
             else if (isRegionalModalOpen) handleCloseRegionalModal();
@@ -459,7 +482,7 @@ function App() {
         }
 
         if (targetContext === 'rexa' || rexaInRange || scene?.isNearRexa) {
-            handleTriggerAgent();
+            handleRexa();
             return;
         }
 
@@ -479,9 +502,7 @@ function App() {
         }
     }, [
         isAnyModalOpen,
-        isNpcModalOpen,
         isApprovalModalOpen,
-        isCrisisModalOpen,
         tvMode,
         isHelpModalOpen,
         isTimeModalOpen,
@@ -489,15 +510,12 @@ function App() {
         managerInRange,
         rexaInRange,
         handleOpenNpcModal,
-        handleCloseNpcModal,
         handleOpenApprovalModal,
         handleCloseApprovalModal,
-        handleCloseCrisisModal,
-        handleCloseTV,
         handleCloseHelpModal,
         handleCloseTimeModal,
         handleCloseRegionalModal,
-        handleTriggerAgent,
+        handleRexa,
         handleOpenTVInspect,
         handleOpenCrisisModal,
     ]);
@@ -509,8 +527,8 @@ function App() {
             const tag = target?.tagName?.toLowerCase();
             if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
 
-            if (e.key === 'Escape' && bubbleTerbuka && !isAnyModalOpen) {
-                handleTutupBubble();
+            if (e.key === 'Escape' && adaPanel && !isAnyModalOpen) {
+                tutupPanel();
             } else if (e.key === 'c' || e.key === 'C') {
                 handleToggleChat();
             } else if (e.key.toLowerCase() === 'x' || e.key === 'h' || e.key === 'H' || e.key === '?') {
@@ -524,19 +542,19 @@ function App() {
 
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [handleToggleChat, handleToggleHelpModal, triggerProximityAction, bubbleTerbuka, isAnyModalOpen, handleTutupBubble]);
+    }, [handleToggleChat, handleToggleHelpModal, triggerProximityAction, adaPanel, isAnyModalOpen, tutupPanel]);
 
     // ── Setup Event Listeners dari Phaser & Window ────────────────────────────
     useEffect(() => {
         const onSceneReady = (scene) => setCurrentScene(scene.scene.key);
         const onPlayerMoved = (pos) => {
             posisiPemainRef.current = pos;
-            if (!bubbleTerbukaRef.current || agentRunningRef.current) return;
-            // Hasil agent sedang dibaca: begitu pemain bergeser lebih dari setengah petak, bubble ditutup.
+            if (!adaPanelRef.current) return;
+            // Pemain pergi (bergeser lebih dari setengah petak): panel laporan ditutup, isinya tetap tersimpan.
             if (!jangkarRef.current) {
                 jangkarRef.current = pos;
             } else if (Math.hypot(pos.x - jangkarRef.current.x, pos.y - jangkarRef.current.y) > 16) {
-                setBubbleTerbuka(false);
+                tutupPanel();
             }
         };
         const onRexaProximity = ({ inRange }) => setRexaInRange(inRange);
@@ -550,7 +568,9 @@ function App() {
         EventBus.on('rexa-screen-pos', onRexaScreenPos);
         EventBus.on('manager-proximity', onManagerProximity);
         EventBus.on('manager-screen-pos', onManagerScreenPos);
-        EventBus.on('trigger-agent-analysis', handleTriggerAgent);
+        // E di dekat Rexa (Phaser) membuka log kalau sudah ada; 'jalankan-agent' (Jalankan Ulang, Crisis Hub) selalu menjalankan.
+        EventBus.on('trigger-agent-analysis', handleRexa);
+        EventBus.on('jalankan-agent', handleTriggerAgent);
         EventBus.on('open-approval-modal', handleOpenApprovalModal);
         window.addEventListener('open-approval-modal', handleOpenApprovalModal);
 
@@ -667,7 +687,8 @@ function App() {
             EventBus.removeListener('rexa-screen-pos', onRexaScreenPos);
             EventBus.removeListener('manager-proximity', onManagerProximity);
             EventBus.removeListener('manager-screen-pos', onManagerScreenPos);
-            EventBus.removeListener('trigger-agent-analysis', handleTriggerAgent);
+            EventBus.removeListener('trigger-agent-analysis', handleRexa);
+            EventBus.removeListener('jalankan-agent', handleTriggerAgent);
             EventBus.removeListener('open-approval-modal', handleOpenApprovalModal);
             window.removeEventListener('open-approval-modal', handleOpenApprovalModal);
 
@@ -718,7 +739,7 @@ function App() {
             window.removeEventListener('action-button-pressed', triggerProximityAction);
             window.removeEventListener('trigger-smart-action', triggerProximityAction);
         };
-    }, [handleTriggerAgent, handleOpenApprovalModal, handleTVProximity, handleOpenTVInspect, handleToggleChat, handleOpenChat, handleCloseChat, handleOpenCrisisModal, handleOpenRegionalModal, handleOpenTimeModal, handleOpenNpcModal, triggerProximityAction]);
+    }, [handleTriggerAgent, handleRexa, tutupPanel, handleOpenApprovalModal, handleTVProximity, handleOpenTVInspect, handleToggleChat, handleOpenChat, handleCloseChat, handleOpenCrisisModal, handleOpenRegionalModal, handleOpenTimeModal, handleOpenNpcModal, triggerProximityAction]);
 
     // Timer agent (polling dan hitung mundur pencairan pemain) hanya dibersihkan saat App dilepas. Kalau ikut cleanup
     // efek listener di atas, timer terhapus setiap handler berganti identitas (misalnya data toko dimuat ulang saat
@@ -975,7 +996,7 @@ function App() {
                     {agentRunning ? (
                         <button
                             type="button"
-                            onClick={() => setBubbleTerbuka(true)}
+                            onClick={bukaBubble}
                             title={bubbleTerbuka ? 'Agent Rexa sedang bekerja (Esc untuk lanjut berjalan)' : 'Klik untuk melihat langkah agent lagi'}
                             style={{
                                 cursor: bubbleTerbuka ? 'default' : 'pointer',
@@ -994,12 +1015,12 @@ function App() {
                             }}
                         >
                             <span className="status-dot pulse-amber" />
-                            <span>⚡ REXA IN PATROL · LANGKAH #{stepCount || 1}{bubbleTerbuka ? '' : ' · LIHAT'}</span>
+                            <span>⚡ REXA IN PATROL · TOKO {tokoLog} · LANGKAH #{stepCount || 1}{bubbleTerbuka ? '' : ' · LIHAT'}</span>
                         </button>
                     ) : adaHasil && !bubbleTerbuka && !isApprovalModalOpen ? (
                         <button
                             type="button"
-                            onClick={() => setBubbleTerbuka(true)}
+                            onClick={bukaBubble}
                             title="Buka lagi hasil agent terakhir untuk toko ini"
                             style={{
                                 display: 'inline-flex',
@@ -1016,7 +1037,7 @@ function App() {
                                 cursor: 'pointer',
                             }}
                         >
-                            <span>{agentStatus === 'GAGAL' ? '⚠️ AGENT GAGAL' : '✅ HASIL AGENT'} · {stepCount} LANGKAH · LIHAT</span>
+                            <span>{agentStatus === 'GAGAL' ? '⚠️ AGENT GAGAL' : '✅ HASIL AGENT'} TOKO {tokoLog} · {stepCount} LANGKAH · LIHAT</span>
                         </button>
                     ) : isApprovalModalOpen ? (
                         <div
@@ -1116,7 +1137,7 @@ function App() {
                     </div>
 
                     {/* Proximity Hotkey Pill: Rexa */}
-                    {rexaInRange && !agentRunning && !isApprovalModalOpen && (
+                    {rexaInRange && !bubbleTerbuka && !isApprovalModalOpen && (
                         <div
                             style={{
                                 display: 'inline-flex',
@@ -1258,7 +1279,7 @@ function App() {
                 <ThoughtBubble
                     visible={bubbleTerbuka && (agentRunning || adaHasil)}
                     onTutup={handleTutupBubble}
-                    onJalankanUlang={agentRunning ? null : () => handleTriggerAgent({ store: String(storeIdAktif) })}
+                    onJalankanUlang={agentRunning ? null : () => handleTriggerAgent({ store: String(tokoLog || storeIdAktif) })}
                     status={agentStatus}
                     currentStep={currentStep}
                     stepCount={stepCount}
@@ -1268,7 +1289,7 @@ function App() {
                 />
 
                 {/* Pill Aksi Interaktif saat Dekat Rexa */}
-                {rexaInRange && !agentRunning && !isApprovalModalOpen && (
+                {rexaInRange && !bubbleTerbuka && !isApprovalModalOpen && (
                     <div
                         style={{
                             position: 'absolute',
@@ -1281,13 +1302,13 @@ function App() {
                         }}
                     >
                         <button
-                            onClick={() => handleTriggerAgent({ store: String(currentStore?.id || 74) })}
+                            onClick={handleRexa}
                             className="action-pill action-pill-rexa"
                             style={{ position: 'static', transform: 'none' }}
-                            title={`Picu analisis inventaris & draf PO Toko ${currentStore?.id || 74}`}
+                            title={agentRunning || adaHasil ? 'Buka log agent (jalankan ulang dari bubble)' : `Picu analisis inventaris & draf PO Toko ${currentStore?.id || 74}`}
                         >
                             <kbd className="keycap active">E</kbd>
-                            <span>Analisis Toko</span>
+                            <span>{agentRunning ? 'Lihat Agent' : adaHasil ? 'Lihat Hasil Agent' : 'Analisis Toko'}</span>
                         </button>
                         <button
                             onClick={handleOpenChat}
@@ -1380,10 +1401,10 @@ function App() {
             <NPCDialogModal
                 isOpen={isNpcModalOpen}
                 npcId={activeNpcId}
-                dialogue={npcDialogue}
-                metrics={npcMetrics}
-                isFallback={isNpcFallback}
-                isLoading={isNpcLoading}
+                laporan={laporanStaf[`${activeNpcId}:${storeIdAktif}`]}
+                isLoading={Boolean(memuatStaf[`${activeNpcId}:${storeIdAktif}`])}
+                tanggalSekarang={formattedDate}
+                onMuatUlang={() => muatLaporanStaf(activeNpcId, storeIdAktif)}
                 onClose={handleCloseNpcModal}
             />
 
