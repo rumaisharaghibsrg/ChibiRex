@@ -5,7 +5,6 @@
  *  - Basis data snapshot Bibitor per 31 Desember 2016 (2016-12-31).
  *  - Penambahan hari (+1 Hari harian, +7 Hari mingguan) dan operasi reset.
  *  - Pemformatan tanggal lokal Indonesia (ID).
- *  - Proyeksi stok habis / mutasi inventaris berdasarkan rata-rata laju harian (Vs).
  */
 
 export const BASELINE_DATE_STR = '2016-12-31';
@@ -71,38 +70,5 @@ export function calculateNewDate(baseDate = BASELINE_DATE, daysOffset = 0) {
         iso: formatISODate(resultDate),
         formatted: formatIndonesianDate(resultDate),
         fullFormatted: formatIndonesianDayAndDate(resultDate),
-    };
-}
-
-/**
- * Menghitung proyeksi penurunan stok dan dampak inventaris berdasarkan hari offset
- * @param {object} store - Objek toko aktif
- * @param {number} daysOffset - Selisih hari
- */
-export function calculateProjectedMetrics(store, daysOffset = 0) {
-    const baseSkuCount = store?.skuCount || 4287;
-    // Rata-rata estimasi penjualan unit harian toko retail minuman/gudang (~120-220 unit/hari)
-    const dailyDepletionUnits = Math.round(160 + (store?.id % 15) * 8);
-    const totalUnitsDepleted = dailyDepletionUnits * daysOffset;
-
-    // Tambahan SKU yang jatuh ke zona Reorder seiring berjalannya waktu
-    const newReorderCount = daysOffset === 0 ? 0 : Math.min(18, Math.max(1, Math.round(daysOffset * 1.6)));
-
-    // Estimasi kas yang diselamatkan bertambah seiring dicegahnya pemesanan barang lambat
-    const baseSavedCash = 18500000;
-    const additionalSavedCash = daysOffset * 2800000;
-    const totalSavedCash = baseSavedCash + additionalSavedCash;
-
-    // Health score sedikit terpengaruh jika ada reorder yang belum diapprove manajer
-    const baseHealth = store?.healthScore || 92.4;
-    const healthDecay = daysOffset === 0 ? 0 : daysOffset >= 7 ? 4.2 : 1.1;
-    const projectedHealthScore = Math.max(75, +(baseHealth - healthDecay).toFixed(1));
-
-    return {
-        dailyDepletionUnits,
-        totalUnitsDepleted,
-        newReorderCount,
-        totalSavedCash,
-        projectedHealthScore,
     };
 }

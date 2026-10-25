@@ -5,12 +5,13 @@
  *  1. STATE PEEK (1/8 Layar Game):
  *     - Popup minimalis di sudut kanan atas kanvas game saat player mendekati TV (< 50px).
  *     - Player TIDAK dibekukan (tetap bebas berjalan).
- *     - Menampilkan metrik ringkas (Rp 124.5M Omset, 842 Trx) dan petunjuk [E] Inspect.
+ *     - Menampilkan Health Score toko yang diawasi dan rata-rata jaringan, plus petunjuk [E] Inspect.
  *  2. STATE INSPECT (1/4 Layar Game):
  *     - Membesar secara mulus (smooth CSS transition all 0.3s ease-in-out) saat [E] ditekan.
  *     - Menjadi panel sidebar kanan di dalam viewport game aktif.
  *     - Player dibekukan.
- *     - Menampilkan visual Bar Chart tren omset 7 hari, 4 kartu KPI, kategori produk, dan status AI.
+ *     - Menampilkan 4 kartu KPI, grafik toko dengan Health terendah, status SKU, dan status agent/guardrail.
+ *     - Semua angka dari API Rexa (ringkasan toko, /jaringan/ringkasan, guardrail, worker, hitung fisik).
  *     - Penutupan via tombol [X] atau tombol keyboard [ESC] mengembalikan kontrol gerak pemain.
  *  3. KONTEN RELATIF KANVAS GAME:
  *     - 100% position: absolute di dalam container viewport game aktif, tidak pernah meluber ke letterbox.
@@ -19,10 +20,60 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { EventBus } from '../game/EventBus';
+import { api, DATA_BERUBAH } from '../lib/api';
+import { angka, rupiahRingkas, statusHealth } from '../lib/format';
+
+const WARNA_STATUS = { AMAN: '#34d399', REORDER: '#fbbf24', OVERSTOCK: '#38bdf8', DEADSTOCK: '#f87171' };
 
 export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
-    const { currentStore } = useStore();
+    const { currentStore, switchStore } = useStore();
     const [hoveredBar, setHoveredBar] = useState(null);
+    const [data, setData] = useState(null);
+    const [galat, setGalat] = useState(null);
+    const terbuka = mode !== 'hidden';
+    const storeId = currentStore?.id || 74;
+
+    // Muat data saat TV terlihat, saat toko diganti, dan setiap data toko berubah (hari simulasi, agent, PO).
+    useEffect(() => {
+        if (!terbuka) return undefined;
+        let aktif = true;
+        const muat = () => Promise.all([
+            api.ringkasan(storeId),
+            api.jaringan().catch(() => null), // statistik jaringan opsional (API lama belum punya)
+            api.statusGuardrail(storeId),
+            api.statusWorker().catch(() => null),
+            api.stokFisik(storeId).catch(() => []),
+        ])
+            .then(([ringkasan, jaringan, guard, worker, fisik]) => {
+                if (!aktif) return;
+                setData({ ringkasan, jaringan, guard, worker, fisik });
+                setGalat(null);
+            })
+            .catch((e) => aktif && setGalat(e.message));
+        muat();
+        EventBus.on(DATA_BERUBAH, muat);
+        return () => {
+            aktif = false;
+            EventBus.removeListener(DATA_BERUBAH, muat);
+        };
+    }, [terbuka, storeId]);
+
+    const r = data?.ringkasan;
+    const j = data?.jaringan;
+    const skor = r ? statusHealth(r.health_score) : null;
+    const peringkat = r && j ? 1 + j.toko.filter((t) => t.health_score > r.health_score).length : null;
+    const tokoKritis = j ? j.toko.filter((t) => t.health_score < 65).length : null;
+    const terendah = j ? [...j.toko].sort((a, b) => a.health_score - b.health_score || a.store - b.store).slice(0, 7) : [];
+    const statusSku = r
+        ? Object.keys(WARNA_STATUS).map((k) => ({ kode: k, jumlah: r.jumlah_status[k] ?? 0 }))
+        : [];
+    const totalSku = statusSku.reduce((t, x) => t + x.jumlah, 0) || 1;
+    const persenTertahan = r?.nilai_stok_idr ? Math.round((100 * r.modal_tertahan_idr) / r.nilai_stok_idr) : 0;
+    const worker = data?.worker;
+    const statusAgent = !worker ? { teks: '-', warna: '#94a3b8' }
+        : worker.mode === 'antrian'
+            ? (worker.aktif ? { teks: 'WORKER AKTIF', warna: '#34d399' } : { teks: 'WORKER MATI', warna: '#f87171' })
+            : worker.mode === 'lokal' ? { teks: 'LOKAL', warna: '#34d399' } : { teks: 'NONAKTIF', warna: '#f87171' };
 
     // ── Tangani Tombol ESC dan Universal E Toggle untuk Interaksi (Directive v4.8) ─
     useEffect(() => {
@@ -41,18 +92,6 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [mode, onInspect, onClose]);
-
-    // Data 7 Hari Terakhir untuk Visual Bar Chart
-    const weeklyData = [
-        { day: 'Sen', amount: 98.2,  orders: 680 },
-        { day: 'Sel', amount: 105.4, orders: 720 },
-        { day: 'Rab', amount: 112.0, orders: 765 },
-        { day: 'Kam', amount: 118.5, orders: 810 },
-        { day: 'Jum', amount: 135.2, orders: 895 },
-        { day: 'Sab', amount: 142.0, orders: 940 },
-        { day: 'Min', amount: 124.5, orders: 842, isToday: true },
-    ];
-    const maxAmount = 160;
 
     const isHidden  = mode === 'hidden';
     const isPeek    = mode === 'peek';
@@ -159,15 +198,15 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                     {/* Middle: Key Numbers */}
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '4px 0' }}>
                         <div>
-                            <span style={{ fontSize: '10px', color: '#94a3b8', display: 'block', marginBottom: '-2px' }}>Omset Toko</span>
-                            <span style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', letterSpacing: '-0.3px' }}>
-                                Rp 124.5M
+                            <span style={{ fontSize: '10px', color: '#94a3b8', display: 'block', marginBottom: '-2px' }}>Health Toko {storeId}</span>
+                            <span style={{ fontSize: '15px', fontWeight: '800', color: skor?.warna || '#ffffff', letterSpacing: '-0.3px' }}>
+                                {r ? `${r.health_score}/100` : galat ? 'Offline' : '...'}
                             </span>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                            <span style={{ fontSize: '10px', color: '#94a3b8', display: 'block', marginBottom: '-2px' }}>Transaksi</span>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', display: 'block', marginBottom: '-2px' }}>Rata-rata jaringan</span>
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#a78bfa', fontFamily: 'monospace' }}>
-                                842 Trx
+                                {j ? angka(j.health_rata) : '-'}
                             </span>
                         </div>
                     </div>
@@ -313,6 +352,14 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             flex: 1,
                         }}
                     >
+                        {!r && (
+                            <div style={{ fontSize: '11px', color: galat ? '#f87171' : '#94a3b8', lineHeight: 1.5 }}>
+                                {galat ? `Data toko tidak bisa dibaca: ${galat}` : 'Memuat data toko...'}
+                            </div>
+                        )}
+
+                        {r && (
+                        <>
                         {/* 4 Kartu KPI Grid 2x2 */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                             <div
@@ -324,14 +371,13 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                 }}
                             >
                                 <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#38bdf8', fontWeight: '700' }}>
-                                    OMSET HARI INI
+                                    HEALTH TOKO {storeId}
                                 </span>
-                                <div style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', margin: '3px 0 1px' }}>
-                                    Rp 124.5M
+                                <div style={{ fontSize: '15px', fontWeight: '800', color: skor?.warna || '#ffffff', margin: '3px 0 1px' }}>
+                                    {r.health_score} <span style={{ fontSize: '10px', color: '#94a3b8' }}>/ 100</span>
                                 </div>
-                                <span style={{ fontSize: '9px', color: '#34d399' }}>▲ +18.4% target</span>
+                                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{skor.label}{peringkat ? ` · #${peringkat} dari ${j.jumlah_toko}` : ''}</span>
                             </div>
-
                             <div
                                 style={{
                                     padding: '10px 12px',
@@ -341,31 +387,29 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                 }}
                             >
                                 <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#a78bfa', fontWeight: '700' }}>
-                                    TRANSAKSI
+                                    JARINGAN {j ? j.jumlah_toko : 80} TOKO
                                 </span>
                                 <div style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', margin: '3px 0 1px' }}>
-                                    842 <span style={{ fontSize: '10px', color: '#94a3b8' }}>Struk</span>
+                                    {j ? angka(j.health_rata) : '-'}
                                 </div>
-                                <span style={{ fontSize: '9px', color: '#94a3b8' }}>Rp 147.8k/struk</span>
+                                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{j ? `${tokoKritis} toko kritis (< 65)` : 'Statistik jaringan belum tersedia'}</span>
                             </div>
-
                             <div
                                 style={{
                                     padding: '10px 12px',
                                     borderRadius: '10px',
                                     background: 'rgba(15, 23, 42, 0.6)',
-                                    border: '1px solid rgba(52, 211, 153, 0.18)',
+                                    border: '1px solid rgba(251, 191, 36, 0.18)',
                                 }}
                             >
-                                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#34d399', fontWeight: '700' }}>
-                                    OTIF SERVICE
+                                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#fbbf24', fontWeight: '700' }}>
+                                    PERLU REORDER
                                 </span>
                                 <div style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', margin: '3px 0 1px' }}>
-                                    96.8%
+                                    {angka(r.jumlah_status.REORDER ?? 0)} <span style={{ fontSize: '10px', color: '#94a3b8' }}>SKU</span>
                                 </div>
-                                <span style={{ fontSize: '9px', color: '#34d399' }}>● Risk Rendah</span>
+                                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{angka(r.sku_risiko_tinggi)} risiko stok habis tinggi</span>
                             </div>
-
                             <div
                                 style={{
                                     padding: '10px 12px',
@@ -375,16 +419,16 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                 }}
                             >
                                 <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#f472b6', fontWeight: '700' }}>
-                                    KAS HEMAT
+                                    MODAL TERTAHAN
                                 </span>
                                 <div style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', margin: '3px 0 1px' }}>
-                                    Rp 48.2M
+                                    {rupiahRingkas(r.modal_tertahan_idr)}
                                 </div>
-                                <span style={{ fontSize: '9px', color: '#f472b6' }}>14 SKU Fast</span>
+                                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{persenTertahan}% nilai stok</span>
                             </div>
                         </div>
 
-                        {/* Visual Bar Chart 7 Hari */}
+                        {/* Grafik toko dengan Health Score terendah (klik untuk berpindah toko) */}
                         <div
                             style={{
                                 padding: '12px 14px',
@@ -395,13 +439,16 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                                 <span style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: '700', color: '#e2e8f0' }}>
-                                    📈 TREN OMSET 7 HARI (JUTA IDR)
+                                    📉 HEALTH TERENDAH DI JARINGAN
                                 </span>
                                 <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#38bdf8' }}>
-                                    Min: Hari Ini
+                                    klik = pindah toko
                                 </span>
                             </div>
 
+                            {terendah.length === 0 ? (
+                                <div style={{ fontSize: '10px', color: '#94a3b8' }}>Statistik jaringan belum tersedia di API ini.</div>
+                            ) : (
                             <div
                                 style={{
                                     height: '110px',
@@ -410,16 +457,17 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                     justifyContent: 'space-between',
                                     gap: '6px',
                                     paddingBottom: '20px',
-                                    borderBottom: '1px dashed rgba(148, 163, 184, 0.2)',
+                                    borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
                                     position: 'relative',
                                 }}
                             >
-                                {weeklyData.map((item, index) => {
-                                    const heightPercent = Math.round((item.amount / maxAmount) * 100);
+                                {terendah.map((t, index) => {
                                     const isHovered = hoveredBar === index;
+                                    const isAktif = t.store === storeId;
+                                    const warna = statusHealth(t.health_score).warna;
                                     return (
                                         <div
-                                            key={item.day}
+                                            key={t.store}
                                             style={{
                                                 flex: 1,
                                                 height: '100%',
@@ -432,13 +480,14 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                             }}
                                             onMouseEnter={() => setHoveredBar(index)}
                                             onMouseLeave={() => setHoveredBar(null)}
+                                            onClick={() => switchStore(t.store)}
+                                            title={`Toko ${t.store} · ${t.kota} · Health ${t.health_score}`}
                                         >
-                                            {/* Tooltip Mini */}
                                             {isHovered && (
                                                 <div
                                                     style={{
                                                         position: 'absolute',
-                                                        bottom: `${heightPercent + 14}%`,
+                                                        bottom: `${t.health_score + 14}%`,
                                                         background: '#0284c7',
                                                         border: '1px solid #38bdf8',
                                                         borderRadius: '4px',
@@ -452,25 +501,19 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                                         zIndex: 10,
                                                     }}
                                                 >
-                                                    Rp {item.amount}M
+                                                    {t.kota} · {t.health_score}
                                                 </div>
                                             )}
 
-                                            {/* Bar Element */}
                                             <div
                                                 className="tv-interactive-bar"
                                                 style={{
                                                     width: '100%',
                                                     maxWidth: '30px',
-                                                    height: `${heightPercent}%`,
-                                                    background: item.isToday
-                                                        ? 'linear-gradient(180deg, #38bdf8 0%, #0284c7 100%)'
-                                                        : 'linear-gradient(180deg, rgba(6, 182, 212, 0.7) 0%, rgba(30, 41, 59, 0.8) 100%)',
+                                                    height: `${t.health_score}%`,
+                                                    background: warna,
                                                     borderRadius: '4px 4px 1px 1px',
-                                                    borderTop: `2px solid ${item.isToday ? '#7dd3fc' : '#22d3ee'}`,
-                                                    boxShadow: item.isToday
-                                                        ? '0 0 10px rgba(56, 189, 248, 0.45)'
-                                                        : 'none',
+                                                    outline: isAktif ? '2px solid #f8fafc' : 'none',
                                                     transition: 'all 0.2s ease',
                                                 }}
                                             />
@@ -481,19 +524,20 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                                     bottom: '-18px',
                                                     fontSize: '9px',
                                                     fontFamily: 'monospace',
-                                                    color: item.isToday ? '#38bdf8' : '#94a3b8',
-                                                    fontWeight: item.isToday ? 'bold' : 'normal',
+                                                    color: isAktif ? '#f8fafc' : '#94a3b8',
+                                                    fontWeight: isAktif ? 'bold' : 'normal',
                                                 }}
                                             >
-                                                {item.day}
+                                                #{t.store}
                                             </span>
                                         </div>
                                     );
                                 })}
                             </div>
+                            )}
                         </div>
 
-                        {/* Breakdown Kategori Produk */}
+                        {/* Status SKU toko yang diawasi */}
                         <div
                             style={{
                                 padding: '12px 14px',
@@ -503,29 +547,27 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             }}
                         >
                             <span style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: '700', color: '#e2e8f0', display: 'block', marginBottom: '8px' }}>
-                                🛒 KONTRIBUSI KATEGORI
+                                📦 STATUS {angka(r.sku_aktif)} SKU AKTIF
                             </span>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                {[
-                                    { name: 'F&B / Groceries', percent: 48, val: 'Rp 59.8M', color: '#06b6d4' },
-                                    { name: 'Personal Care', percent: 26, val: 'Rp 32.4M', color: '#3b82f6' },
-                                    { name: 'Household', percent: 18, val: 'Rp 22.4M', color: '#10b981' },
-                                    { name: 'Fresh Produce', percent: 8, val: 'Rp 9.9M', color: '#f59e0b' },
-                                ].map((cat) => (
-                                    <div key={cat.name}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', marginBottom: '2px' }}>
-                                            <span style={{ color: '#cbd5e1' }}>{cat.name}</span>
-                                            <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{cat.percent}%</span>
+                                {statusSku.map((x) => {
+                                    const persen = Math.round((100 * x.jumlah) / totalSku);
+                                    return (
+                                        <div key={x.kode}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', marginBottom: '2px' }}>
+                                                <span style={{ color: '#cbd5e1' }}>{x.kode}</span>
+                                                <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{angka(x.jumlah)} · {persen}%</span>
+                                            </div>
+                                            <div style={{ height: '4px', background: 'rgba(30, 41, 59, 0.7)', borderRadius: '2px', overflow: 'hidden' }}>
+                                                <div style={{ width: `${persen}%`, height: '100%', background: WARNA_STATUS[x.kode] }} />
+                                            </div>
                                         </div>
-                                        <div style={{ height: '4px', background: 'rgba(30, 41, 59, 0.7)', borderRadius: '2px', overflow: 'hidden' }}>
-                                            <div style={{ width: `${cat.percent}%`, height: '100%', background: cat.color }} />
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 
-                        {/* Status Ekosistem AI Agent */}
+                        {/* Status agent, audit, dan guardrail */}
                         <div
                             style={{
                                 padding: '10px 14px',
@@ -539,18 +581,24 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span style={{ color: '#cbd5e1' }}>🤖 Rexa AI Copilot</span>
-                                <span style={{ color: '#34d399', fontFamily: 'monospace', fontWeight: '700' }}>ACTIVE</span>
+                                <span style={{ color: '#cbd5e1' }}>🤖 Agent Rexa</span>
+                                <span style={{ color: statusAgent.warna, fontFamily: 'monospace', fontWeight: '700' }}>{statusAgent.teks}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span style={{ color: '#cbd5e1' }}>📦 Maya Auditor Stok</span>
-                                <span style={{ color: '#38bdf8', fontFamily: 'monospace', fontWeight: '700' }}>CONF 98.5%</span>
+                                <span style={{ color: '#cbd5e1' }}>📦 Maya: hitung fisik</span>
+                                <span style={{ color: data.fisik.length ? '#fbbf24' : '#34d399', fontFamily: 'monospace', fontWeight: '700' }}>
+                                    {data.fisik.length ? `${data.fisik.length} MENUNGGU AUDIT` : 'TIDAK ADA'}
+                                </span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span style={{ color: '#cbd5e1' }}>🛡️ Rian Guardrail</span>
-                                <span style={{ color: '#34d399', fontFamily: 'monospace', fontWeight: '700' }}>SECURE</span>
+                                <span style={{ color: '#cbd5e1' }}>🛡️ Rian: circuit breaker</span>
+                                <span style={{ color: data.guard.circuit_breaker_terbuka ? '#f87171' : '#34d399', fontFamily: 'monospace', fontWeight: '700' }}>
+                                    {data.guard.circuit_breaker_terbuka ? 'TERBUKA' : 'TERTUTUP'}
+                                </span>
                             </div>
                         </div>
+                        </>
+                        )}
                     </div>
 
                     {/* Footer Sidebar */}

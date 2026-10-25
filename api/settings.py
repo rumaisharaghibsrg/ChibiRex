@@ -11,8 +11,10 @@ import httpx
 from engine import config
 from sap_mock import SERVICE
 
-# Dashboard yang boleh memanggil API dari browser: Vite lokal dan dashboard Vercel (termasuk preview deploy-nya).
-CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,https://chibirex-dashboard.vercel.app"
+# Yang boleh memanggil API dari browser: dashboard (Vite 5173), Virtual HQ (Vite 8080), dan dashboard Vercel
+# (termasuk preview deploy-nya).
+CORS_ORIGINS = ("http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080,"
+                "https://chibirex-dashboard.vercel.app")
 CORS_ORIGIN_REGEX = r"https://chibirex-dashboard(-[a-z0-9-]+)?\.vercel\.app"
 
 

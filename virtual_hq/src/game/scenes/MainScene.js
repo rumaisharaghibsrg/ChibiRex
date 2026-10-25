@@ -911,16 +911,11 @@ export class MainScene extends Phaser.Scene {
                 const isCrisis = Boolean(window.StoreCrisisState?.isCrisis);
                 if (isCrisis) return;
 
-                const crisisIds = [
-                    'CRISIS_STOCKOUT_FAST_MOVING',
-                    'CRISIS_DEADSTOCK_CASH_LOCK',
-                    'CRISIS_CIRCUIT_BREAKER_TRIPPED',
-                    'CRISIS_STORE_HEALTH_CRASH'
-                ];
-                const randomCrisisId = crisisIds[Math.floor(Math.random() * crisisIds.length)];
-                console.log(`[Auto-Crisis] ⏰ 30-Menit interval memicu krisis organik: ${randomCrisisId}`);
+                // Doni memeriksa data toko; alarm hanya berbunyi kalau datanya memang menunjukkan krisis.
                 if (typeof window !== 'undefined' && window.triggerStoreCrisis) {
-                    window.triggerStoreCrisis(randomCrisisId);
+                    window.triggerStoreCrisis()
+                        .then((krisis) => console.log(`[Auto-Crisis] ⏰ Pemeriksaan 30 menit: ${krisis ? krisis.title : 'tidak ada krisis'}`))
+                        .catch((err) => console.warn('[Auto-Crisis] Data toko tidak bisa dibaca:', err));
                 }
             }
         });
@@ -3323,7 +3318,7 @@ export class MainScene extends Phaser.Scene {
         const cy = cam.worldView?.centerY ?? (cam.scrollY + cam.height / 2);
         const bannerTitle = isReset
             ? '🔄 RESET BASELINE WAKTU (31 DES 2016)'
-            : `⚡ DISTORSI TEMPORAL: +${daysAdded} HARI (${targetDateFormatted})`;
+            : `⚡ DISTORSI TEMPORAL: ${daysAdded > 0 ? '+' : ''}${daysAdded} HARI (${targetDateFormatted})`;
         this._spawnHologramTimeBanner(cx, cy - 10, bannerTitle);
 
         // 7. Spawn Ikon Emote ⏳ di atas kepala seluruh staf/NPC (Tahap 4)
@@ -3406,7 +3401,7 @@ export class MainScene extends Phaser.Scene {
             // ── URUTAN KRITIS #4: NOTIFIKASI TOAST ────────────────────────────
             const toastMsg = isReset
                 ? '🔄 Waktu dikembalikan ke 31 Des 2016'
-                : `📅 Waktu dipercepat ke ${targetDateFormatted}`;
+                : `📅 Waktu ${daysAdded < 0 ? 'dimundurkan' : 'dipercepat'} ke ${targetDateFormatted}`;
             if (typeof this._showCheatNotification === 'function') {
                 this._showCheatNotification(toastMsg, 0xf59e0b);
             }
@@ -3789,8 +3784,8 @@ export class MainScene extends Phaser.Scene {
     /**
      * Memeriksa kombinasi tombol rahasia setiap frame di update():
      * - U + R: Toggle auto-crisis 30-menit (ON/OFF)
-     * - U + R + 1: Trigger Krisis Maya (Stockout Arabika)
-     * - U + R + 2: Trigger Krisis Citra (Deadstock Sirup)
+     * - U + R + 1: Periksa krisis Maya (SKU berisiko tinggi kehabisan stok)
+     * - U + R + 2: Periksa krisis Citra (modal tertahan)
      * - U + R + 3: Trigger Krisis Rian (Circuit Breaker Tripped)
      * - U + R + 4: Trigger Krisis Pak Budi (Store Health Crash)
      */
@@ -3816,10 +3811,10 @@ export class MainScene extends Phaser.Scene {
 
             if (just1) {
                 this._cheatUsedNumber = true;
-                this._triggerCheatCrisis('CRISIS_STOCKOUT_FAST_MOVING', 'Maya (Stockout Arabika)');
+                this._triggerCheatCrisis('CRISIS_STOCKOUT_FAST_MOVING', 'Maya (stok kritis)');
             } else if (just2) {
                 this._cheatUsedNumber = true;
-                this._triggerCheatCrisis('CRISIS_DEADSTOCK_CASH_LOCK', 'Citra (Deadstock Sirup)');
+                this._triggerCheatCrisis('CRISIS_DEADSTOCK_CASH_LOCK', 'Citra (modal tertahan)');
             } else if (just3) {
                 this._cheatUsedNumber = true;
                 this._triggerCheatCrisis('CRISIS_CIRCUIT_BREAKER_TRIPPED', 'Rian (Circuit Breaker)');
@@ -3858,10 +3853,14 @@ export class MainScene extends Phaser.Scene {
      */
     _triggerCheatCrisis(crisisId, label) {
         console.log(`%c[CHEAT CODE] 🚨 Manual Trigger: ${crisisId} (${label})`, 'color: #ef4444; font-weight: bold; font-size: 12px;');
-        if (typeof window !== 'undefined' && window.triggerStoreCrisis) {
-            window.triggerStoreCrisis(crisisId);
-        }
-        this._showCheatNotification(`🚨 CHEAT: Memicu Krisis ${label}!`, 0xef4444);
+        if (typeof window === 'undefined' || !window.triggerStoreCrisis) return;
+        // Krisis diambil dari data toko yang diawasi; kalau datanya normal, cheat hanya memberi tahu.
+        this._showCheatNotification(`🔎 Doni memeriksa data: ${label}...`, 0x38bdf8);
+        window.triggerStoreCrisis(crisisId)
+            .then((krisis) => this._showCheatNotification(
+                krisis ? `🚨 Krisis ${label}: ${krisis.title}` : `✅ Data toko normal: tidak ada krisis ${label}`,
+                krisis ? 0xef4444 : 0x10b981))
+            .catch((err) => this._showCheatNotification(`⚠️ Data toko tidak bisa dibaca: ${err.message}`, 0xf59e0b));
     }
 
     /**

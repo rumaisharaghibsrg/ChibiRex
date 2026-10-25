@@ -285,7 +285,7 @@ def _kedaluwarsa_agent(con, s: Settings, sekarang) -> None:
     batas_jalan = (sekarang - timedelta(seconds=s.worker_batas_berjalan_dtk)).isoformat(timespec="seconds")
     con.execute("""update agent_runs set status = 'GAGAL', pesan = ? where status = 'MENUNGGU' and waktu < ?""",
                 (f"Tidak ada worker agent yang mengambil tugas dalam {s.worker_batas_menunggu_dtk} detik. "
-                 "Jalankan `python -m agent.worker` di laptop yang punya Ollama, lalu coba lagi.", batas_tunggu))
+                 "Jalankan `python -m agent.worker` di laptop (atau cek worker otomatisnya), lalu coba lagi.", batas_tunggu))
     con.execute("""update agent_runs set status = 'GAGAL', pesan = ? where status = 'BERJALAN' and mulai_pada < ?""",
                 ("Worker agent berhenti sebelum agent selesai.", batas_jalan))
 

@@ -6,7 +6,7 @@
  *  - EventBus (Jembatan komunikasi Phaser ↔ React)
  *  - ThoughtBubble (Visualisasi pemikiran AI Agent Rexa)
  *  - ApprovalModal (Meja Manajer: 1-Click PO Approval ke SAP S/4HANA)
- *  - Integrasi API REST ChibiRex (POST /agent-runs/mulai, GET /agent-runs/{id}, GET/POST /purchase-orders)
+ *  - Integrasi API REST ChibiRex lewat src/lib/api.js (alamat dari VITE_API_URL, sama dengan dashboard)
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react';
@@ -28,16 +28,15 @@ import MobileRexaCallButton from './components/MobileRexaCallButton';
 import MobileDrawerMenu from './components/MobileDrawerMenu';
 import { useStore } from './context/StoreContext';
 import { useTimeSimulation } from './context/TimeSimulationContext';
-import { NPC_FALLBACK_REGISTRY, fetchWithTimeout, getNPCFallback } from './utils/NPCFallbackData';
+import { api, beritahuDataBerubah } from './lib/api';
+import { laporanNpc } from './lib/npc';
 import './game/StoreCrisisState';
-
-const API_BASE = 'http://localhost:8000';
 
 function App() {
     const phaserRef = useRef();
     const { isMobileScreen, isTouch, shouldShowMobileControls } = useDeviceDetect();
     const { currentStore, switchStore } = useStore();
-    const { currentSimulatedDate, daysOffset, isWarping, formattedDate } = useTimeSimulation();
+    const { daysOffset, isWarping, formattedDate, apiOnline } = useTimeSimulation();
     const [currentScene, setCurrentScene] = useState('');
     const [playerPos, setPlayerPos]       = useState({ x: 0, y: 0 });
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -103,7 +102,6 @@ function App() {
     const [summary, setSummary]             = useState('');
     const [errorMessage, setErrorMessage]   = useState('');
     const [countdown, setCountdown]         = useState(5);
-    const [isRexaFallback, setIsRexaFallback] = useState(false);
 
     const pollingTimerRef   = useRef(null);
     const countdownTimerRef = useRef(null);
@@ -120,9 +118,9 @@ function App() {
         }
     }, []);
 
-    // ── Hitung Mundur 5 Detik Sebelum Menutup Bubble & Unfreeze Player ─────────
-    const startCloseCountdown = useCallback(() => {
-        let count = 5;
+    // ── Hitung Mundur Sebelum Menutup Bubble & Unfreeze Player (galat ditampilkan lebih lama) ─────────
+    const startCloseCountdown = useCallback((detik = 5) => {
+        let count = detik;
         setCountdown(count);
 
         if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
@@ -147,53 +145,45 @@ function App() {
     const startPolling = useCallback((activeRunId) => {
         if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
 
+        const berhenti = () => {
+            if (pollingTimerRef.current) {
+                clearInterval(pollingTimerRef.current);
+                pollingTimerRef.current = null;
+            }
+        };
+        let gagalBeruntun = 0;
+
         pollingTimerRef.current = setInterval(async () => {
             try {
-                const res = await fetch(`${API_BASE}/agent-runs/${activeRunId}`);
-                if (!res.ok) return;
-
-                const data = await res.json();
+                const data = await api.statusAgent(activeRunId);
+                gagalBeruntun = 0;
                 const steps = data.langkah || [];
                 const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
 
                 setStepCount(steps.length);
                 setCurrentStep(latestStep);
-                setAgentStatus(data.status || 'BERJALAN');
+                // MENUNGGU = mode antrian, tugas belum diambil worker agent di laptop.
+                setAgentStatus(data.status === 'MENUNGGU' ? 'MEMULAI' : data.status);
 
-                // Jika status sudah "SELESAI"
                 if (data.status === 'SELESAI') {
-                    if (pollingTimerRef.current) {
-                        clearInterval(pollingTimerRef.current);
-                        pollingTimerRef.current = null;
-                    }
+                    berhenti();
                     setSummary(data.jawaban || 'Tinjauan toko selesai. Draf PO siap ditinjau manajer.');
-                    startCloseCountdown();
-                }
-
-                // Jika status "GAGAL"
-                else if (data.status === 'GAGAL') {
-                    if (pollingTimerRef.current) {
-                        clearInterval(pollingTimerRef.current);
-                        pollingTimerRef.current = null;
-                    }
-                    console.warn('[VirtualHQ] Status agen GAGAL. Mengaktifkan silent fallback Rexa.');
-                    setAgentStatus('SELESAI');
-                    setSummary(NPC_FALLBACK_REGISTRY.rexa.sentence);
-                    setIsRexaFallback(true);
-                    setErrorMessage('');
-                    startCloseCountdown();
+                    beritahuDataBerubah();
+                    startCloseCountdown(8);
+                } else if (data.status === 'GAGAL') {
+                    berhenti();
+                    setErrorMessage(data.pesan || 'Agent gagal dijalankan.');
+                    beritahuDataBerubah();
+                    startCloseCountdown(8);
                 }
             } catch (err) {
-                console.warn('[VirtualHQ] Polling error. Mengaktifkan silent fallback Rexa:', err);
-                if (pollingTimerRef.current) {
-                    clearInterval(pollingTimerRef.current);
-                    pollingTimerRef.current = null;
-                }
-                setAgentStatus('SELESAI');
-                setSummary(NPC_FALLBACK_REGISTRY.rexa.sentence);
-                setIsRexaFallback(true);
-                setErrorMessage('');
-                startCloseCountdown();
+                // Satu permintaan gagal (misalnya cold start) belum berarti agent gagal; tiga kali beruntun baru dilaporkan.
+                gagalBeruntun += 1;
+                if (gagalBeruntun < 3) return;
+                berhenti();
+                setAgentStatus('GAGAL');
+                setErrorMessage(`Status agent tidak bisa dibaca: ${err.message}`);
+                startCloseCountdown(8);
             }
         }, 2000);
     }, [startCloseCountdown]);
@@ -203,7 +193,6 @@ function App() {
         if (agentRunning || isApprovalModalOpen) return; // Cegah pemanggilan ganda
 
         const activeStoreId = parseInt(store || currentStore?.id || 74, 10);
-        const activeStoreCity = currentStore?.city || 'PAENTMARWY';
 
         // 1. Bekukan gerakan pemain
         EventBus.emit('freeze-player');
@@ -217,40 +206,25 @@ function App() {
         setSummary('');
         setErrorMessage('');
         setCountdown(5);
-        setIsRexaFallback(false);
 
         try {
-            // 3. POST ke http://localhost:8000/agent-runs/mulai dengan timeout 3000ms
-            const res = await fetchWithTimeout(
-                `${API_BASE}/agent-runs/mulai`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ store: activeStoreId }),
-                },
-                3000
-            );
-
-            if (!res.success || res.isFallback || !res.data) {
-                throw new Error(res.error || 'Tidak dapat terhubung ke Backend API (port 8000).');
-            }
-
-            const data = res.data;
-            const newRunId = data.run_id;
-
-            setRunId(newRunId);
-            setAgentStatus(data.status || 'BERJALAN');
-
-            // 4. Jalankan interval polling setiap 2000ms
-            startPolling(newRunId);
+            // 3. Antrikan agent di API (mode antrian: worker di laptop mengambilnya), lalu pantau langkahnya.
+            const data = await api.mulaiAgent(activeStoreId);
+            setRunId(data.run_id);
+            setAgentStatus(data.status === 'MENUNGGU' ? 'MEMULAI' : data.status);
+            startPolling(data.run_id);
         } catch (err) {
-            console.warn('[VirtualHQ] Backend offline/timeout saat memicu agen Rexa. Mengaktifkan silent fallback:', err);
-            const fallbackData = getNPCFallback('rexa', activeStoreId, activeStoreCity);
-            setAgentStatus('SELESAI');
-            setSummary(fallbackData.sentence);
-            setIsRexaFallback(true);
-            setErrorMessage('');
-            startCloseCountdown();
+            // Agent lain sedang berjalan (misalnya dari dashboard): ikuti run itu, jangan mulai yang baru.
+            if (err.kode === 'AGENT_SEDANG_BERJALAN' && err.detail?.run_id) {
+                setRunId(err.detail.run_id);
+                setAgentStatus('BERJALAN');
+                startPolling(err.detail.run_id);
+                return;
+            }
+            console.warn('[VirtualHQ] Agent Rexa tidak bisa dimulai:', err);
+            setAgentStatus('GAGAL');
+            setErrorMessage(err.message);
+            startCloseCountdown(8);
         }
     }, [agentRunning, isApprovalModalOpen, clearAllTimers, startPolling, startCloseCountdown, currentStore]);
 
@@ -387,84 +361,20 @@ function App() {
         setIsNpcLoading(true);
         EventBus.emit('freeze-player');
 
-        const storeId = currentStore?.id || 74;
-        const storeCity = currentStore?.city || 'PAENTMARWY';
-        const fallbackConfig = getNPCFallback(id, storeId, storeCity, daysOffset);
-
         try {
-            const endpoint = `${API_BASE}${fallbackConfig.endpoint}`;
-            const res = await fetchWithTimeout(endpoint, {}, 2500);
-
-            if (res.success && !res.isFallback && res.data) {
-                setIsNpcFallback(false);
-
-                if (id === 'maya') {
-                    const selisihList = Array.isArray(res.data) ? res.data : (res.data.data || []);
-                    const countSelisih = selisihList.length;
-                    setNpcDialogue(
-                        countSelisih > 0
-                            ? `Halo Manager! Dari hasil opname fisik gudang Toko ${storeId} (${storeCity}) per ${formattedDate}, terdapat ${countSelisih} SKU dengan selisih stok fisik vs sistem yang memerlukan verifikasi lebih lanjut.`
-                            : fallbackConfig.sentence
-                    );
-                    setNpcMetrics([
-                        { label: 'Status Opname', value: countSelisih === 0 ? 'Terverifikasi (FIFO)' : `${countSelisih} Perlu Verifikasi`, color: countSelisih === 0 ? '#4ade80' : '#fbbf24' },
-                        { label: 'Data Confidence', value: countSelisih === 0 ? '0.94 / 1.00' : '0.86 / 1.00', color: '#38bdf8' },
-                        { label: 'Selisih Kritis', value: `${countSelisih} SKU`, color: countSelisih === 0 ? '#4ade80' : '#f87171' },
-                        { label: 'Status Kunci PO', value: countSelisih === 0 ? 'Terbuka (Aman)' : 'Terkunci Sementara', color: countSelisih === 0 ? '#4ade80' : '#fbbf24' },
-                    ]);
-                } else if (id === 'citra') {
-                    const savedCash = res.data.total_saved_cash || res.data.kas_diselamatkan || 'Rp 18.500.000';
-                    setNpcDialogue(
-                        `Selamat siang, Manager! Saya baru saja meninjau neraca belanja Toko ${storeId} (${storeCity}) per ${formattedDate}. Likuiditas kas berada dalam batas aman. Alokasi belanja terkendali dan modal operasional terhindar dari deadstock produk lambat.`
-                    );
-                    setNpcMetrics([
-                        { label: 'Kas Diselamatkan', value: typeof savedCash === 'number' ? `Rp ${savedCash.toLocaleString('id-ID')}` : String(savedCash), color: '#4ade80' },
-                        { label: 'Exploratory Budget', value: '10% (Aktif)', color: '#fbbf24' },
-                        { label: 'Rasio Likuiditas', value: '1.42 (Sehat)', color: '#38bdf8' },
-                        { label: 'Deadstock Terkunci', value: 'Rp 0 (Terkendali)', color: '#4ade80' },
-                    ]);
-                } else if (id === 'rian') {
-                    const isTripped = Boolean(res.data.circuit_breaker_tripped);
-                    setNpcDialogue(
-                        isTripped
-                            ? `Peringatan Manager! Terdeteksi anomali pada sistem Toko ${storeId} per ${formattedDate}. Circuit Breaker dalam kondisi TRIPPED dan membekukan sementara gateway penerbitan PO ke SAP S/4HANA.`
-                            : fallbackConfig.sentence
-                    );
-                    setNpcMetrics([
-                        { label: 'Circuit Breaker', value: isTripped ? 'TRIPPED (BAHAYA)' : 'NORMAL (TERTUTUP)', color: isTripped ? '#ef4444' : '#4ade80' },
-                        { label: 'Batas PO Harian', value: 'Rp 50.000.000', color: '#38bdf8' },
-                        { label: 'Sisa Kuota Belanja', value: 'Rp 36.321.120', color: '#4ade80' },
-                        { label: 'Anomali 3-Sigma', value: isTripped ? 'Terdeteksi' : '0 Terdeteksi', color: isTripped ? '#ef4444' : '#4ade80' },
-                    ]);
-                } else if (id === 'budi') {
-                    const score = res.data.health_score || res.data.overall_score || 92.4;
-                    setNpcDialogue(
-                        `Kerja bagus untuk seluruh tim toko hari ini, Manager! Evaluasi operasional harian Toko ${storeId} (${storeCity}) per ${formattedDate} menunjukkan tren yang sangat memuaskan. Store Health Score kita berada di zona prima dan seluruh divisi bekerja selaras.`
-                    );
-                    setNpcMetrics([
-                        { label: 'Store Health Score', value: `${score} / 100`, color: '#4ade80' },
-                        { label: 'Ketersediaan Rak', value: '95%', color: '#38bdf8' },
-                        { label: 'Perputaran Stok', value: '89%', color: '#38bdf8' },
-                        { label: 'Peringkat Regional', value: '#2 Jabodetabek', color: '#fbbf24' },
-                    ]);
-                } else {
-                    setNpcDialogue(fallbackConfig.sentence);
-                    setNpcMetrics(fallbackConfig.metrics);
-                }
-            } else {
-                setIsNpcFallback(true);
-                setNpcDialogue(fallbackConfig.sentence);
-                setNpcMetrics(fallbackConfig.metrics);
-            }
+            const laporan = await laporanNpc(id, currentStore?.id || 74);
+            setIsNpcFallback(false);
+            setNpcDialogue(laporan.dialogue);
+            setNpcMetrics(laporan.metrics);
         } catch (err) {
-            console.warn(`[App] Silent fallback dialog untuk ${id}:`, err);
+            console.warn(`[App] Laporan ${id} tidak bisa dibaca:`, err);
             setIsNpcFallback(true);
-            setNpcDialogue(fallbackConfig.sentence);
-            setNpcMetrics(fallbackConfig.metrics);
+            setNpcDialogue(`Data toko belum bisa dibaca, jadi saya belum bisa melapor. ${err.message}`);
+            setNpcMetrics([]);
         } finally {
             setIsNpcLoading(false);
         }
-    }, [currentStore, agentRunning, isWarping, daysOffset, formattedDate]);
+    }, [currentStore]);
 
     // ── Universal Proximity Interaction Handler (Directive v5.6) ─────────────
     // Dipanggil serentak oleh Keyboard Desktop ('E') dan Smart Action Button Mobile
@@ -1093,9 +1003,14 @@ function App() {
                 {/* Right Meta Badges */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     {/* Backend API Health Status */}
-                    <div className="hud-tag" style={{ gap: '6px' }} title="Status Koneksi REST API ChibiRex">
-                        <span className="status-dot live" />
-                        <span>API: <strong style={{ color: '#38bdf8' }}>:8000</strong></span>
+                    <div className="hud-tag" style={{ gap: '6px' }} title="Status koneksi REST API Rexa (dicek tiap 15 detik)">
+                        <span
+                            className={`status-dot ${apiOnline ? 'live' : ''}`}
+                            style={apiOnline === false ? { backgroundColor: '#ef4444', boxShadow: '0 0 8px #ef4444' } : undefined}
+                        />
+                        <span>API: <strong style={{ color: apiOnline === false ? '#f87171' : '#38bdf8' }}>
+                            {apiOnline === null ? 'MEMERIKSA' : apiOnline ? 'ONLINE' : 'OFFLINE'}
+                        </strong></span>
                     </div>
 
                     {/* Temporal Simulation Widget Capsule */}
@@ -1267,7 +1182,6 @@ function App() {
                     errorMessage={errorMessage}
                     screenPos={rexaScreenPos}
                     countdown={countdown}
-                    isFallback={isRexaFallback}
                 />
 
                 {/* Pill Aksi Interaktif saat Dekat Rexa */}
@@ -1356,6 +1270,7 @@ function App() {
             {/* ── Modal Approval PO ke SAP S/4HANA (Overlay Penuh) ─────── */}
             <ApprovalModal
                 isOpen={isApprovalModalOpen}
+                store={currentStore?.id || 74}
                 onClose={handleCloseApprovalModal}
             />
 

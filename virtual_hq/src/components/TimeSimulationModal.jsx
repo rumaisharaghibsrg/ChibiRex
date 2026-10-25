@@ -1,22 +1,25 @@
 /**
  * TimeSimulationModal.jsx — Temporal Simulation Engine Modal
  *
- * Mengakomodasi simulasi percepatan waktu operasional toko (+1 Hari, +7 Hari, Reset)
- * dan menampilkan kalkulasi proyeksi penurunan inventaris (Vs velocity decay).
+ * Menggeser jam simulasi API Rexa (+1/+7 hari, -1/-7 hari, kembali ke 31 Des 2016), sama dengan kontrol tanggal di
+ * dashboard: stok, PO dalam pengiriman, dan Health Score ikut berubah. Kartu bawah menampilkan kondisi toko yang
+ * diawasi pada tanggal simulasi sekarang (GET /stores/{store}/ringkasan).
  */
 
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { useTimeSimulation } from '../context/TimeSimulationContext';
 import { useStore } from '../context/StoreContext';
 import { EventBus } from '../game/EventBus';
-import { calculateNewDate, calculateProjectedMetrics, BASELINE_DATE } from '../utils/TimeEngine';
+import { calculateNewDate } from '../utils/TimeEngine';
+import { api, DATA_BERUBAH } from '../lib/api';
+import { angka, rupiahRingkas, statusHealth } from '../lib/format';
 
 export function TimeSimulationModal({ isOpen, onClose }) {
     const {
         currentSimulatedDate,
         daysOffset,
+        hariMaks,
         isWarping,
-        formattedDate,
         fullFormattedDate,
         triggerTimeWarp,
         resetTimeToBaseline,
@@ -28,8 +31,24 @@ export function TimeSimulationModal({ isOpen, onClose }) {
     const next1Day = calculateNewDate(currentSimulatedDate, 1);
     const next7Days = calculateNewDate(currentSimulatedDate, 7);
 
-    // Kalkulasi metrik proyeksi dampak
-    const projected = calculateProjectedMetrics(currentStore, daysOffset);
+    const [galat, setGalat] = useState(null);
+    const [kondisi, setKondisi] = useState(null);
+    const storeId = currentStore?.id || 74;
+
+    // Kondisi toko yang diawasi pada tanggal simulasi sekarang; dimuat ulang setiap data berubah.
+    useEffect(() => {
+        if (!isOpen) return undefined;
+        let aktif = true;
+        const muat = () => api.ringkasan(storeId)
+            .then((r) => aktif && setKondisi(r))
+            .catch(() => aktif && setKondisi(null));
+        muat();
+        EventBus.on(DATA_BERUBAH, muat);
+        return () => {
+            aktif = false;
+            EventBus.removeListener(DATA_BERUBAH, muat);
+        };
+    }, [isOpen, storeId]);
 
     // Handler tutup modal & unfreeze player
     const handleClose = useCallback(() => {
@@ -54,20 +73,37 @@ export function TimeSimulationModal({ isOpen, onClose }) {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, isWarping, handleClose]);
 
-    // Eksekusi lompatan waktu
-    const handleJumpTime = (days) => {
+    // Eksekusi lompatan waktu lewat API; modal ditutup setelah API menerima supaya animasi warp terlihat.
+    const handleJumpTime = async (days) => {
         if (isWarping) return;
-        triggerTimeWarp(days);
-        // Langsung tutup modal agar pemain dapat menyaksikan efek Time Warp di kanvas Phaser
-        if (onClose) onClose();
+        setGalat(null);
+        const pesan = await triggerTimeWarp(days);
+        if (pesan) setGalat(pesan);
+        else if (onClose) onClose();
     };
 
-    // Eksekusi reset waktu
-    const handleReset = () => {
+    // Kembali ke 31 Des 2016: tanggal dan stok kembali ke data awal; PO, hold, dan riwayat agent tetap tersimpan.
+    const handleReset = async () => {
         if (isWarping || daysOffset === 0) return;
-        resetTimeToBaseline();
-        if (onClose) onClose();
+        setGalat(null);
+        const pesan = await resetTimeToBaseline();
+        if (pesan) setGalat(pesan);
+        else if (onClose) onClose();
     };
+
+    const tombolMundur = (hari) => ({
+        padding: '8px 12px',
+        borderRadius: '10px',
+        backgroundColor: 'rgba(30, 41, 59, 0.55)',
+        border: '1px solid rgba(148, 163, 184, 0.3)',
+        color: daysOffset < 1 ? '#64748b' : '#e2e8f0',
+        cursor: daysOffset < 1 || isWarping ? 'not-allowed' : 'pointer',
+        fontSize: '11px',
+        fontWeight: '700',
+        fontFamily: 'monospace',
+        flex: 1,
+        opacity: hari > daysOffset && daysOffset > 0 ? 0.8 : 1,
+    });
 
     if (!isOpen) return null;
 
@@ -258,7 +294,7 @@ export function TimeSimulationModal({ isOpen, onClose }) {
                         {/* Tombol +1 Hari */}
                         <button
                             onClick={() => handleJumpTime(1)}
-                            disabled={isWarping}
+                            disabled={isWarping || daysOffset + 1 > hariMaks}
                             style={{
                                 padding: '14px 16px',
                                 borderRadius: '12px',
@@ -303,7 +339,7 @@ export function TimeSimulationModal({ isOpen, onClose }) {
                         {/* Tombol +7 Hari */}
                         <button
                             onClick={() => handleJumpTime(7)}
-                            disabled={isWarping}
+                            disabled={isWarping || daysOffset + 7 > hariMaks}
                             style={{
                                 padding: '14px 16px',
                                 borderRadius: '12px',
@@ -346,6 +382,22 @@ export function TimeSimulationModal({ isOpen, onClose }) {
                         </button>
                     </div>
 
+                    {/* Tombol mundur (stok kembali seperti tanggal itu; PO dan hold tetap tercatat) */}
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <button onClick={() => handleJumpTime(-1)} disabled={isWarping || daysOffset < 1} style={tombolMundur(1)}>
+                            ⏪ -1 HARI
+                        </button>
+                        <button onClick={() => handleJumpTime(-7)} disabled={isWarping || daysOffset < 1} style={tombolMundur(7)}>
+                            ⏮️ -7 HARI {daysOffset > 0 && daysOffset < 7 ? `(ke 31 Des 2016)` : ''}
+                        </button>
+                    </div>
+
+                    {galat && (
+                        <div style={{ fontSize: '11px', color: '#f87171', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '8px', padding: '8px 12px' }}>
+                            ⚠️ Waktu tidak bergeser: {galat}
+                        </div>
+                    )}
+
                     {/* Tombol Reset Baseline */}
                     <button
                         onClick={handleReset}
@@ -368,7 +420,7 @@ export function TimeSimulationModal({ isOpen, onClose }) {
                         }}
                     >
                         <span>🔄</span>
-                        <span>RESET KE BASELINE (31 Des 2016 • Data Original DuckDB)</span>
+                        <span>KEMBALI KE 31 DES 2016 (stok awal; PO, hold, dan riwayat agent tetap)</span>
                     </button>
                 </div>
 
@@ -387,30 +439,30 @@ export function TimeSimulationModal({ isOpen, onClose }) {
                 >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{ fontSize: '11px', fontWeight: '800', color: '#38bdf8' }}>
-                            📊 PROYEKSI DAMPAK TEMPORAL:
+                            📊 KONDISI TOKO {storeId} PER TANGGAL INI:
                         </span>
                         <span style={{ fontSize: '10px', color: '#94a3b8' }}>
-                            {daysOffset === 0 ? 'Baseline As-Of' : `Simulasi Hari Ke-${daysOffset}`}
+                            Data API · sama dengan dashboard
                         </span>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '10px' }}>
                         <div style={{ padding: '6px 8px', borderRadius: '6px', background: 'rgba(15, 23, 42, 0.6)' }}>
-                            <span style={{ color: '#94a3b8', display: 'block' }}>Laju Penjualan (Vs):</span>
-                            <strong style={{ color: '#f8fafc', fontSize: '11px' }}>
-                                ~{projected.dailyDepletionUnits} unit/hari
+                            <span style={{ color: '#94a3b8', display: 'block' }}>Health Score:</span>
+                            <strong style={{ color: kondisi ? statusHealth(kondisi.health_score).warna : '#f8fafc', fontSize: '11px' }}>
+                                {kondisi ? `${kondisi.health_score} / 100` : '-'}
                             </strong>
                         </div>
                         <div style={{ padding: '6px 8px', borderRadius: '6px', background: 'rgba(15, 23, 42, 0.6)' }}>
-                            <span style={{ color: '#94a3b8', display: 'block' }}>Total Mutasi Keluar:</span>
-                            <strong style={{ color: daysOffset > 0 ? '#fbbf24' : '#f8fafc', fontSize: '11px' }}>
-                                {projected.totalUnitsDepleted.toLocaleString('id-ID')} unit
+                            <span style={{ color: '#94a3b8', display: 'block' }}>SKU perlu reorder:</span>
+                            <strong style={{ color: '#fbbf24', fontSize: '11px' }}>
+                                {kondisi ? angka(kondisi.jumlah_status.REORDER ?? 0) : '-'}
                             </strong>
                         </div>
                         <div style={{ padding: '6px 8px', borderRadius: '6px', background: 'rgba(15, 23, 42, 0.6)' }}>
-                            <span style={{ color: '#94a3b8', display: 'block' }}>Kas Terlindungi:</span>
+                            <span style={{ color: '#94a3b8', display: 'block' }}>Modal diselamatkan:</span>
                             <strong style={{ color: '#34d399', fontSize: '11px' }}>
-                                Rp {(projected.totalSavedCash / 1000000).toFixed(1)} Juta
+                                {kondisi ? rupiahRingkas(kondisi.modal_diselamatkan_idr) : '-'}
                             </strong>
                         </div>
                     </div>

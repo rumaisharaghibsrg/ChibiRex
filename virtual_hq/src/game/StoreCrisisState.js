@@ -1,106 +1,113 @@
 /**
- * StoreCrisisState.js — Global Crisis Engine & State Management untuk Virtual HQ
+ * StoreCrisisState.js — Krisis toko untuk Crisis Command Hub Doni (Koordinator)
  *
- * Mengelola status darurat operasional lintas divisi (Rian, Maya, Citra, Pak Budi)
- * dan menghubungkan perilaku AI Doni (Koordinator) dengan UI Crisis Command Hub.
+ * Doni tidak mengarang krisis: deteksiKrisis() membaca API Rexa untuk toko yang diawasi dan hanya melaporkan kondisi
+ * yang benar-benar ada, diurutkan dari yang paling parah:
+ *  - Rian: circuit breaker terbuka (semua PO baru ditahan).
+ *  - Pak Budi: Health Score di bawah 65 (zona merah dashboard).
+ *  - Maya: SKU yang penjualannya naik dengan risiko stok habis TINGGI.
+ *  - Citra: lebih dari 40% nilai stok tertahan di SKU overstock/deadstock (komponen stabilitas kas < 60).
+ * Aksi resolusinya juga aksi asli: reset breaker oleh manajer, menugaskan Agent Rexa, atau membuka laporan Citra.
  */
 
 import { EventBus } from './EventBus';
+import { api } from '../lib/api';
+import { angka, rupiah, rupiahRingkas } from '../lib/format';
 
-export const CRISIS_PRESETS = {
-    CRISIS_CIRCUIT_BREAKER_TRIPPED: {
-        crisisId: 'CRISIS_CIRCUIT_BREAKER_TRIPPED',
-        severity: 'CRITICAL',
-        sourceNPC: 'rian',
-        sourceName: 'Rian (Security & Guardrail Sentinel)',
-        sourceLocation: 'Gerbang Server & Konsol Keamanan',
-        title: 'CIRCUIT BREAKER TRIPPED!',
-        headline: 'Sistem Pengaman Membekukan Seluruh Alur Pengadaan PO Toko',
-        description: 'Terdeteksi lonjakan pesanan anomali 3.2-Sigma senilai Rp 58.200.000 yang melampaui batas harian Rp 50.000.000. Seluruh gateway penerbitan PO ke SAP S/4HANA terkunci otomatis.',
-        metrics: {
-            label: 'Nilai Transaksi Terdeteksi',
-            currentValue: 'Rp 58.200.000',
-            thresholdValue: 'Maks. Rp 50.000.000',
-            badgeColor: '#ef4444',
-        },
-        action: {
-            label: '⚡ Reset Circuit Breaker Sekarang',
-            apiEndpoint: 'http://localhost:8000/guardrails/circuit-breaker/reset',
-            apiMethod: 'POST',
-            payload: { store: 74, reason: 'Manager Emergency Authorization' },
-            successMessage: 'Circuit Breaker telah di-reset ke status NORMAL. Gateway SAP S/4HANA dibuka kembali!',
-        },
-    },
-    CRISIS_STOCKOUT_FAST_MOVING: {
-        crisisId: 'CRISIS_STOCKOUT_FAST_MOVING',
-        severity: 'CRITICAL',
-        sourceNPC: 'maya',
-        sourceName: 'Maya (Auditor Stok & Gudang)',
-        sourceLocation: 'Meja Hot-Desk & Ruang Arsip',
-        title: 'CRITICAL STOCKOUT: ARABIKA SPECIALTY!',
-        headline: 'Stok Fisik SKU Fast-Moving Utama Habis Total di Rak Toko',
-        description: 'Stok fisik Kopi Arabika Specialty tercatat 0 unit di rak B-04 sementara laju konsumsi harian mencapai 28 botol/hari. Pelanggan mulai mengeluhkan kekosongan stok!',
-        metrics: {
-            label: 'Stok Fisik Tersedia',
-            currentValue: '0 Botol (KOSONG)',
-            thresholdValue: 'Safety Stock: 15 Botol',
-            badgeColor: '#f97316',
-        },
-        action: {
-            label: '📦 Otorisasi Restock Darurat (50 Karton)',
-            apiEndpoint: 'http://localhost:8000/purchase-orders',
-            apiMethod: 'POST',
-            payload: { store: 74, sku: 'SKU-001', qty: 50, priority: 'EMERGENCY' },
-            successMessage: 'Draf PO Darurat 50 Karton Arabika diterbitkan langsung ke antrean approval!',
-        },
-    },
-    CRISIS_DEADSTOCK_CASH_LOCK: {
-        crisisId: 'CRISIS_DEADSTOCK_CASH_LOCK',
-        severity: 'CRITICAL',
-        sourceNPC: 'citra',
-        sourceName: 'Citra (Financial Strategist)',
-        sourceLocation: 'Meja Rapat War Room',
-        title: 'DEADSTOCK CAPITAL LOCK!',
-        headline: 'Dana Mengendap di Produk Lambat Melebihi Batas Toleransi',
-        description: 'Modal operasional toko tertahan sebesar Rp 18.500.000 pada SKU Sirup Hazelnut Gourmet yang perputarannya anjlok. Sisa kas lancar toko berada di bawah ambang batas likuiditas minimum.',
-        metrics: {
-            label: 'Modal Tertahan di Deadstock',
-            currentValue: 'Rp 18.500.000',
-            thresholdValue: 'Batas Toleransi: Rp 10.000.000',
-            badgeColor: '#eab308',
-        },
-        action: {
-            label: '💼 Eksekusi Realokasi Kas 100%',
-            apiEndpoint: 'http://localhost:8000/stores/74/reallocation',
-            apiMethod: 'GET',
-            payload: {},
-            successMessage: 'Modal Rp 18.500.000 berhasil diselamatkan dari deadstock dan dialokasikan ke produk laris!',
-        },
-    },
-    CRISIS_STORE_HEALTH_CRASH: {
-        crisisId: 'CRISIS_STORE_HEALTH_CRASH',
-        severity: 'CRITICAL',
-        sourceNPC: 'budi',
-        sourceName: 'Pak Budi (Store Operations Director)',
-        sourceLocation: 'Smart Screen Area Eksekutif',
-        title: 'STORE HEALTH CRASH: 58.4 / 100!',
-        headline: 'Skor Kesehatan Toko 74 Merosot ke Kategori Red Alert',
-        description: 'Kombinasi keterlambatan pengiriman pemasok dan deviasi stok menurunkan Store Health Score Toko 74 ke level 58.4/100. Direksi Regional menandai Toko 74 dalam evaluasi darurat.',
-        metrics: {
-            label: 'Overall Health Score',
-            currentValue: '58.4 / 100 (KRITIS)',
-            thresholdValue: 'Standar Minimum: 80.0 / 100',
-            badgeColor: '#dc2626',
-        },
-        action: {
-            label: '📊 Terapkan Protokol Intervensi Operasional',
-            apiEndpoint: 'http://localhost:8000/stores/74/ringkasan',
-            apiMethod: 'GET',
-            payload: {},
-            successMessage: 'Protokol intervensi diterapkan. Health Score dipulihkan ke kategori Prima!',
-        },
-    },
+// Kunci lama (cheat U+R+1..4 di MainScene) dipetakan ke NPC sumber krisisnya.
+const KUNCI_KE_NPC = {
+    CRISIS_STOCKOUT_FAST_MOVING: 'maya',
+    CRISIS_DEADSTOCK_CASH_LOCK: 'citra',
+    CRISIS_CIRCUIT_BREAKER_TRIPPED: 'rian',
+    CRISIS_STORE_HEALTH_CRASH: 'budi',
 };
+
+const AMBANG_HEALTH = 65;
+const AMBANG_STABILITAS_KAS = 60;
+
+/**
+ * Memeriksa data toko. Mengembalikan {krisis: [...], ringkas: string}; krisis kosong berarti tidak ada kondisi darurat.
+ * Melempar ApiError kalau API tidak terjangkau.
+ */
+export async function deteksiKrisis(store) {
+    const s = store?.id || 74;
+    const [r, g, p] = await Promise.all([
+        api.ringkasan(s),
+        api.statusGuardrail(s),
+        api.prioritas(s, { limit_naik: 10, limit_turun: 0 }),
+    ]);
+    const krisis = [];
+
+    if (g.circuit_breaker_terbuka) {
+        krisis.push({
+            crisisId: 'CRISIS_CIRCUIT_BREAKER_TRIPPED',
+            sourceNPC: 'rian',
+            sourceName: 'Rian (Guardrail Sentinel)',
+            sourceLocation: 'Gerbang Server & Konsol Keamanan',
+            title: 'CIRCUIT BREAKER TERBUKA',
+            headline: `Semua PO baru Toko ${s} ditahan guardrail`,
+            description: `${g.alasan || 'Guardrail mencatat pelanggaran beruntun.'} PO baru baru bisa dibuat lagi setelah ` +
+                'manajer mereset circuit breaker.',
+            metrics: { label: 'Status circuit breaker', currentValue: 'TERBUKA', thresholdValue: 'Tertutup (normal)', badgeColor: '#ef4444' },
+            action: { jenis: 'reset-breaker', label: '⚡ Reset circuit breaker (keputusan manajer)' },
+        });
+    }
+
+    const terlemah = [...r.komponen].sort((a, b) => a.nilai - b.nilai)[0];
+    if (r.health_score < AMBANG_HEALTH) {
+        krisis.push({
+            crisisId: 'CRISIS_STORE_HEALTH_CRASH',
+            sourceNPC: 'budi',
+            sourceName: 'Pak Budi (Store Operations Director)',
+            sourceLocation: 'Smart Screen Area Eksekutif',
+            title: `HEALTH SCORE ${r.health_score} / 100`,
+            headline: `Toko ${s} masuk zona merah`,
+            description: `Komponen terlemah: ${terlemah.nama.toLowerCase()} ${angka(terlemah.nilai)}. ` +
+                `${angka(r.jumlah_status.REORDER ?? 0)} SKU perlu reorder dan ${angka(r.sku_risiko_tinggi)} berisiko tinggi stok habis.`,
+            metrics: { label: 'Health Score', currentValue: `${r.health_score} / 100`, thresholdValue: `Minimum ${AMBANG_HEALTH} (batas zona merah)`, badgeColor: '#dc2626' },
+            action: { jenis: 'agent', label: '🤖 Tugaskan Agent Rexa meninjau toko ini' },
+        });
+    }
+
+    const kritis = p.naik.filter((x) => x.level_risiko === 'TINGGI').sort((a, b) => (b.skor_risiko ?? 0) - (a.skor_risiko ?? 0));
+    if (kritis.length) {
+        const x = kritis[0];
+        krisis.push({
+            crisisId: 'CRISIS_STOCKOUT_FAST_MOVING',
+            sourceNPC: 'maya',
+            sourceName: 'Maya (Auditor Stok & Gudang)',
+            sourceLocation: 'Meja Hot-Desk & Ruang Arsip',
+            title: `STOK KRITIS: ${(x.deskripsi || x.inventory_id).toUpperCase()}`,
+            headline: `${kritis.length} SKU yang penjualannya naik berisiko tinggi kehabisan stok`,
+            description: `${x.deskripsi}: stok ${angka(x.stok_akhir)} unit di bawah reorder point ${angka(x.reorder_point)}, ` +
+                `skor risiko ${x.skor_risiko}. Saran PO ${angka(x.saran_qty_po)} unit (${rupiah(x.nilai_saran_po_idr)}); ` +
+                'agent menyusun drafnya, manajer yang menyetujui.',
+            metrics: { label: 'Stok tersisa', currentValue: `${angka(x.stok_akhir)} unit`, thresholdValue: `Reorder point ${angka(x.reorder_point)} unit`, badgeColor: '#f97316' },
+            action: { jenis: 'agent', label: '🤖 Tugaskan Agent Rexa menyusun draf PO' },
+        });
+    }
+
+    const kas = r.komponen.find((k) => k.kode === 'STABILITAS_KAS');
+    const persenTertahan = r.nilai_stok_idr ? Math.round((100 * r.modal_tertahan_idr) / r.nilai_stok_idr) : 0;
+    if (kas && kas.nilai < AMBANG_STABILITAS_KAS) {
+        krisis.push({
+            crisisId: 'CRISIS_DEADSTOCK_CASH_LOCK',
+            sourceNPC: 'citra',
+            sourceName: 'Citra (Financial Strategist)',
+            sourceLocation: 'Meja Rapat War Room',
+            title: `MODAL TERTAHAN ${rupiahRingkas(r.modal_tertahan_idr).toUpperCase()}`,
+            headline: `${persenTertahan}% nilai stok Toko ${s} ada di SKU overstock dan deadstock`,
+            description: `${angka(r.jumlah_status.OVERSTOCK ?? 0)} SKU overstock dan ${angka(r.jumlah_status.DEADSTOCK ?? 0)} ` +
+                `deadstock menahan ${rupiahRingkas(r.modal_tertahan_idr)} dari nilai stok ${rupiahRingkas(r.nilai_stok_idr)}.`,
+            metrics: { label: 'Modal tertahan', currentValue: `${persenTertahan}% nilai stok`, thresholdValue: `Maks. ${100 - AMBANG_STABILITAS_KAS}% nilai stok`, badgeColor: '#eab308' },
+            action: { jenis: 'npc', npcId: 'citra', label: '💼 Lihat laporan modal dan realokasi Citra' },
+        });
+    }
+
+    const ringkas = `Health Score ${r.health_score}/100, circuit breaker ${g.circuit_breaker_terbuka ? 'terbuka' : 'tertutup'}, ` +
+        `${angka(r.jumlah_status.REORDER ?? 0)} SKU perlu reorder, modal tertahan ${persenTertahan}% nilai stok.`;
+    return { krisis: krisis.map((k) => ({ ...k, isCrisis: true, severity: 'CRITICAL', store: s })), ringkas };
+}
 
 // Inisialisasi Default State
 export const defaultCrisisState = {
@@ -111,21 +118,10 @@ export const defaultCrisisState = {
     sourceName: '',
     sourceLocation: '',
     title: 'Operasional Toko Normal',
-    headline: 'Semua divisi berjalan tertib dan aman',
-    description: 'Tidak ada anomali atau krisis yang memerlukan tindakan darurat.',
-    metrics: {
-        label: 'Status Operasional',
-        currentValue: 'Stabil & Terkendali',
-        thresholdValue: 'Semua Parameter Normal',
-        badgeColor: '#10b981',
-    },
-    action: {
-        label: 'Tutup',
-        apiEndpoint: '',
-        apiMethod: 'GET',
-        payload: {},
-        successMessage: 'Operasional tetap normal.',
-    },
+    headline: 'Tidak ada krisis aktif',
+    description: '',
+    metrics: null,
+    action: null,
     timestamp: Date.now(),
 };
 
@@ -182,17 +178,17 @@ if (typeof window !== 'undefined') {
         window.StoreCrisisState = { ...defaultCrisisState };
     }
 
-    window.triggerStoreCrisis = (presetKey = 'CRISIS_CIRCUIT_BREAKER_TRIPPED') => {
-        const preset = CRISIS_PRESETS[presetKey] || CRISIS_PRESETS.CRISIS_CIRCUIT_BREAKER_TRIPPED;
-        window.StoreCrisisState = {
-            isCrisis: true,
-            ...preset,
-            timestamp: Date.now(),
-        };
-
-        // Bunyikan Klaxon Darurat
-        playEmergencyKlaxonSFX();
-
+    /**
+     * Memeriksa data toko yang diawasi lalu mengaktifkan krisis teratas (atau krisis NPC tertentu untuk kunci cheat).
+     * Mengembalikan krisis yang diaktifkan, atau null kalau datanya tidak menunjukkan krisis. Klaxon dibunyikan
+     * MainScene saat menerima event store-crisis-triggered.
+     */
+    window.triggerStoreCrisis = async (kunci) => {
+        const npc = KUNCI_KE_NPC[kunci];
+        const { krisis } = await deteksiKrisis(window.CURRENT_STORE);
+        const pilihan = npc ? krisis.find((k) => k.sourceNPC === npc) : krisis[0];
+        if (!pilihan) return null;
+        window.StoreCrisisState = { ...pilihan, timestamp: Date.now() };
         EventBus.emit('store-crisis-triggered', window.StoreCrisisState);
         window.dispatchEvent(new CustomEvent('store-crisis-triggered', { detail: window.StoreCrisisState }));
         return window.StoreCrisisState;

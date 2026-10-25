@@ -56,13 +56,16 @@ export function ThoughtBubble({
 }) {
     if (!visible) return null;
 
-    // Hitung posisi absolut di atas sprite Rexa
+    // Hitung posisi absolut di atas sprite Rexa. Rexa duduk di tepi atas peta, jadi kalau ruang di atasnya tidak
+    // cukup, bubble tampil di bawah sprite supaya langkah dan pesan agent tetap terbaca.
     const bubbleX = screenPos ? Math.max(180, Math.min(screenPos.x, 780)) : 220;
-    const bubbleY = screenPos ? Math.max(65, screenPos.y - 12) : 100;
+    const diBawah = Boolean(screenPos) && screenPos.y < 330;
+    const bubbleY = screenPos ? (diBawah ? screenPos.y + 36 : Math.max(65, screenPos.y - 12)) : 100;
 
     const isDone    = status === 'SELESAI' || isFallback;
     const isRunning = (status === 'BERJALAN' || status === 'MEMULAI') && !isDone;
     const isError   = status === 'GAGAL' && !isFallback;
+    const warnaEkor = isDone ? 'rgba(52, 211, 153, 0.96)' : isError ? 'rgba(248, 113, 113, 0.96)' : 'rgba(245, 158, 11, 0.96)';
 
     const toolMeta = currentStep?.tool ? (TOOL_INFO[currentStep.tool] || {
         icon: '⚡',
@@ -76,7 +79,7 @@ export function ThoughtBubble({
                 position: 'absolute',
                 left: `${bubbleX}px`,
                 top: `${bubbleY}px`,
-                transform: 'translate(-50%, -100%)',
+                transform: diBawah ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
                 zIndex: 1000,
                 pointerEvents: 'auto',
                 width: '360px',
@@ -99,7 +102,7 @@ export function ThoughtBubble({
                 fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
                 fontSize: '12px',
                 lineHeight: '1.45',
-                animation: 'bubble-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                animation: `${diBawah ? 'bubble-pop-bawah' : 'bubble-pop'} 0.25s cubic-bezier(0.16, 1, 0.3, 1)`,
                 transition: 'all 0.3s ease',
             }}
         >
@@ -317,7 +320,7 @@ export function ThoughtBubble({
                             lineHeight: '1.4',
                         }}
                     >
-                        {errorMessage || 'Tidak dapat terhubung ke Backend API (port 8000) atau LLM Provider.'}
+                        {errorMessage || 'Agent gagal dijalankan.'}
                     </div>
 
                     {countdown > 0 && (
@@ -341,18 +344,18 @@ export function ThoughtBubble({
                 </div>
             )}
 
-            {/* ── Pointer / Ekor Bubble di Bawah ─────────────────────────── */}
+            {/* ── Pointer / Ekor Bubble ke arah Rexa ──────────────────────── */}
             <div
                 style={{
                     position: 'absolute',
-                    bottom: '-9px',
+                    ...(diBawah ? { top: '-9px' } : { bottom: '-9px' }),
                     left: '50%',
                     transform: 'translateX(-50%)',
                     width: 0,
                     height: 0,
                     borderLeft: '9px solid transparent',
                     borderRight: '9px solid transparent',
-                    borderTop: `9px solid ${isDone ? 'rgba(52, 211, 153, 0.96)' : isError ? 'rgba(248, 113, 113, 0.96)' : 'rgba(245, 158, 11, 0.96)'}`,
+                    ...(diBawah ? { borderBottom: `9px solid ${warnaEkor}` } : { borderTop: `9px solid ${warnaEkor}` }),
                 }}
             />
 
@@ -370,6 +373,10 @@ export function ThoughtBubble({
                     @keyframes bubble-pop {
                         0% { opacity: 0; transform: translate(-50%, -85%) scale(0.92); }
                         100% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+                    }
+                    @keyframes bubble-pop-bawah {
+                        0% { opacity: 0; transform: translate(-50%, -6%) scale(0.92); }
+                        100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
                     }
                 `}
             </style>

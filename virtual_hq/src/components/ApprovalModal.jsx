@@ -2,20 +2,19 @@
  * ApprovalModal.jsx — Meja Manajer: 1-Click PO Approval ke SAP S/4HANA
  *
  * Komponen Modal React untuk:
- *  - Mengambil daftar PO via GET /purchase-orders (status: DRAFT)
+ *  - Mengambil draf PO toko yang diawasi via GET /purchase-orders?store=&status=DRAFT
  *  - Metrik agregat (Total Draf, Estimasi Nilai IDR)
- *  - Eksekusi 1-Click Approval via POST /purchase-orders/{po_id}/approve ke SAP
+ *  - Eksekusi 1-Click Approval via POST /purchase-orders/{po_id}/approve ke SAP (tiruan OData di API)
  *  - Eksekusi Penolakan via POST /purchase-orders/{po_id}/reject
  *  - Pratinjau payload OData V2 SAP S/4HANA
  *  - Efek Confetti saat PO sukses terbit di SAP
+ * Kalau API menolak atau tidak terjangkau, pesan galatnya ditampilkan; tidak ada PO atau nomor SAP pengganti.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { SentenceWithDot } from './NPCDialogModal';
-import { fetchWithTimeout } from '../utils/NPCFallbackData';
-
-const API_BASE = 'http://localhost:8000';
+import { api, beritahuDataBerubah } from '../lib/api';
 
 function formatRupiah(num) {
     if (num === null || num === undefined) return 'Rp 0';
@@ -26,7 +25,7 @@ function formatRupiah(num) {
     }).format(num);
 }
 
-export function ApprovalModal({ isOpen, onClose }) {
+export function ApprovalModal({ isOpen, store, onClose }) {
     const [draftList, setDraftList]         = useState([]);
     const [loading, setLoading]             = useState(false);
     const [approvingId, setApprovingId]     = useState(null);
@@ -35,63 +34,20 @@ export function ApprovalModal({ isOpen, onClose }) {
     const [loadingPayloadId, setLoadingPayloadId] = useState(null);
     const [toastMessage, setToastMessage]   = useState(null);
     const [errorMessage, setErrorMessage]   = useState(null);
-    const [isFallback, setIsFallback]       = useState(false);
 
-    // ── Ambil Daftar PO & Filter Status "DRAFT" ──────────────────────────────
+    // ── Ambil Draf PO Toko yang Diawasi ──────────────────────────────────────
     const fetchDraftOrders = useCallback(async () => {
         setLoading(true);
         setErrorMessage(null);
         try {
-            const res = await fetchWithTimeout(`${API_BASE}/purchase-orders`, {}, 2500);
-            if (res.success && !res.isFallback && res.data) {
-                const drafts = Array.isArray(res.data) ? res.data.filter((po) => po.status === 'DRAFT') : [];
-                setDraftList(drafts);
-                setIsFallback(false);
-            } else {
-                // Injeksi Silent Fallback Draf PO jika backend offline/timeout
-                setIsFallback(true);
-                setErrorMessage(null);
-                setDraftList([
-                    {
-                        po_id: 'PO-SAP-901',
-                        status: 'DRAFT',
-                        store: 74,
-                        vendor_name: 'PT Sumber Kopi Nusantara',
-                        vendor_number: 'V-1002',
-                        deskripsi: 'Kopi Arabika Specialty',
-                        inventory_id: 'SKU-001',
-                        qty: 50,
-                        nilai_idr: 12500000,
-                        alasan: 'Laju konsumsi fast-moving 28 botol/hari, stok fisik menipis di bawah safety stock. Draf restock 50 karton direkomendasikan agen Rexa.',
-                        guardrail_passed: true,
-                        guardrail_notes: 'Lolos uji batas nominal harian (Rp 12.5jt < Rp 50jt) dan data confidence 0.94.',
-                    }
-                ]);
-            }
+            setDraftList(await api.daftarPo({ store, status: 'DRAFT' }));
         } catch (err) {
-            console.warn('[ApprovalModal] Silent fallback PO:', err);
-            setIsFallback(true);
-            setErrorMessage(null);
-            setDraftList([
-                {
-                    po_id: 'PO-SAP-901',
-                    status: 'DRAFT',
-                    store: 74,
-                    vendor_name: 'PT Sumber Kopi Nusantara',
-                    vendor_number: 'V-1002',
-                    deskripsi: 'Kopi Arabika Specialty',
-                    inventory_id: 'SKU-001',
-                    qty: 50,
-                    nilai_idr: 12500000,
-                    alasan: 'Laju konsumsi fast-moving 28 botol/hari, stok fisik menipis di bawah safety stock. Draf restock 50 karton direkomendasikan agen Rexa.',
-                    guardrail_passed: true,
-                    guardrail_notes: 'Lolos uji batas nominal harian (Rp 12.5jt < Rp 50jt) dan data confidence 0.94.',
-                }
-            ]);
+            setDraftList([]);
+            setErrorMessage(`Draf PO tidak bisa dibaca: ${err.message}`);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [store]);
 
     useEffect(() => {
         if (isOpen) {
@@ -114,71 +70,20 @@ export function ApprovalModal({ isOpen, onClose }) {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
 
+    const hapusDariDaftar = (poId, jedaTutup) => {
+        const remaining = draftList.filter((item) => item.po_id !== poId);
+        setDraftList(remaining);
+        if (remaining.length === 0) {
+            setTimeout(() => onClose(), jedaTutup);
+        }
+    };
+
     // ── Eksekusi Approval PO ke SAP S/4HANA ────────────────────────────────────
     const handleApprove = async (poId) => {
         setApprovingId(poId);
         setErrorMessage(null);
-
         try {
-            if (isFallback) {
-                // Simulasi approval sukses dalam mode silent fallback
-                await new Promise((r) => setTimeout(r, 450));
-                confetti({
-                    particleCount: 85,
-                    spread: 75,
-                    origin: { y: 0.6 },
-                    colors: ['#34d399', '#38bdf8', '#fbbf24', '#a78bfa'],
-                });
-
-                setToastMessage({
-                    poId,
-                    sapNumber: '4500008901',
-                    deskripsi: 'Kopi Arabika Specialty (50 Karton)',
-                });
-
-                const remaining = draftList.filter((item) => item.po_id !== poId);
-                setDraftList(remaining);
-
-                if (remaining.length === 0) {
-                    setTimeout(() => {
-                        onClose();
-                    }, 2000);
-                }
-                return;
-            }
-
-            const res = await fetchWithTimeout(`${API_BASE}/purchase-orders/${poId}/approve`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    oleh: 'Manager Toko',
-                    catatan: '1-Click Approval via Virtual HQ Command Center',
-                }),
-            }, 3000);
-
-            if (!res.success || !res.data) {
-                // Fallback jika API gagal
-                confetti({
-                    particleCount: 85,
-                    spread: 75,
-                    origin: { y: 0.6 },
-                    colors: ['#34d399', '#38bdf8', '#fbbf24', '#a78bfa'],
-                });
-                setToastMessage({
-                    poId,
-                    sapNumber: '4500008901',
-                    deskripsi: 'Kopi Arabika Specialty (50 Karton)',
-                });
-                const remaining = draftList.filter((item) => item.po_id !== poId);
-                setDraftList(remaining);
-                if (remaining.length === 0) {
-                    setTimeout(() => onClose(), 2000);
-                }
-                return;
-            }
-
-            const approvedPO = res.data;
-            const sapNumber = approvedPO.sap_po_number || '4500008901';
+            const approvedPO = await api.setujuiPo(poId, '1-Click Approval dari Meja Manajer Virtual HQ');
 
             // Efek Confetti Perayaan Visual
             confetti({
@@ -187,40 +92,12 @@ export function ApprovalModal({ isOpen, onClose }) {
                 origin: { y: 0.6 },
                 colors: ['#34d399', '#38bdf8', '#fbbf24', '#a78bfa'],
             });
-
-            setToastMessage({
-                poId,
-                sapNumber,
-                deskripsi: approvedPO.deskripsi || 'Kopi Arabika Specialty',
-            });
-
-            // Hapus dari daftar lokal
-            const remaining = draftList.filter((item) => item.po_id !== poId);
-            setDraftList(remaining);
-
-            if (remaining.length === 0) {
-                setTimeout(() => {
-                    onClose();
-                }, 2000);
-            }
+            setToastMessage({ poId, sapNumber: approvedPO.sap_po_number, deskripsi: approvedPO.deskripsi });
+            beritahuDataBerubah();
+            hapusDariDaftar(poId, 2000);
         } catch (err) {
-            console.warn('[ApprovalModal] Silent fallback on approve:', err);
-            confetti({
-                particleCount: 85,
-                spread: 75,
-                origin: { y: 0.6 },
-                colors: ['#34d399', '#38bdf8', '#fbbf24', '#a78bfa'],
-            });
-            setToastMessage({
-                poId,
-                sapNumber: '4500008901',
-                deskripsi: 'Kopi Arabika Specialty (50 Karton)',
-            });
-            const remaining = draftList.filter((item) => item.po_id !== poId);
-            setDraftList(remaining);
-            if (remaining.length === 0) {
-                setTimeout(() => onClose(), 2000);
-            }
+            // Misalnya ditahan guardrail atau SAP menolak: PO tetap DRAFT dan alasannya ditampilkan.
+            setErrorMessage(`PO ${poId} belum disetujui: ${err.message}`);
         } finally {
             setApprovingId(null);
         }
@@ -230,42 +107,12 @@ export function ApprovalModal({ isOpen, onClose }) {
     const handleReject = async (poId) => {
         setRejectingId(poId);
         setErrorMessage(null);
-
         try {
-            if (isFallback) {
-                await new Promise((r) => setTimeout(r, 300));
-                const remaining = draftList.filter((item) => item.po_id !== poId);
-                setDraftList(remaining);
-                if (remaining.length === 0) {
-                    setTimeout(() => onClose(), 1200);
-                }
-                return;
-            }
-
-            await fetchWithTimeout(`${API_BASE}/purchase-orders/${poId}/reject`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    oleh: 'Manager Toko',
-                    catatan: 'Ditolak via Virtual HQ Command Center',
-                }),
-            }, 3000);
-
-            const remaining = draftList.filter((item) => item.po_id !== poId);
-            setDraftList(remaining);
-
-            if (remaining.length === 0) {
-                setTimeout(() => {
-                    onClose();
-                }, 1200);
-            }
+            await api.tolakPo(poId, 'Ditolak dari Meja Manajer Virtual HQ');
+            beritahuDataBerubah();
+            hapusDariDaftar(poId, 1200);
         } catch (err) {
-            console.warn('[ApprovalModal] Silent fallback on reject:', err);
-            const remaining = draftList.filter((item) => item.po_id !== poId);
-            setDraftList(remaining);
-            if (remaining.length === 0) {
-                setTimeout(() => onClose(), 1200);
-            }
+            setErrorMessage(`PO ${poId} belum ditolak: ${err.message}`);
         } finally {
             setRejectingId(null);
         }
@@ -280,47 +127,9 @@ export function ApprovalModal({ isOpen, onClose }) {
 
         setLoadingPayloadId(poId);
         try {
-            const res = await fetchWithTimeout(`${API_BASE}/purchase-orders/${poId}/sap-payload`, {}, 2000);
-            if (res.success && res.data) {
-                setPreviewPayload(res.data);
-            } else {
-                setPreviewPayload({
-                    po_id: poId,
-                    sap_odata_endpoint: 'https://sap.corporate.internal:44300/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV/A_PurchaseOrder',
-                    payload: {
-                        PurchaseOrderType: 'NB',
-                        CompanyCode: '1000',
-                        PurchasingOrganization: '1000',
-                        PurchasingGroup: '001',
-                        Supplier: 'V-1002',
-                        to_PurchaseOrderItem: [
-                            {
-                                PurchaseOrderItem: '10',
-                                Material: 'SKU-001',
-                                OrderQuantity: '50',
-                                PurchaseOrderQuantityUnit: 'BOX',
-                                NetPriceAmount: '250000',
-                                DocumentCurrency: 'IDR',
-                                Plant: 'PL01',
-                                StorageLocation: 'SL01',
-                            }
-                        ]
-                    }
-                });
-            }
-        } catch {
-            setPreviewPayload({
-                po_id: poId,
-                sap_odata_endpoint: 'https://sap.corporate.internal:44300/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV/A_PurchaseOrder',
-                payload: {
-                    PurchaseOrderType: 'NB',
-                    CompanyCode: '1000',
-                    Supplier: 'V-1002',
-                    to_PurchaseOrderItem: [
-                        { Material: 'SKU-001', OrderQuantity: '50', DocumentCurrency: 'IDR' }
-                    ]
-                }
-            });
+            setPreviewPayload(await api.payloadSap(poId));
+        } catch (err) {
+            setErrorMessage(`Payload SAP tidak bisa dibaca: ${err.message}`);
         } finally {
             setLoadingPayloadId(null);
         }
@@ -393,10 +202,7 @@ export function ApprovalModal({ isOpen, onClose }) {
                                     Meja Manajer — 1-Click PO Approval ke SAP S/4HANA
                                 </div>
                                 <div style={{ color: '#64748b', fontSize: '11px', marginTop: '1px' }}>
-                                    <SentenceWithDot
-                                        text="Verifikasi & rilis draf Purchase Order ke sistem ERP SAP resmi"
-                                        isFallback={isFallback}
-                                    />
+                                    <SentenceWithDot text={`Draf PO Toko ${store} dari Agent Rexa; tidak ada yang masuk SAP sebelum disetujui`} />
                                 </div>
                             </div>
                         </div>
@@ -500,7 +306,7 @@ export function ApprovalModal({ isOpen, onClose }) {
                 )}
 
                 {/* ── Error Banner ────────────────────────────────────────── */}
-                {errorMessage && !isFallback && (
+                {errorMessage && (
                     <div
                         style={{
                             backgroundColor: 'rgba(239, 68, 68, 0.15)',

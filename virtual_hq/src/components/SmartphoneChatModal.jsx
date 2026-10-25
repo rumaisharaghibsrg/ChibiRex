@@ -7,17 +7,33 @@
  *  - Non-blocking gameplay overlay
  *  - Smart Input Focus Trapping (menonaktifkan kontrol WASD Phaser saat mengetik)
  *  - Quick Action Chips
- *  - Respon domain-grounded Rexa Copilot (Guardrail, Suppression Engine, Health Score)
+ *  - Jawaban dari Rexa Copilot (Claude di Lambda, POST {VITE_COPILOT_URL}/tanya) untuk toko yang diawasi; tanpa
+ *    Copilot, pertanyaan diteruskan ke NPC yang membacakan data API (src/lib/npc.js). Tidak ada jawaban tetap.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { EventBus } from '../game/EventBus';
+import { useStore } from '../context/StoreContext';
+import { api, COPILOT_URL } from '../lib/api';
+import { laporanNpc } from '../lib/npc';
 import './SmartphoneChatModal.css';
+
+const tunda = (ms) => new Promise((r) => setTimeout(r, ms));
+const jam = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+// Teks **tebal** dari Copilot dan laporan NPC ditampilkan tebal; sisanya teks biasa.
+function TeksTebal({ teks }) {
+    return teks.split(/(\*\*[^*]+\*\*)/g).map((bagian, i) => (
+        bagian.startsWith('**') && bagian.endsWith('**')
+            ? <strong key={i}>{bagian.slice(2, -2)}</strong>
+            : <React.Fragment key={i}>{bagian}</React.Fragment>
+    ));
+}
 
 // Kumpulan Prompt Pintas Cepat (Quick Action Chips)
 const QUICK_CHIPS = [
     { label: '📦 Audit Gudang Maya', query: 'Bagaimana hasil audit stok fisik di gudang?' },
-    { label: '💼 Realokasi Kas Citra', query: 'Berapa modal kas yang diselamatkan dari deadstock sirup?' },
+    { label: '💼 Realokasi Kas Citra', query: 'Berapa modal yang diselamatkan dan ke mana sebaiknya dialihkan?' },
     { label: '🛡️ Guardrail Rian', query: 'Bagaimana status keamanan Guardrail dan circuit breaker saat ini?' },
     { label: '📊 Health Score Budi', query: 'Bagaimana performa Store Health Score toko kita?' },
 ];
@@ -33,56 +49,36 @@ const NPC_ROUTING = [
         callingText: 'Tunggu sebentar ya Manager, saya sambungkan ke **Maya** di Ruang Gudang & Arsip untuk memeriksa kondisi stok fisik dan hasil opname terbaru...',
         callingTag: 'Calling Maya...',
         typingStatus: 'Rexa sedang menelepon Maya (Auditor Stok)...',
-        generateReply: () => ({
-            text: '📞 **Laporan Langsung dari Maya (Auditor Stok):**\n\n> "Halo Rexa, halo Manager! Baru saja saya cek rak dan dokumen inventaris gudang. Untuk stok di rak utama tercatat aman terkendali. Pada SKU slow-moving (Sirup Hazelnut Gourmet), terdapat penyesuaian selisih **-4 botol** karena retur botol rusak kemarin, dan Data Confidence saat ini berada di level aman **0.88** (di atas ambang batas 0.85). Rekomendasi saya: selesaikan verifikasi audit di meja saya sebelum merilis PO SAP baru!"\n\n📦 **Ringkasan Audit Maya:**\n• **Kondisi Fisik**: Rak tertata rapi, batch expired aman s/d 2027\n• **Data Confidence Score**: 0.88 (Normal & Terverifikasi)\n• **Status Kunci PO**: Siap dirilis setelah audit tuntas.',
-            tag: 'Warehouse Opname',
-            confidence: 98.6,
-        }),
     },
     {
         id: 'citra',
         name: 'Citra',
         role: 'Financial Strategist',
         location: 'Meja Rapat War Room',
-        regex: /(alokasi|realokasi|anggaran|saving|hemat|kas(\s+)?toko|dana|modal|deadstock|hold|substitusi|monin|hazelnut|duit|keuangan|citra)/i,
+        regex: /(alokasi|realokasi|anggaran|saving|hemat|kas(\s+)?toko|dana|modal|deadstock|hold|substitusi|duit|keuangan|citra)/i,
         callingText: 'Saya hubungi **Citra** di Meja Meeting War Room untuk memverifikasi kalkulasi alokasi kas dan penyelamatan modal belanja...',
         callingTag: 'Calling Citra...',
         typingStatus: 'Rexa sedang menelepon Citra (Finance)...',
-        generateReply: () => ({
-            text: '📞 **Laporan Keuangan dari Citra (Finance Strategist):**\n\n> "Selamat pagi Manager! Dari sisi arus kas, penahanan PO SKU Sirup Hazelnut Gourmet terbukti sangat efektif. Kita berhasil **menyelamatkan kas lancar sebesar Rp 5.500.000**. Dana tersebut tidak mengendap sia-sia, melainkan telah saya realokasikan 100% untuk menambah modal restock **Kopi Arabika Specialty** yang memiliki perputaran 3.8x lebih cepat. Likuiditas kas toko kita minggu ini sangat sehat!"\n\n💼 **Rincian Realokasi Finansial Toko 74:**\n• **Modal Diselamatkan**: Rp 5.500.000 (dari hold deadstock)\n• **Target Alokasi**: Restock Kopi Arabika Specialty\n• **Proyeksi Margin Tambahan**: +Rp 1.450.000 dalam 14 hari operasional.',
-            tag: 'Cash Optimization',
-            confidence: 99.2,
-        }),
     },
     {
         id: 'rian',
         name: 'Rian',
         role: 'Security & Guardrail Admin',
         location: 'Gerbang Server & Konsol',
-        regex: /(guardrail|circuit(\s+)?breaker|keamanan|aman|limit|batas|50(\s+)?(juta|jt)|anomali|outlier|tripped|terputus|sentinel|rian)/i,
+        regex: /(guardrail|circuit(\s+)?breaker|keamanan|aman|limit|batas|anomali|outlier|tripped|terputus|sentinel|rian)/i,
         callingText: 'Menghubungi konsol keamanan **Rian** di Gerbang Server untuk memeriksa integritas guardrail & circuit breaker...',
         callingTag: 'Calling Rian...',
         typingStatus: 'Rexa sedang menelepon Rian (Guardrail Admin)...',
-        generateReply: () => ({
-            text: '📞 **Laporan Keamanan Sistem dari Rian (Guardrail Admin):**\n\n> "Konsol Gerbang Kepatuhan online, Manager. Seluruh parameter keamanan pengadaan berstatus **HIJAU / NORMAL**. Tidak ada indikasi runaway agent dari AI. Total PO hari ini baru mencapai **Rp 13.678.880** dari kuota limit harian Rp 50.000.000. Circuit Breaker terkunci rapat dalam posisi operasional standar."\n\n🛡️ **Status Parameter Sentinel:**\n• **Circuit Breaker**: 🟢 **NORMAL / CLOSED** (Operasional Lancar)\n• **Batas PO Harian**: Rp 50.000.000 (Sisa Kuota Aman: Rp 36.321.120)\n• **Anomaly Outlier Detector**: 0 Transaksi di luar toleransi 3-sigma.',
-            tag: 'Security Sentinel',
-            confidence: 99.8,
-        }),
     },
     {
         id: 'budi',
         name: 'Pak Budi',
         role: 'Store Operations Director',
         location: 'Layar Smart Screen Eksekutif',
-        regex: /(health(\s+)?score|kesehatan|kpi|performa|kinerja|toko(\s+)?74|direktur|ringkasan|cabang|target|evaluasi|budi)/i,
-        callingText: 'Menyambungkan interkom ke ruang presentasi **Pak Budi** untuk menarik ringkasan KPI eksekutif Toko 74...',
+        regex: /(health(\s+)?score|kesehatan|kpi|performa|kinerja|direktur|ringkasan|cabang|target|evaluasi|budi)/i,
+        callingText: 'Menyambungkan interkom ke ruang presentasi **Pak Budi** untuk menarik Health Score dan peringkat toko ini...',
         callingTag: 'Calling Pak Budi...',
         typingStatus: 'Rexa sedang menelepon Pak Budi (Director)...',
-        generateReply: () => ({
-            text: '📞 **Evaluasi Eksekutif dari Pak Budi (Director):**\n\n> "Kerja bagus untuk tim Toko 74 hari ini, Manager! Berdasarkan dashboard pantauan saya di smart screen, **Overall Store Health Score kita berada di angka 91.0 / 100** (Predikat: Prima). Ketersediaan stok mencapai 94% dan perputaran barang 88%. Sinergi antara audit fisik gudang dan disiplin arus kas berjalan sangat solid!"\n\n📊 **Pilar Evaluasi Toko 74:**\n• **Ketersediaan Barang**: 94% (Hanya 2 SKU mendekati safety stock)\n• **Perputaran Stok**: 88% (Arus keluar-masuk barang stabil)\n• **Stabilitas Finansial**: 91% (Kas terhindar dari deadstock)\n• **Peringkat Regional**: Peringkat #2 Store Sehat se-Jabodetabek.',
-            tag: 'Executive KPI',
-            confidence: 98.4,
-        }),
     },
 ];
 
@@ -96,6 +92,8 @@ function detectTargetNPC(query) {
 }
 
 export function SmartphoneChatModal({ isOpen: externalIsOpen, onClose }) {
+    const { currentStore } = useStore();
+    const storeId = currentStore?.id || 74;
     const [internalOpen, setInternalOpen] = useState(false);
     const [currentTime, setCurrentTime] = useState('09:41');
     const [inputQuery, setInputQuery] = useState('');
@@ -105,10 +103,10 @@ export function SmartphoneChatModal({ isOpen: externalIsOpen, onClose }) {
         {
             id: 'init-1',
             sender: 'assistant',
-            text: 'Halo Manager! Saya **Rexa** (AI Inventory & Cash Copilot).\n\nSaya memantau stok dan arus kas Toko 74 secara real-time. Anda bisa bertanya tentang sisa anggaran kas, status guardrail belanja, atau memeriksa kesehatan inventaris toko.',
-            tag: 'System Ready',
-            confidence: 99.8,
-            timestamp: '09:40',
+            text: 'Halo Manager! Saya **Rexa** (AI Inventory & Cash Copilot).\n\nSaya menjawab dari data toko yang sedang Anda awasi: stok, draf PO, Hold Reorder, modal, guardrail, dan Health Score. ' +
+                (COPILOT_URL ? 'Jawaban saya memakai Claude di Amazon Bedrock dan hanya membaca data.' : 'Copilot (Claude) belum diatur, jadi pertanyaan saya teruskan ke staf yang membacakan data API.'),
+            tag: COPILOT_URL ? 'Rexa Copilot · Claude' : 'Data API',
+            timestamp: jam(),
         },
     ]);
 
@@ -208,132 +206,81 @@ export function SmartphoneChatModal({ isOpen: externalIsOpen, onClose }) {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
 
-    // ── Logika Evaluasi Jawaban Cerdas Rexa ───────────────────────────────────
-    const generateRexaReply = (query) => {
-        const q = query.toLowerCase();
-
-        if (q.includes('anggaran') || q.includes('kas') || q.includes('belanja') || q.includes('sisa')) {
-            return {
-                text: 'Berdasarkan monitor **Guardrail Rian**, batas pengadaan harian Toko 74 adalah **Rp 50.000.000**.\n\nHari ini telah diterbitkan PO senilai **Rp 13.678.880**, sehingga **sisa kuota belanja aman adalah Rp 36.321.120**.\n\nStatus Circuit Breaker: 🟢 **NORMAL** (Tidak ada anomali lonjakan transaksi).',
-                tag: 'Guardrail Verified',
-                confidence: 99.4,
-            };
+    // ── Jawaban: Copilot (Claude) kalau diatur, selain itu laporan data dari NPC yang dituju ──────────────
+    const jawab = async (pertanyaan, npc, riwayat) => {
+        if (COPILOT_URL) {
+            try {
+                const r = await api.tanyaCopilot(storeId, pertanyaan, riwayat);
+                return { text: r.jawaban, tag: npc ? `Copilot · bersama ${npc.name}` : 'Rexa Copilot · Claude' };
+            } catch (e) {
+                if (!npc) return { text: `Copilot belum bisa menjawab: ${e.message}`, tag: 'Copilot gagal' };
+                // Ada NPC yang cocok: tetap jawab dari data API.
+            }
         }
-
-        if (q.includes('guardrail') || q.includes('breaker') || q.includes('keamanan') || q.includes('rian')) {
-            return {
-                text: 'Status Sistem Pengaman (Security Sentinel):\n• **Circuit Breaker**: 🟢 **NORMAL / TERTUTUP** (Operasional lancar)\n• **Outlier Threshold**: 3-Sigma Batas Standar\n• **Data Confidence Minimum**: 0.85\n• **Batas PO Harian**: Rp 50.000.000\n\nSemua transaksi draf PO dievaluasi secara otomatis sebelum diteruskan ke Meja Manajer.',
-                tag: 'Security Status',
-                confidence: 99.1,
-            };
+        if (npc) {
+            try {
+                const l = await laporanNpc(npc.id, storeId);
+                return {
+                    text: `📞 **Laporan ${npc.name} (${npc.role}):**\n\n"${l.dialogue}."\n\n` +
+                        l.metrics.map((m) => `• **${m.label}**: ${m.value}`).join('\n'),
+                    tag: `Data API · Toko ${storeId}`,
+                };
+            } catch (e) {
+                return { text: `${npc.name} tidak bisa membaca data toko: ${e.message}`, tag: 'API tidak terjangkau' };
+            }
         }
-
-        if (q.includes('sirup') || q.includes('hazelnut') || q.includes('deadstock') || q.includes('hold')) {
-            return {
-                text: 'Reorder **SKU-002 (Sirup Hazelnut Gourmet)** berstatus **Hold Reorder** karena 3 faktor:\n1. **Permintaan Menurun**: Tren penjualan turun drastis (0.28x dari normal).\n2. **Korelasi Substitusi**: 84% pembeli beralih ke *Sirup Karamel Monin* tanpa batal beli.\n3. **Penyelamatan Modal**: Menghemat **Rp 5.500.000** yang langsung dialihkan ke *Kopi Arabika Specialty*.',
-                tag: 'Suppression Engine',
-                confidence: 97.8,
-            };
-        }
-
-        if (q.includes('health') || q.includes('kesehatan') || q.includes('performa') || q.includes('skor') || q.includes('toko')) {
-            return {
-                text: 'Kondisi Kesehatan Inventaris **Toko 74 (Q4 2026)**:\n• **Ketersediaan**: 94% (Hanya 2 SKU mendekati reorder point)\n• **Perputaran Barang**: 88% (Arus keluar-masuk barang prima)\n• **Stabilitas Kas**: 91% (Kas terlindungi dari deadstock)\n\nOverall Store Health Score: 🟢 **91.0 / 100** (Kategori Prima).',
-                tag: 'Executive KPI',
-                confidence: 98.2,
-            };
-        }
-
-        // Respon default cerdas
         return {
-            text: `Halo Manager! Saya telah menerima pesan: *"${query}"*.\n\nSaya dapat memverifikasi status kas, menganalisis penahanan restock produk lambat, atau memeriksa metrik kesehatan operasional Toko 74. Silakan gunakan tombol pintas di atas atau tanyakan metrik spesifik!`,
-            tag: 'Copilot Assistant',
-            confidence: 95.0,
+            text: 'Rexa Copilot (Claude) belum diatur untuk Virtual HQ (VITE_COPILOT_URL kosong), jadi saya belum bisa menjawab pertanyaan bebas. ' +
+                'Saya bisa meneruskan ke **Maya** (stok fisik), **Citra** (modal dan realokasi), **Rian** (guardrail), atau **Pak Budi** (Health Score); coba tombol pintas di atas.',
+            tag: 'Copilot belum diatur',
         };
     };
 
     // ── Kirim Pesan User & Pemicu Respons Rexa ─────────────────────────────────
-    const handleSend = (overrideQuery) => {
-        const textToSend = overrideQuery || inputQuery;
-        if (!textToSend.trim() || isTyping) return;
+    const handleSend = async (overrideQuery) => {
+        const textToSend = (overrideQuery || inputQuery).trim();
+        if (!textToSend || isTyping) return;
 
-        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-        const userMsg = {
-            id: `usr-${Date.now()}`,
-            sender: 'user',
-            text: textToSend.trim(),
-            timestamp: timeStr,
-        };
-
-        setMessages((prev) => [...prev, userMsg]);
+        // Riwayat untuk Copilot: hanya tanya-jawab, tanpa pesan "menyambungkan..."
+        const riwayat = messages.filter((m) => m.riwayat).slice(-8)
+            .map((m) => ({ peran: m.sender === 'user' ? 'user' : 'assistant', teks: m.text }));
+        setMessages((prev) => [...prev, { id: `usr-${Date.now()}`, sender: 'user', text: textToSend, timestamp: jam(), riwayat: true }]);
         setInputQuery('');
         setIsTyping(true);
 
         const targetNPC = detectTargetNPC(textToSend);
-
+        let dering = Promise.resolve();
         if (targetNPC) {
             // ── SISTEM INTERKOM 2-FASE (Rexa ↔ NPC Calling System) ────────────
             setTypingStatus(targetNPC.typingStatus);
-
-            // Fase 1: Transisi Panggilan Rexa (delay 350ms)
-            setTimeout(() => {
-                const callTransitionMsg = {
-                    id: `call-${Date.now()}`,
-                    sender: 'assistant',
-                    text: targetNPC.callingText,
-                    tag: targetNPC.callingTag,
-                    confidence: 99.0,
-                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                };
-
-                setMessages((prev) => [...prev, callTransitionMsg]);
-
-                // Dispatch event panggilan interkom ke Phaser Canvas (3000ms dering)
-                const intercomPayload = {
-                    npcId: targetNPC.id,
-                    caller: 'rexa',
-                    duration: 3000,
-                    topic: targetNPC.role,
-                };
-                window.dispatchEvent(new CustomEvent('npc-intercom-call', { detail: intercomPayload }));
-                EventBus.emit('npc-intercom-call', intercomPayload);
-
-                // Fase 2: Respons Balasan Persona Data NPC (setelah 3000ms durasi dering)
-                setTimeout(() => {
-                    const finalReply = targetNPC.generateReply(textToSend);
-                    const assistantMsg = {
-                        id: `ast-${Date.now()}`,
-                        sender: 'assistant',
-                        text: finalReply.text,
-                        tag: finalReply.tag,
-                        confidence: finalReply.confidence,
-                        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    };
-
-                    setMessages((prev) => [...prev, assistantMsg]);
-                    setIsTyping(false);
-                    setTypingStatus('Rexa sedang menganalisis data...');
-                }, 3000);
-            }, 350);
+            await tunda(350);
+            setMessages((prev) => [...prev, {
+                id: `call-${Date.now()}`,
+                sender: 'assistant',
+                text: targetNPC.callingText,
+                tag: targetNPC.callingTag,
+                timestamp: jam(),
+            }]);
+            // Dispatch event panggilan interkom ke Phaser Canvas (3000ms dering)
+            const intercomPayload = { npcId: targetNPC.id, caller: 'rexa', duration: 3000, topic: targetNPC.role };
+            window.dispatchEvent(new CustomEvent('npc-intercom-call', { detail: intercomPayload }));
+            EventBus.emit('npc-intercom-call', intercomPayload);
+            dering = tunda(3000);
         } else {
-            // ── Respons Standar Rexa (General / Non-Intercom) ──────────────────
-            setTypingStatus('Rexa sedang menganalisis data...');
-            setTimeout(() => {
-                const reply = generateRexaReply(textToSend);
-                const assistantMsg = {
-                    id: `ast-${Date.now()}`,
-                    sender: 'assistant',
-                    text: reply.text,
-                    tag: reply.tag,
-                    confidence: reply.confidence,
-                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                };
-
-                setMessages((prev) => [...prev, assistantMsg]);
-                setIsTyping(false);
-            }, 650);
+            setTypingStatus(COPILOT_URL ? 'Rexa sedang membaca data toko...' : 'Rexa sedang menganalisis data...');
         }
+
+        const [balasan] = await Promise.all([jawab(textToSend, targetNPC, riwayat), dering]);
+        setMessages((prev) => [...prev, {
+            id: `ast-${Date.now()}`,
+            sender: 'assistant',
+            text: balasan.text,
+            tag: balasan.tag,
+            timestamp: jam(),
+            riwayat: true,
+        }]);
+        setIsTyping(false);
+        setTypingStatus('Rexa sedang menganalisis data...');
     };
 
     // ── Bersihkan Riwayat Chat ────────────────────────────────────────────────
@@ -342,10 +289,9 @@ export function SmartphoneChatModal({ isOpen: externalIsOpen, onClose }) {
             {
                 id: `reset-${Date.now()}`,
                 sender: 'assistant',
-                text: 'Riwayat percakapan telah dibersihkan. Ada informasi operasional Toko 74 lain yang ingin Anda analisis, Manager?',
+                text: `Riwayat percakapan telah dibersihkan. Ada yang ingin Anda tanyakan tentang Toko ${storeId}, Manager?`,
                 tag: 'System Ready',
-                confidence: 99.8,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                timestamp: jam(),
             },
         ]);
     };
@@ -392,7 +338,7 @@ export function SmartphoneChatModal({ isOpen: externalIsOpen, onClose }) {
                             <span>Rexa Copilot</span>
                             <span style={{ fontSize: '9px', background: '#0284c7', color: '#fff', padding: '1px 4px', borderRadius: '4px' }}>AI</span>
                         </div>
-                        <div className="phone-subtitle">● Online • Toko 74</div>
+                        <div className="phone-subtitle">● Online • Toko {storeId}</div>
                     </div>
                 </div>
 
@@ -445,7 +391,7 @@ export function SmartphoneChatModal({ isOpen: externalIsOpen, onClose }) {
                             <div className={`chat-bubble ${isUser ? 'user' : 'assistant'}`}>
                                 {m.text.split('\n').map((line, i) => (
                                     <React.Fragment key={i}>
-                                        {line}
+                                        <TeksTebal teks={line} />
                                         {i !== m.text.split('\n').length - 1 && <br />}
                                     </React.Fragment>
                                 ))}

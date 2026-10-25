@@ -7,6 +7,7 @@ ChibiRex/
 ├── agent/          # Strands AI agent: LLM wrappers, tool definitions, worker, run entry point
 ├── api/            # FastAPI backend: routes, schemas, guardrails, SAP integration, settings
 ├── dashboard/      # React + Vite frontend
+├── virtual_hq/     # Virtual HQ: Phaser 4 + React 2D office; NPCs read the same API as the dashboard (src/lib/api.js)
 ├── engine/         # Offline analytics pipeline (runs separately, produces chibirex.duckdb)
 ├── sap_mock/       # SAP OData V2 mock; mounted inside the API at /sap
 ├── copilot/        # Lambda rexa-copilot (outside VPC), read-only API tools: chatbot (inti.py, Haiku 4.5) and network agent (jaringan.py, Sonnet 4.6)

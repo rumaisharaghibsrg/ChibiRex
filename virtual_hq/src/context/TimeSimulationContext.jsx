@@ -1,18 +1,17 @@
 /**
- * TimeSimulationContext.jsx — Global Time Engine State Provider
+ * TimeSimulationContext.jsx — Jam simulasi Virtual HQ, tersambung ke jam simulasi API Rexa
  *
- * Mengelola state temporal Virtual HQ:
- *  - Tanggal simulasi aktif (currentSimulatedDate)
- *  - Offset hari dari baseline (daysOffset, default 0)
- *  - Asynchronous Warp Lock (isWarping) untuk mencegah race condition
- *  - Komunikasi dua arah dengan Phaser melalui EventBus ('timeline-shift', 'timeline-shift-completed')
+ * Tanggal di game sama dengan tanggal di dashboard: dibaca dari GET /simulasi (dicek ulang tiap 15 detik, jadi
+ * perubahan dari dashboard ikut terlihat), dan tombol lompatan waktu memanggil /simulasi/maju, /mundur, atau /kembali
+ * sehingga stok, PO dalam pengiriman, dan Health Score ikut berubah. Animasi warp Phaser tetap memakai EventBus
+ * ('timeline-shift' -> 'timeline-shift-completed'); tanggal baru diterapkan setelah animasinya selesai.
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { EventBus } from '../game/EventBus';
+import { api, beritahuDataBerubah } from '../lib/api';
 import {
     BASELINE_DATE,
-    BASELINE_DATE_STR,
     calculateNewDate,
     formatIndonesianDate,
     formatIndonesianDayAndDate,
@@ -20,161 +19,141 @@ import {
 } from '../utils/TimeEngine';
 
 const TimeSimulationContext = createContext(null);
+const INTERVAL_CEK_MS = 15000;
+
+function setGlobal(hari, warping) {
+    if (typeof window === 'undefined') return;
+    window.CURRENT_SIMULATED_DATE = calculateNewDate(BASELINE_DATE, hari).iso;
+    window.CURRENT_DAYS_OFFSET = hari;
+    window.IS_TIME_WARPING = warping;
+}
 
 export function TimeSimulationProvider({ children }) {
-    const [currentSimulatedDate, setCurrentSimulatedDate] = useState(BASELINE_DATE);
     const [daysOffset, setDaysOffset] = useState(0);
+    const [hariMaks, setHariMaks] = useState(90);
     const [isWarping, setIsWarping] = useState(false);
-    const [pendingTarget, setPendingTarget] = useState(null);
+    const [apiOnline, setApiOnline] = useState(null); // null = belum dicek
+    const hariRef = useRef(0);
+    const warpRef = useRef(false);
+    const targetRef = useRef(null); // hari dari jawaban API, diterapkan setelah animasi warp selesai
 
-    // Inisialisasi window global agar non-React runtime (seperti Phaser) dapat membaca tanggal secara sinkron
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            window.CURRENT_SIMULATED_DATE = BASELINE_DATE_STR;
-            window.CURRENT_DAYS_OFFSET = 0;
-            window.IS_TIME_WARPING = false;
-        }
+    const terapkanHari = useCallback((hari) => {
+        const berubah = hari !== hariRef.current;
+        hariRef.current = hari;
+        setDaysOffset(hari);
+        setGlobal(hari, warpRef.current);
+        if (berubah) beritahuDataBerubah();
     }, []);
 
-    // ── Listener Sinyal Selesai dari Animasi Phaser (timeline-shift-completed) ───
+    // ── Baca jam simulasi dari API saat mulai, lalu berkala (perubahan dari dashboard ikut terlihat) ─────────
     useEffect(() => {
-        const handleWarpCompleted = (payload) => {
-            const data = payload?.detail || payload || {};
-            const finalDaysOffset = typeof data.targetOffset === 'number'
-                ? data.targetOffset
-                : (typeof data.daysOffset === 'number' ? data.daysOffset : (pendingTarget?.targetOffset ?? 0));
-            const newDateCalc = calculateNewDate(BASELINE_DATE, finalDaysOffset);
+        setGlobal(0, false);
+        let aktif = true;
+        const cek = () => api.simulasi()
+            .then((s) => {
+                if (!aktif) return;
+                setApiOnline(true);
+                setHariMaks(s.hari_maks);
+                if (!warpRef.current) terapkanHari(s.hari_ke);
+            })
+            .catch(() => aktif && setApiOnline(false));
+        cek();
+        const ulang = setInterval(cek, INTERVAL_CEK_MS);
+        return () => {
+            aktif = false;
+            clearInterval(ulang);
+        };
+    }, [terapkanHari]);
 
-            setCurrentSimulatedDate(newDateCalc.date);
-            setDaysOffset(finalDaysOffset);
-            setIsWarping(false);
-            setPendingTarget(null);
+    const selesaiWarp = useCallback(() => {
+        if (!warpRef.current) return;
+        warpRef.current = false;
+        setIsWarping(false);
+        if (targetRef.current !== null) terapkanHari(targetRef.current);
+        targetRef.current = null;
+        setGlobal(hariRef.current, false);
+    }, [terapkanHari]);
 
-            if (typeof window !== 'undefined') {
-                window.CURRENT_SIMULATED_DATE = newDateCalc.iso;
-                window.CURRENT_DAYS_OFFSET = finalDaysOffset;
-                window.IS_TIME_WARPING = false;
-            }
-
+    // ── Sinyal selesai dari animasi Phaser (timeline-shift-completed) ─────────────
+    useEffect(() => {
+        const handleWarpCompleted = () => {
+            selesaiWarp();
             // Sinyal unfreeze pemain eksplisit
             EventBus.emit('unfreeze-player');
             window.dispatchEvent(new CustomEvent('unfreeze-player'));
-
-            console.log(
-                `%c[TIME ENGINE] ⏳ Lompatan Waktu Selesai! Tanggal Sekarang: ${newDateCalc.fullFormatted} (+${finalDaysOffset} Hari)`,
-                'color: #f59e0b; font-weight: bold;'
-            );
         };
-
         EventBus.on('timeline-shift-completed', handleWarpCompleted);
         window.addEventListener('timeline-shift-completed', handleWarpCompleted);
-
         return () => {
             EventBus.removeListener('timeline-shift-completed', handleWarpCompleted);
             window.removeEventListener('timeline-shift-completed', handleWarpCompleted);
         };
-    }, [pendingTarget]);
+    }, [selesaiWarp]);
 
-    // ── Memicu Percepatan Waktu (+1, +7, dll) ──────────────────────────────────
-    const triggerTimeWarp = useCallback((additionalDays) => {
-        if (isWarping) return; // Cegah pemicu ganda selama warp
-
-        const targetOffset = daysOffset + additionalDays;
-        const targetCalc = calculateNewDate(BASELINE_DATE, targetOffset);
-
+    /**
+     * Geser waktu lewat API: hari > 0 maju, hari < 0 mundur, null kembali ke 31 Des 2016. Mengembalikan pesan galat
+     * (string) kalau API menolak, atau null kalau berhasil dan animasi warp dimulai.
+     */
+    const geserWaktu = useCallback(async (hari) => {
+        if (warpRef.current) return null;
+        warpRef.current = true;
         setIsWarping(true);
-        setPendingTarget({ targetOffset, targetCalc });
+        setGlobal(hariRef.current, true);
 
-        if (typeof window !== 'undefined') {
-            window.IS_TIME_WARPING = true;
+        let s;
+        try {
+            s = hari === null ? await api.kembaliSimulasi()
+                : hari > 0 ? await api.majuSimulasi(hari) : await api.mundurSimulasi(-hari);
+        } catch (e) {
+            warpRef.current = false;
+            setIsWarping(false);
+            setGlobal(hariRef.current, false);
+            return e.message;
         }
 
+        const previousOffset = hariRef.current;
+        const targetCalc = calculateNewDate(BASELINE_DATE, s.hari_ke);
+        targetRef.current = s.hari_ke;
         const payload = {
-            daysAdded: additionalDays,
-            previousOffset: daysOffset,
-            targetOffset: targetOffset,
-            daysOffset: targetOffset,
+            daysAdded: s.hari_ke - previousOffset,
+            previousOffset,
+            targetOffset: s.hari_ke,
+            daysOffset: s.hari_ke,
             targetDate: targetCalc.iso,
             targetDateFormatted: targetCalc.formatted,
             targetFullFormatted: targetCalc.fullFormatted,
-            isReset: false,
+            isReset: hari === null,
         };
-
-        // Siarkan event ke Phaser & Window
         EventBus.emit('timeline-shift', payload);
         window.dispatchEvent(new CustomEvent('timeline-shift', { detail: payload }));
 
-        // Fail-safe release: jika ada kendala di kanvas, kunci otomatis dilepaskan pada 2500ms
+        // Fail-safe: kalau animasi kanvas tidak mengirim sinyal selesai, tanggal tetap diterapkan setelah 2,5 detik.
         setTimeout(() => {
-            setIsWarping((prev) => {
-                if (prev) {
-                    console.warn('[TIME ENGINE] ⚠️ Fail-safe timeout (2500ms) membebaskan Asynchronous Lock.');
-                    if (typeof window !== 'undefined') window.IS_TIME_WARPING = false;
-                    EventBus.emit('unfreeze-player');
-                    window.dispatchEvent(new CustomEvent('unfreeze-player'));
-                    return false;
-                }
-                return prev;
-            });
+            if (!warpRef.current) return;
+            console.warn('[TIME ENGINE] ⚠️ Fail-safe timeout (2500ms) membebaskan Asynchronous Lock.');
+            selesaiWarp();
+            EventBus.emit('unfreeze-player');
+            window.dispatchEvent(new CustomEvent('unfreeze-player'));
         }, 2500);
-    }, [daysOffset, isWarping]);
+        return null;
+    }, [selesaiWarp]);
 
-    // ── Reset Waktu ke Baseline (31 Des 2016) ─────────────────────────────────
-    const resetTimeToBaseline = useCallback(() => {
-        if (isWarping || daysOffset === 0) return;
+    const triggerTimeWarp = useCallback((hari) => geserWaktu(hari), [geserWaktu]);
+    const resetTimeToBaseline = useCallback(() => geserWaktu(null), [geserWaktu]);
 
-        const targetOffset = 0;
-        const targetCalc = calculateNewDate(BASELINE_DATE, 0);
-
-        setIsWarping(true);
-        setPendingTarget({ targetOffset: 0, targetCalc });
-
-        if (typeof window !== 'undefined') {
-            window.IS_TIME_WARPING = true;
-        }
-
-        const payload = {
-            daysAdded: -daysOffset,
-            previousOffset: daysOffset,
-            targetOffset: 0,
-            daysOffset: 0,
-            targetDate: BASELINE_DATE_STR,
-            targetDateFormatted: targetCalc.formatted,
-            targetFullFormatted: targetCalc.fullFormatted,
-            isReset: true,
-        };
-
-        EventBus.emit('timeline-shift', payload);
-        window.dispatchEvent(new CustomEvent('timeline-shift', { detail: payload }));
-
-        // Fail-safe release untuk reset
-        setTimeout(() => {
-            setIsWarping((prev) => {
-                if (prev) {
-                    console.warn('[TIME ENGINE] ⚠️ Fail-safe timeout (2500ms) membebaskan Asynchronous Lock.');
-                    if (typeof window !== 'undefined') window.IS_TIME_WARPING = false;
-                    EventBus.emit('unfreeze-player');
-                    window.dispatchEvent(new CustomEvent('unfreeze-player'));
-                    return false;
-                }
-                return prev;
-            });
-        }, 2500);
-    }, [daysOffset, isWarping]);
-
-    const formattedDate = formatIndonesianDate(currentSimulatedDate);
-    const fullFormattedDate = formatIndonesianDayAndDate(currentSimulatedDate);
-    const isoDate = formatISODate(currentSimulatedDate);
+    const currentSimulatedDate = calculateNewDate(BASELINE_DATE, daysOffset).date;
 
     return (
         <TimeSimulationContext.Provider
             value={{
                 currentSimulatedDate,
                 daysOffset,
+                hariMaks,
                 isWarping,
-                formattedDate,
-                fullFormattedDate,
-                isoDate,
+                apiOnline,
+                formattedDate: formatIndonesianDate(currentSimulatedDate),
+                fullFormattedDate: formatIndonesianDayAndDate(currentSimulatedDate),
+                isoDate: formatISODate(currentSimulatedDate),
                 triggerTimeWarp,
                 resetTimeToBaseline,
             }}

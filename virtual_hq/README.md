@@ -1,4 +1,44 @@
-# Phaser React Template
+# Virtual HQ Rexa
+
+Kantor virtual 2D (Phaser 4 + React) untuk demo Rexa. Manajer berjalan di kantor dan berbicara dengan staf yang
+masing-masing mewakili satu bagian dashboard. Semua angka dibaca dari API Rexa yang sama dengan dashboard
+(`src/lib/api.js`), jadi tanggal simulasi, Health Score, PO, dan guardrail di game selalu sama dengan dashboard.
+
+| Di game | Isi | Endpoint API |
+|---|---|---|
+| Rexa (meja kiri atas, tombol E) | Agent Rexa: langkah dan ringkasan run asli; kalau gagal, alasannya ditampilkan | `POST /agent-runs/mulai`, `GET /agent-runs/{id}` |
+| Meja Approval | Draf PO toko yang diawasi dan 1-Click Approval ke tiruan SAP | `GET /purchase-orders?store=&status=DRAFT`, `POST .../approve`, `.../reject`, `GET .../sap-payload` |
+| Pak Budi | Health Score, komponennya, dan peringkat di jaringan | `GET /stores/{s}/ringkasan`, `GET /jaringan/ringkasan` |
+| Citra | Modal tertahan, modal diselamatkan Hold Reorder, saran realokasi | `GET /stores/{s}/ringkasan`, `GET /stores/{s}/reallocation` |
+| Rian | Circuit breaker, batas PO harian, ambang lonjakan 3σ | `GET /guardrails/status?store=` |
+| Maya | Hitung fisik yang menunggu audit dan Data Confidence | `GET /stores/{s}/stok-fisik`, `GET /guardrails/status` |
+| Doni (Crisis Hub) | Krisis yang benar-benar ada di data: breaker terbuka, Health < 65, SKU naik berisiko tinggi stok habis, modal tertahan > 40% nilai stok. Aksinya asli: reset breaker, tugaskan Agent Rexa, buka laporan Citra | gabungan di atas, `POST /guardrails/circuit-breaker/reset` |
+| Smart TV | Health toko dan rata-rata jaringan, toko dengan Health terendah, status SKU, worker agent, audit, breaker | ringkasan toko, `/jaringan/ringkasan`, guardrail, `/agent-runs/worker`, stok fisik |
+| Ganti cabang | 80 toko dengan Health Score per tanggal simulasi; filter Sehat/Perhatian/Kritis memakai ambang dashboard | `GET /jaringan/ringkasan` (cadangan: `GET /stores`) |
+| Tanggal di header | Jam simulasi bersama dashboard: +1/+7, -1/-7, kembali ke 31 Des 2016 | `GET /simulasi`, `POST /simulasi/maju`, `/mundur`, `/kembali` |
+| Rexa Chat (tombol C) | Rexa Copilot (Claude di Lambda); tanpa Copilot, NPC yang dituju membacakan data API | `POST {VITE_COPILOT_URL}/tanya` |
+
+Kalau API tidak terjangkau, game tetap bisa dimainkan, tetapi setiap panel menuliskan galatnya. Tidak ada angka atau
+hasil pengganti.
+
+## Menjalankan
+
+1. API dari root repo: `uvicorn api.main:app` (port 8000). CORS bawaan API sudah mengizinkan `http://localhost:8080`.
+2. `cd virtual_hq`, `npm install`, `npm run dev`, lalu buka http://localhost:8080.
+3. Opsional, `virtual_hq/.env.local` untuk memakai API online dan Copilot:
+   ```
+   VITE_API_URL=<Function URL Lambda API>
+   VITE_COPILOT_URL=<Function URL Lambda rexa-copilot>
+   ```
+   Domain tempat game dibuka harus diizinkan di `CHIBIREX_CORS_ORIGINS` Lambda API dan di CORS Lambda Copilot.
+
+Cheat demo (tahan U+R): U+R+1..4 meminta Doni memeriksa krisis Maya, Citra, Rian, atau Pak Budi di data toko yang
+diawasi; kalau datanya normal, cheat hanya memberi tahu. U+R saja menyalakan atau mematikan pemeriksaan otomatis tiap
+30 menit.
+
+---
+
+# Catatan template asli (Phaser React Template)
 
 This is a Phaser project template that uses the React framework and Vite for bundling. It includes a bridge for React to Phaser game communication, hot-reloading for quick development workflow and scripts to generate production-ready builds.
 
@@ -25,8 +65,6 @@ This template has been updated for:
 | `npm install` | Install project dependencies |
 | `npm run dev` | Launch a development web server |
 | `npm run build` | Create a production build in the `dist` folder |
-| `npm run dev-nolog` | Launch a development web server without sending anonymous data (see "About log.js" below) |
-| `npm run build-nolog` | Create a production build in the `dist` folder without sending anonymous data (see "About log.js" below) |
 
 ## Writing Code
 
@@ -178,52 +216,6 @@ In order to deploy your game, you will need to upload *all* of the contents of t
 ### Vite
 
 If you want to customize your build, such as adding plugin (i.e. for loading CSS or fonts), you can modify the `vite/config.*.mjs` file for cross-project changes, or you can modify and/or create new configuration files and target them in specific npm tasks inside of `package.json`. Please see the [Vite documentation](https://vitejs.dev/) for more information.
-
-## About log.js
-
-If you inspect our node scripts you will see there is a file called `log.js`. This file makes a single silent API call to a domain called `gryzor.co`. This domain is owned by Phaser Studio Inc. The domain name is a homage to one of our favorite retro games.
-
-We send the following 3 pieces of data to this API: The name of the template being used (vue, react, etc). If the build was 'dev' or 'prod' and finally the version of Phaser being used.
-
-At no point is any personal data collected or sent. We don't know about your project files, device, browser or anything else. Feel free to inspect the `log.js` file to confirm this.
-
-Why do we do this? Because being open source means we have no visible metrics about which of our templates are being used. We work hard to maintain a large and diverse set of templates for Phaser developers and this is our small anonymous way to determine if that work is actually paying off, or not. In short, it helps us ensure we're building the tools for you.
-
-However, if you don't want to send any data, you can use these commands instead:
-
-Dev:
-
-```bash
-npm run dev-nolog
-```
-
-Build:
-
-```bash
-npm run build-nolog
-```
-
-Or, to disable the log entirely, simply delete the file `log.js` and remove the call to it in the `scripts` section of `package.json`:
-
-Before:
-
-```json
-"scripts": {
-    "dev": "node log.js dev & dev-template-script",
-    "build": "node log.js build & build-template-script"
-},
-```
-
-After:
-
-```json
-"scripts": {
-    "dev": "dev-template-script",
-    "build": "build-template-script"
-},
-```
-
-Either of these will stop `log.js` from running. If you do decide to do this, please could you at least join our Discord and tell us which template you're using! Or send us a quick email. Either will be super-helpful, thank you.
 
 ## Join the Phaser Community!
 

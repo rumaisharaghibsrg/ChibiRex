@@ -2,10 +2,9 @@
  * RegionalDashboardModal.jsx — Multi-Tenant Regional Command Center (80 Cabang)
  *
  * Mengakomodasi pengawasan multi-toko regional:
- *  - Menampilkan 80 cabang otentik yang diekstrak dari DuckDB ChibiRex
+ *  - Menampilkan 80 toko Bibitor dengan Health Score dan SKU perlu reorder dari GET /jaringan/ringkasan
  *  - Pencarian real-time via Store ID (misal: "74", "1", "81") atau Nama Kota (misal: "Ashborne", "Paentmarwy")
- *  - Filter Status: Semua, Prima (Health Score >= 90), Warning (Health Score < 90)
- *  - Filter Wilayah (Region): All, North, London, Midlands, Scotland, Wales, East, West, South
+ *  - Filter Status dengan ambang dashboard: Sehat (>= 80), Perhatian (65-79), Kritis (< 65)
  *  - Highlight Cabang Aktif dengan Glow Cyan
  *  - Single-Click Store Switching dengan Telemetry Sync trigger
  */
@@ -14,22 +13,23 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../context/StoreContext';
 import { EventBus } from '../game/EventBus';
 import { formatStoreName } from '../data/storesRegistry';
+import { angka, statusHealth } from '../lib/format';
+
+const KELOMPOK = {
+    SEHAT: (h) => h >= 80,
+    PERHATIAN: (h) => h >= 65 && h < 80,
+    KRITIS: (h) => h < 65,
+};
 
 export function RegionalDashboardModal({ isOpen, onClose }) {
-    const { currentStore, storesList, switchStore } = useStore();
+    const { currentStore, storesList, statsTersedia, switchStore } = useStore();
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'PRIMA' | 'WARNING'
-    const [regionFilter, setRegionFilter] = useState('ALL');
+    const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'SEHAT' | 'PERHATIAN' | 'KRITIS'
     const [hoveredStoreId, setHoveredStoreId] = useState(null);
 
-    // Ambil daftar region unik
-    const uniqueRegions = useMemo(() => {
-        const set = new Set();
-        storesList.forEach((s) => {
-            if (s.region) set.add(s.region);
-        });
-        return ['ALL', ...Array.from(set)];
-    }, [storesList]);
+    const jumlahKelompok = useMemo(() => Object.fromEntries(Object.entries(KELOMPOK).map(
+        ([k, cocok]) => [k, storesList.filter((s) => s.healthScore !== null && s.healthScore !== undefined && cocok(s.healthScore)).length])),
+    [storesList]);
 
     // Tutup modal dan unfreeze player
     const handleClose = useCallback(() => {
@@ -60,19 +60,15 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
             const matchesQuery =
                 !query ||
                 String(s.id).includes(query) ||
-                (s.city && s.city.toLowerCase().includes(query)) ||
-                (s.region && s.region.toLowerCase().includes(query));
+                (s.city && s.city.toLowerCase().includes(query));
 
             if (!matchesQuery) return false;
-
-            if (statusFilter === 'PRIMA' && s.healthScore < 90) return false;
-            if (statusFilter === 'WARNING' && s.healthScore >= 90) return false;
-
-            if (regionFilter !== 'ALL' && s.region !== regionFilter) return false;
-
+            if (statusFilter !== 'ALL' && (s.healthScore === null || s.healthScore === undefined || !KELOMPOK[statusFilter](s.healthScore))) {
+                return false;
+            }
             return true;
         });
-    }, [storesList, searchQuery, statusFilter, regionFilter]);
+    }, [storesList, searchQuery, statusFilter]);
 
     // Aksi peralihan toko
     const handleSelectStore = (storeId) => {
@@ -181,7 +177,7 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
                                         fontWeight: '700',
                                     }}
                                 >
-                                    80 CABANG AKTIF
+                                    {storesList.length} TOKO
                                 </span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
@@ -331,63 +327,53 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
                             Semua ({storesList.length})
                         </button>
                         <button
-                            onClick={() => setStatusFilter('PRIMA')}
+                            onClick={() => setStatusFilter('SEHAT')}
                             style={{
                                 padding: '6px 12px',
                                 borderRadius: '6px',
                                 fontSize: '11px',
                                 fontWeight: '700',
                                 cursor: 'pointer',
-                                border: statusFilter === 'PRIMA' ? '1px solid #10b981' : '1px solid rgba(148, 163, 184, 0.2)',
-                                backgroundColor: statusFilter === 'PRIMA' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(30, 41, 59, 0.5)',
-                                color: statusFilter === 'PRIMA' ? '#34d399' : '#94a3b8',
+                                border: statusFilter === 'SEHAT' ? '1px solid #34d399' : '1px solid rgba(148, 163, 184, 0.2)',
+                                backgroundColor: statusFilter === 'SEHAT' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(30, 41, 59, 0.5)',
+                                color: statusFilter === 'SEHAT' ? '#34d399' : '#94a3b8',
                                 transition: 'all 0.15s ease',
                             }}
                         >
-                            🟢 Prima (Score ≥ 90)
+                            🟢 Sehat (≥ 80) ({jumlahKelompok.SEHAT})
                         </button>
                         <button
-                            onClick={() => setStatusFilter('WARNING')}
+                            onClick={() => setStatusFilter('PERHATIAN')}
                             style={{
                                 padding: '6px 12px',
                                 borderRadius: '6px',
                                 fontSize: '11px',
                                 fontWeight: '700',
                                 cursor: 'pointer',
-                                border: statusFilter === 'WARNING' ? '1px solid #f59e0b' : '1px solid rgba(148, 163, 184, 0.2)',
-                                backgroundColor: statusFilter === 'WARNING' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(30, 41, 59, 0.5)',
-                                color: statusFilter === 'WARNING' ? '#fbbf24' : '#94a3b8',
+                                border: statusFilter === 'PERHATIAN' ? '1px solid #fbbf24' : '1px solid rgba(148, 163, 184, 0.2)',
+                                backgroundColor: statusFilter === 'PERHATIAN' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(30, 41, 59, 0.5)',
+                                color: statusFilter === 'PERHATIAN' ? '#fbbf24' : '#94a3b8',
                                 transition: 'all 0.15s ease',
                             }}
                         >
-                            🟡 Perhatian (&lt; 90)
+                            🟡 Perhatian (65-79) ({jumlahKelompok.PERHATIAN})
                         </button>
-                    </div>
-
-                    {/* Region Dropdown Filter */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', color: '#64748b' }}>Region:</span>
-                        <select
-                            value={regionFilter}
-                            onChange={(e) => setRegionFilter(e.target.value)}
+                        <button
+                            onClick={() => setStatusFilter('KRITIS')}
                             style={{
-                                padding: '6px 10px',
-                                backgroundColor: 'rgba(30, 41, 59, 0.7)',
-                                border: '1px solid rgba(148, 163, 184, 0.3)',
+                                padding: '6px 12px',
                                 borderRadius: '6px',
-                                color: '#e2e8f0',
                                 fontSize: '11px',
-                                fontFamily: 'monospace',
-                                outline: 'none',
+                                fontWeight: '700',
                                 cursor: 'pointer',
+                                border: statusFilter === 'KRITIS' ? '1px solid #f87171' : '1px solid rgba(148, 163, 184, 0.2)',
+                                backgroundColor: statusFilter === 'KRITIS' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(30, 41, 59, 0.5)',
+                                color: statusFilter === 'KRITIS' ? '#f87171' : '#94a3b8',
+                                transition: 'all 0.15s ease',
                             }}
                         >
-                            {uniqueRegions.map((reg) => (
-                                <option key={reg} value={reg} style={{ background: '#0f172a', color: '#fff' }}>
-                                    {reg === 'ALL' ? 'Semua Wilayah' : reg}
-                                </option>
-                            ))}
-                        </select>
+                            🔴 Kritis (&lt; 65) ({jumlahKelompok.KRITIS})
+                        </button>
                     </div>
                 </div>
 
@@ -420,7 +406,7 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
                         filteredStores.map((s) => {
                             const isCurrent = s.id === currentStore.id;
                             const isHovered = hoveredStoreId === s.id;
-                            const isPrima = s.healthScore >= 90;
+                            const status = statusHealth(s.healthScore);
 
                             return (
                                 <div
@@ -485,7 +471,7 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
                                                     color: '#94a3b8',
                                                 }}
                                             >
-                                                {s.region || 'UK'}
+                                                {status.label}
                                             </span>
                                         </div>
 
@@ -530,11 +516,25 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
                                                 justifyContent: 'space-between',
                                                 fontSize: '10px',
                                                 color: '#94a3b8',
+                                                marginBottom: '4px',
+                                            }}
+                                        >
+                                            <span>Perlu reorder:</span>
+                                            <strong style={{ color: '#e2e8f0' }}>{angka(s.reorderNeededCount)}</strong>
+                                        </div>
+
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                fontSize: '10px',
+                                                color: '#94a3b8',
                                             }}
                                         >
                                             <span>Health:</span>
-                                            <strong style={{ color: isPrima ? '#34d399' : '#fbbf24' }}>
-                                                {s.healthScore?.toFixed(1) || 90.0} / 100
+                                            <strong style={{ color: status.warna }}>
+                                                {s.healthScore ?? '-'} / 100
                                             </strong>
                                         </div>
                                     </div>
@@ -606,7 +606,9 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
                 >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }} />
-                        <span>DuckDB Telemetry Engine: <strong>80/80 Cabang Siap Pantau</strong></span>
+                        <span>{statsTersedia
+                            ? <>Health Score per tanggal simulasi dari API (sama dengan dashboard)</>
+                            : <>Health Score belum tersedia: API belum punya <strong>/jaringan/ringkasan</strong> atau tidak terjangkau</>}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                         <span>Tekan <kbd style={{ padding: '2px 6px', background: 'rgba(30, 41, 59, 0.9)', border: '1px solid rgba(148, 163, 184, 0.3)', borderRadius: '4px', color: '#e2e8f0' }}>ESC</kbd> untuk menutup</span>

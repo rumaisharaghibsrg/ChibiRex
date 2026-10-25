@@ -1,58 +1,57 @@
 /**
  * CrisisCommandModal.jsx — Tactical Red Alert Emergency Crisis Hub
  *
- * Antarmuka terpadu untuk merespons kondisi darurat toko yang dilaporkan oleh
- * Doni (Koordinator Operasional). Menampilkan telemetri insiden lintas divisi
- * (Maya, Citra, Rian, Pak Budi) dan menyediakan protokol eksekusi resolusi 1-klik.
+ * Doni (Koordinator Operasional) memeriksa data toko yang diawasi setiap kali hub dibuka (deteksiKrisis di
+ * StoreCrisisState.js) dan hanya melaporkan krisis yang benar-benar ada di data API. Tombol resolusinya menjalankan
+ * aksi asli: reset circuit breaker oleh manajer, menugaskan Agent Rexa, atau membuka laporan NPC sumber masalah.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { EventBus } from '../game/EventBus';
-import { defaultCrisisState, CRISIS_PRESETS } from '../game/StoreCrisisState';
+import { defaultCrisisState, deteksiKrisis } from '../game/StoreCrisisState';
+import { useStore } from '../context/StoreContext';
+import { useTimeSimulation } from '../context/TimeSimulationContext';
+import { api, beritahuDataBerubah } from '../lib/api';
 import './CrisisCommandModal.css';
 
 export function CrisisCommandModal({ isOpen, onClose }) {
-    const [crisisData, setCrisisData] = useState(() => {
-        if (typeof window !== 'undefined' && window.StoreCrisisState) {
-            return window.StoreCrisisState;
-        }
-        return defaultCrisisState;
-    });
-
+    const { currentStore } = useStore();
+    const { formattedDate } = useTimeSimulation();
+    const storeId = currentStore?.id || 74;
+    const [crisisData, setCrisisData] = useState(defaultCrisisState);
+    const [lainnya, setLainnya] = useState([]);
+    const [ringkas, setRingkas] = useState('');
+    const [memeriksa, setMemeriksa] = useState(false);
+    const [galat, setGalat] = useState(null);
     const [isResolving, setIsResolving] = useState(false);
     const [resolvedSuccess, setResolvedSuccess] = useState(false);
 
-    // Sinkronisasi data krisis saat modal dibuka atau saat ada event
+    // Doni memeriksa data toko setiap hub dibuka (dan setelah toko diganti selagi terbuka).
     useEffect(() => {
-        const syncCrisis = () => {
-            if (typeof window !== 'undefined' && window.StoreCrisisState) {
-                setCrisisData({ ...window.StoreCrisisState });
-            }
-        };
-
-        syncCrisis();
-
-        const handleTrigger = (e) => {
-            setCrisisData(e?.detail ? { ...e.detail } : { ...window.StoreCrisisState });
-            setResolvedSuccess(false);
-        };
-
-        const handleResolved = () => {
-            syncCrisis();
-        };
-
-        window.addEventListener('store-crisis-triggered', handleTrigger);
-        window.addEventListener('store-crisis-resolved', handleResolved);
-        EventBus.on('store-crisis-triggered', handleTrigger);
-        EventBus.on('store-crisis-resolved', handleResolved);
-
+        if (!isOpen) return undefined;
+        let aktif = true;
+        setMemeriksa(true);
+        setGalat(null);
+        setResolvedSuccess(false);
+        deteksiKrisis(currentStore)
+            .then(({ krisis, ringkas: teks }) => {
+                if (!aktif) return;
+                setCrisisData(krisis[0] || defaultCrisisState);
+                setLainnya(krisis.slice(1));
+                setRingkas(teks);
+            })
+            .catch((e) => aktif && setGalat(e.message))
+            .finally(() => aktif && setMemeriksa(false));
         return () => {
-            window.removeEventListener('store-crisis-triggered', handleTrigger);
-            window.removeEventListener('store-crisis-resolved', handleResolved);
-            EventBus.removeListener('store-crisis-triggered', handleTrigger);
-            EventBus.removeListener('store-crisis-resolved', handleResolved);
+            aktif = false;
         };
-    }, []);
+    }, [isOpen, currentStore]);
+
+    const handleClose = useCallback(() => {
+        setIsResolving(false);
+        setResolvedSuccess(false);
+        if (onClose) onClose();
+    }, [onClose]);
 
     // Tutup dengan tombol Escape & Universal E Toggle (Directive v4.8)
     useEffect(() => {
@@ -65,29 +64,38 @@ export function CrisisCommandModal({ isOpen, onClose }) {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen]);
+    }, [isOpen, handleClose]);
 
-    const handleClose = () => {
-        setIsResolving(false);
-        setResolvedSuccess(false);
-        if (onClose) onClose();
-    };
-
-    // Eksekusi Resolusi Darurat 1-Klik
-    const handleExecuteResolution = () => {
-        setIsResolving(true);
-
-        setTimeout(() => {
-            if (typeof window !== 'undefined' && window.resolveStoreCrisis) {
-                window.resolveStoreCrisis();
+    // Eksekusi resolusi: aksi asli sesuai jenis krisis
+    const handleExecuteResolution = async () => {
+        const aksi = crisisData.action || {};
+        setGalat(null);
+        if (aksi.jenis === 'reset-breaker') {
+            setIsResolving(true);
+            try {
+                await api.resetBreaker('Reset dari Crisis Hub Doni (Virtual HQ)');
+            } catch (e) {
+                setGalat(e.message);
+                setIsResolving(false);
+                return;
             }
+            window.resolveStoreCrisis?.();
+            beritahuDataBerubah();
             setIsResolving(false);
             setResolvedSuccess(true);
-
-            setTimeout(() => {
-                handleClose();
-            }, 1200);
-        }, 800);
+            setTimeout(() => handleClose(), 1500);
+            return;
+        }
+        // Agent dan laporan NPC membuka panel lain: hub ditutup dulu supaya kontrol pemain tidak bentrok.
+        window.resolveStoreCrisis?.();
+        handleClose();
+        setTimeout(() => {
+            if (aksi.jenis === 'agent') {
+                EventBus.emit('trigger-agent-analysis', { store: String(storeId) });
+            } else if (aksi.jenis === 'npc') {
+                window.dispatchEvent(new CustomEvent('open-npc-dialog-modal', { detail: { npcId: aksi.npcId } }));
+            }
+        }, 250);
     };
 
     // Pemicu Interkom ke NPC Sumber Masalah
@@ -124,9 +132,9 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                 <div className="crisis-top-banner">
                     <div className="crisis-banner-title">
                         <span>{isCrisis ? '🚨' : '🛡️'}</span>
-                        <span>{isCrisis ? 'CRISIS DISPATCH · TOKO #74' : 'STATUS OPERASIONAL · TOKO #74'}</span>
+                        <span>{isCrisis ? `CRISIS DISPATCH · TOKO #${storeId}` : `STATUS OPERASIONAL · TOKO #${storeId}`}</span>
                         <span className={isCrisis ? 'crisis-badge-urgent' : 'crisis-badge-normal'}>
-                            {isCrisis ? 'URGENT' : 'STABIL'}
+                            {memeriksa ? 'MEMERIKSA' : galat && !isCrisis ? 'OFFLINE' : isCrisis ? 'URGENT' : 'STABIL'}
                         </span>
                     </div>
                     <button
@@ -152,18 +160,22 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                                 </span>
                             </div>
                             <p className="crisis-doni-text">
-                                {resolvedSuccess ? (
+                                {memeriksa ? (
+                                    <>"Sebentar, Manager, saya periksa data Toko {storeId} per {formattedDate}..."</>
+                                ) : resolvedSuccess ? (
                                     <strong style={{ color: '#4ade80' }}>
-                                        🎉 "Luar biasa, Manager! Krisis berhasil dinetralisir dan seluruh sistem kembali beroperasi normal. Saya kembali memantau lorong!"
+                                        🎉 "Circuit breaker sudah direset, Manager. PO baru kembali diproses guardrail seperti biasa."
                                     </strong>
+                                ) : galat && !isCrisis ? (
+                                    <>"Maaf, Manager, data toko tidak bisa saya baca sekarang: {galat}"</>
                                 ) : isCrisis ? (
                                     <>
-                                        "Manager! Syukurlah Anda ada di sini! Terjadi kondisi <strong>DARURAT</strong> di divisi{' '}
-                                        <strong style={{ color: '#f87171' }}>{crisisData.sourceName}</strong>. Kita harus segera mengeksekusi protokol resolusi sebelum operasional toko terhenti!"
+                                        "Manager, data Toko {storeId} per {formattedDate} menunjukkan kondisi <strong>DARURAT</strong> di bagian{' '}
+                                        <strong style={{ color: '#f87171' }}>{crisisData.sourceName}</strong>. Ini angka dari dashboard, bukan perkiraan."
                                     </>
                                 ) : (
                                     <>
-                                        "Laporan Operasional: Seluruh divisi Toko 74 berjalan tertib dan lancar, Manager! Maya sedang opname di gudang, Citra memantau kas, Rian mengawal server, dan Pak Budi memantau health score. Tidak ada anomali aktif!"
+                                        "Tidak ada krisis di Toko {storeId} per {formattedDate}, Manager. {ringkas}"
                                     </>
                                 )}
                             </p>
@@ -203,6 +215,15 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                             )}
 
                             <p className="crisis-problem-desc">{crisisData.description}</p>
+
+                            {lainnya.length > 0 && (
+                                <p className="crisis-problem-desc" style={{ marginTop: '8px', color: '#94a3b8' }}>
+                                    Temuan lain: {lainnya.map((k) => `${k.sourceName.split(' (')[0]}: ${k.headline}`).join(' · ')}
+                                </p>
+                            )}
+                            {galat && (
+                                <p className="crisis-problem-desc" style={{ marginTop: '8px', color: '#f87171' }}>⚠️ {galat}</p>
+                            )}
                         </div>
                     )}
                 </div>
@@ -219,12 +240,12 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                                 {isResolving ? (
                                     <>
                                         <span className="status-dot pulse-amber" />
-                                        <span>MENGEKSEKUSI PROTOKOL DARURAT...</span>
+                                        <span>MENGIRIM KE API...</span>
                                     </>
                                 ) : resolvedSuccess ? (
-                                    <span>✔️ KRISIS TELAH DINETRALISIR!</span>
+                                    <span>✔️ CIRCUIT BREAKER DIRESET</span>
                                 ) : (
-                                    <span>{crisisData.action?.label || '⚡ EKSEKUSI PROTOKOL RESOLUSI CEPAT'}</span>
+                                    <span>{crisisData.action?.label || '⚡ Tindak lanjuti'}</span>
                                 )}
                             </button>
 

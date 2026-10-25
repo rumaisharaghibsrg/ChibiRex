@@ -2,15 +2,15 @@
  * NPCDialogModal.jsx — Interactive Persona Dialog Hub & Graceful Fallback Showcase
  *
  * Menampilkan pesan dialog langsung dari NPC (Maya, Citra, Rian, Pak Budi, Rexa)
- * dengan dukungan Graceful Degradation:
- * - Menampilkan titik putih normal jika data didapat langsung dari live REST API.
- * - Mengubah titik akhir menjadi Subtle Red Dot (#ef4444) jika data berasal dari silent fallback.
+ * berdasarkan data API Rexa (src/lib/npc.js):
+ * - Titik akhir putih: laporan dari data API.
+ * - Titik akhir merah (#ef4444): API tidak terjangkau; teksnya menjelaskan galat, bukan angka pengganti.
  * - Menjamin unfreeze player saat modal ditutup.
  */
 
 import React, { useEffect, useCallback } from 'react';
 import { EventBus } from '../game/EventBus';
-import { NPC_FALLBACK_REGISTRY } from '../utils/NPCFallbackData';
+import { PERSONA } from '../lib/npc';
 import './NPCDialogModal.css';
 
 /**
@@ -29,7 +29,7 @@ export function SentenceWithDot({ text, isFallback }) {
                 <span
                     className="subtle-red-dot"
                     style={{ color: '#ef4444', fontWeight: 'bold' }}
-                    title="Dev Indicator: Disajikan dari Fallback Data Lokal (Backend REST Offline/Timeout)"
+                    title="API tidak terjangkau: tidak ada data toko yang ditampilkan"
                 >
                     .
                 </span>
@@ -49,10 +49,9 @@ export function NPCDialogModal({
     isLoading = false,
     onClose,
 }) {
-    // Ambil default config dari registry sesuai NPC ID
-    const npcConfig = NPC_FALLBACK_REGISTRY[npcId] || NPC_FALLBACK_REGISTRY.maya;
-    const activeText = dialogue || npcConfig.sentence;
-    const activeMetrics = metrics && metrics.length > 0 ? metrics : npcConfig.metrics;
+    const npcConfig = PERSONA[npcId] || PERSONA.maya;
+    const activeText = dialogue;
+    const activeMetrics = metrics;
 
     // Handler penutupan modal dengan jaminan mutlak unfreeze pemain
     const handleClose = useCallback(() => {
@@ -152,7 +151,7 @@ export function NPCDialogModal({
                         <p className="npc-speech-text">
                             {isLoading ? (
                                 <span style={{ color: '#94a3b8' }}>
-                                    Memeriksa koneksi telemetri divisi {npcConfig.name}...
+                                    {npcConfig.name} sedang membaca data toko...
                                 </span>
                             ) : (
                                 <SentenceWithDot text={activeText} isFallback={isFallback} />

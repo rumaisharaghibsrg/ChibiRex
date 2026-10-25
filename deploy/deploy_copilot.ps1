@@ -48,7 +48,8 @@ $appId = (aws amplify list-apps @aws --query "apps[?name=='$App'].appId | [0]" -
 Cek "mencari aplikasi Amplify $App"
 $domain = (aws amplify get-app --app-id $appId @aws --query "app.defaultDomain" --output text).Trim()
 Cek "membaca domain Amplify"
-$origins = @("https://main.$domain", "http://localhost:5173", "http://127.0.0.1:5173")
+# Dashboard (Amplify dan Vite lokal) dan Virtual HQ lokal (Vite 8080).
+$origins = @("https://main.$domain", "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8080", "http://127.0.0.1:8080")
 
 Write-Host "2. Kemas kode copilot/ ke zip (tanpa dependensi: boto3 sudah ada di runtime Lambda)"
 $zip = Join-Path $tmp "copilot.zip"
