@@ -10,7 +10,8 @@
  *     - Membesar secara mulus (smooth CSS transition all 0.3s ease-in-out) saat [E] ditekan.
  *     - Menjadi panel sidebar kanan di dalam viewport game aktif.
  *     - Player dibekukan.
- *     - Menampilkan 4 kartu KPI, grafik toko dengan Health terendah, status SKU, dan status agent/guardrail.
+ *     - Menampilkan 4 kartu KPI, grafik Health terendah, tertinggi, dan semua toko, status SKU, dan status
+ *       agent/guardrail.
  *     - Semua angka dari API Rexa (ringkasan toko, /jaringan/ringkasan, guardrail, worker, hitung fisik).
  *     - Data dibaca sekali per toko lalu disimpan; data baru hanya lewat tombol "Muat Ulang". Pemain tidak dibekukan:
  *       panel tertutup saat pemain pergi, menekan ✕, atau Esc.
@@ -28,12 +29,174 @@ import { angka, rupiahRingkas, statusHealth } from '../lib/format';
 
 const WARNA_STATUS = { AMAN: '#34d399', REORDER: '#fbbf24', OVERSTOCK: '#38bdf8', DEADSTOCK: '#f87171' };
 
+const kartuGrafik = {
+    padding: '12px 14px',
+    borderRadius: '12px',
+    background: 'rgba(15, 23, 42, 0.6)',
+    border: '1px solid rgba(56, 189, 248, 0.18)',
+};
+
+function JudulGrafik({ judul, keterangan = 'klik = pindah toko' }) {
+    return (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <span style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: '700', color: '#e2e8f0' }}>{judul}</span>
+            <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#38bdf8' }}>{keterangan}</span>
+        </div>
+    );
+}
+
+// Grafik batang Health Score beberapa toko (terendah atau tertinggi). Klik batang = pindah ke toko itu.
+function GrafikHealth({ judul, toko, storeAktif, onPilih }) {
+    const [sorot, setSorot] = useState(null);
+    return (
+        <div style={kartuGrafik}>
+            <JudulGrafik judul={judul} />
+            {toko.length === 0 ? (
+                <div style={{ fontSize: '10px', color: '#94a3b8' }}>Statistik jaringan belum tersedia di API ini.</div>
+            ) : (
+                <div
+                    style={{
+                        height: '110px',
+                        display: 'flex',
+                        alignItems: 'flex-end',
+                        justifyContent: 'space-between',
+                        gap: '6px',
+                        paddingBottom: '20px',
+                        borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
+                        position: 'relative',
+                    }}
+                >
+                    {toko.map((t, index) => {
+                        const isAktif = t.store === storeAktif;
+                        return (
+                            <div
+                                key={t.store}
+                                style={{
+                                    flex: 1,
+                                    height: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'flex-end',
+                                    alignItems: 'center',
+                                    position: 'relative',
+                                    cursor: 'pointer',
+                                }}
+                                onMouseEnter={() => setSorot(index)}
+                                onMouseLeave={() => setSorot(null)}
+                                onClick={() => onPilih(t.store)}
+                                title={`Toko ${t.store} · ${t.kota} · Health ${t.health_score}`}
+                            >
+                                {sorot === index && (
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            bottom: `${Math.min(t.health_score + 14, 86)}%`,
+                                            background: '#0284c7',
+                                            border: '1px solid #38bdf8',
+                                            borderRadius: '4px',
+                                            padding: '2px 5px',
+                                            fontSize: '9px',
+                                            fontFamily: 'monospace',
+                                            fontWeight: 'bold',
+                                            color: '#ffffff',
+                                            whiteSpace: 'nowrap',
+                                            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.5)',
+                                            zIndex: 10,
+                                        }}
+                                    >
+                                        {t.kota} · {t.health_score}
+                                    </div>
+                                )}
+                                <div
+                                    className="tv-interactive-bar"
+                                    style={{
+                                        width: '100%',
+                                        maxWidth: '30px',
+                                        height: `${t.health_score}%`,
+                                        background: statusHealth(t.health_score).warna,
+                                        borderRadius: '4px 4px 1px 1px',
+                                        outline: isAktif ? '2px solid #f8fafc' : 'none',
+                                        transition: 'all 0.2s ease',
+                                    }}
+                                />
+                                <span
+                                    style={{
+                                        position: 'absolute',
+                                        bottom: '-18px',
+                                        fontSize: '9px',
+                                        fontFamily: 'monospace',
+                                        color: isAktif ? '#f8fafc' : '#94a3b8',
+                                        fontWeight: isAktif ? 'bold' : 'normal',
+                                    }}
+                                >
+                                    #{t.store}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Health Score semua toko dalam satu grafik (urut dari terendah). Batang terlalu tipis untuk label, jadi toko yang
+// disorot ditulis di baris bawah; garis tipis menandai batas zona merah (65).
+function GrafikSemuaToko({ toko, storeAktif, onPilih }) {
+    const [sorot, setSorot] = useState(null);
+    const urut = [...toko].sort((a, b) => a.health_score - b.health_score || a.store - b.store);
+    const dipilih = sorot === null ? null : urut[sorot];
+    const pertama = urut[0];
+    const terakhir = urut[urut.length - 1];
+    return (
+        <div style={kartuGrafik}>
+            <JudulGrafik judul={`📊 HEALTH SEMUA TOKO (${urut.length})`} keterangan="terendah → tertinggi" />
+            <div style={{ position: 'relative', height: '90px', borderBottom: '1px solid rgba(148, 163, 184, 0.2)' }}>
+                <div
+                    style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', gap: '1px' }}
+                    onMouseLeave={() => setSorot(null)}
+                >
+                    {urut.map((t, i) => (
+                        <div
+                            key={t.store}
+                            onMouseEnter={() => setSorot(i)}
+                            onClick={() => onPilih(t.store)}
+                            title={`Toko ${t.store} · ${t.kota} · Health ${t.health_score}`}
+                            style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'flex-end', cursor: 'pointer', minWidth: 0 }}
+                        >
+                            <div
+                                style={{
+                                    width: '100%',
+                                    height: `${t.health_score}%`,
+                                    background: statusHealth(t.health_score).warna,
+                                    borderRadius: '2px 2px 0 0',
+                                    opacity: sorot === null || sorot === i ? 1 : 0.55,
+                                    outline: t.store === storeAktif ? '1px solid #f8fafc' : 'none',
+                                }}
+                            />
+                        </div>
+                    ))}
+                </div>
+                {/* Batas zona merah di atas batang (tidak menangkap klik); label di kiri, di atas batang merah yang pendek */}
+                <div style={{ position: 'absolute', left: 0, right: 0, bottom: '65%', borderTop: '1px solid rgba(248, 113, 113, 0.6)', pointerEvents: 'none' }} />
+                <span style={{ position: 'absolute', left: '2px', bottom: 'calc(65% + 2px)', fontSize: '8px', fontFamily: 'monospace', color: '#f87171', pointerEvents: 'none' }}>
+                    batas merah 65
+                </span>
+            </div>
+            <div style={{ fontSize: '9px', fontFamily: 'monospace', color: dipilih ? '#f8fafc' : '#94a3b8', marginTop: '6px', minHeight: '13px' }}>
+                {dipilih
+                    ? `Toko ${dipilih.store} · ${dipilih.kota} · Health ${dipilih.health_score} (klik = pindah toko)`
+                    : pertama && `Terendah Toko ${pertama.store} (${pertama.health_score}) · tertinggi Toko ${terakhir.store} (${terakhir.health_score})`}
+            </div>
+        </div>
+    );
+}
+
 export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
     const { currentStore, switchStore, mode: modeHq } = useStore();
     // Mode Semua Toko: TV menampilkan statistik seluruh jaringan (disimpan dengan kunci 'jaringan').
     const modeJaringan = modeHq === 'jaringan';
     const { formattedDate } = useTimeSimulation();
-    const [hoveredBar, setHoveredBar] = useState(null);
     const [cache, setCache] = useState({}); // toko -> {ringkasan, jaringan, guard, worker, fisik, tanggal}
     const [memuat, setMemuat] = useState(false);
     const [galat, setGalat] = useState(null);
@@ -85,6 +248,8 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
     const peringkat = r && j ? 1 + j.toko.filter((t) => t.health_score > r.health_score).length : null;
     const tokoKritis = j ? j.toko.filter((t) => t.health_score < 65).length : null;
     const terendah = j ? [...j.toko].sort((a, b) => a.health_score - b.health_score || a.store - b.store).slice(0, 7) : [];
+    const tertinggi = j ? [...j.toko].sort((a, b) => b.health_score - a.health_score || a.store - b.store).slice(0, 7) : [];
+    const storeAktif = modeJaringan ? null : storeId; // di mode Semua Toko tidak ada toko yang ditandai
     const statusSku = r
         ? Object.keys(WARNA_STATUS).map((k) => ({ kode: k, jumlah: r.jumlah_status[k] ?? 0 }))
         : [];
@@ -473,114 +638,10 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             ))}
                         </div>
 
-                        {/* Grafik toko dengan Health Score terendah (klik untuk berpindah toko) */}
-                        <div
-                            style={{
-                                padding: '12px 14px',
-                                borderRadius: '12px',
-                                background: 'rgba(15, 23, 42, 0.6)',
-                                border: '1px solid rgba(56, 189, 248, 0.18)',
-                            }}
-                        >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                                <span style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: '700', color: '#e2e8f0' }}>
-                                    📉 HEALTH TERENDAH DI JARINGAN
-                                </span>
-                                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#38bdf8' }}>
-                                    klik = pindah toko
-                                </span>
-                            </div>
-
-                            {terendah.length === 0 ? (
-                                <div style={{ fontSize: '10px', color: '#94a3b8' }}>Statistik jaringan belum tersedia di API ini.</div>
-                            ) : (
-                            <div
-                                style={{
-                                    height: '110px',
-                                    display: 'flex',
-                                    alignItems: 'flex-end',
-                                    justifyContent: 'space-between',
-                                    gap: '6px',
-                                    paddingBottom: '20px',
-                                    borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
-                                    position: 'relative',
-                                }}
-                            >
-                                {terendah.map((t, index) => {
-                                    const isHovered = hoveredBar === index;
-                                    const isAktif = t.store === storeId;
-                                    const warna = statusHealth(t.health_score).warna;
-                                    return (
-                                        <div
-                                            key={t.store}
-                                            style={{
-                                                flex: 1,
-                                                height: '100%',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                justifyContent: 'flex-end',
-                                                alignItems: 'center',
-                                                position: 'relative',
-                                                cursor: 'pointer',
-                                            }}
-                                            onMouseEnter={() => setHoveredBar(index)}
-                                            onMouseLeave={() => setHoveredBar(null)}
-                                            onClick={() => switchStore(t.store)}
-                                            title={`Toko ${t.store} · ${t.kota} · Health ${t.health_score}`}
-                                        >
-                                            {isHovered && (
-                                                <div
-                                                    style={{
-                                                        position: 'absolute',
-                                                        bottom: `${t.health_score + 14}%`,
-                                                        background: '#0284c7',
-                                                        border: '1px solid #38bdf8',
-                                                        borderRadius: '4px',
-                                                        padding: '2px 5px',
-                                                        fontSize: '9px',
-                                                        fontFamily: 'monospace',
-                                                        fontWeight: 'bold',
-                                                        color: '#ffffff',
-                                                        whiteSpace: 'nowrap',
-                                                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.5)',
-                                                        zIndex: 10,
-                                                    }}
-                                                >
-                                                    {t.kota} · {t.health_score}
-                                                </div>
-                                            )}
-
-                                            <div
-                                                className="tv-interactive-bar"
-                                                style={{
-                                                    width: '100%',
-                                                    maxWidth: '30px',
-                                                    height: `${t.health_score}%`,
-                                                    background: warna,
-                                                    borderRadius: '4px 4px 1px 1px',
-                                                    outline: isAktif ? '2px solid #f8fafc' : 'none',
-                                                    transition: 'all 0.2s ease',
-                                                }}
-                                            />
-
-                                            <span
-                                                style={{
-                                                    position: 'absolute',
-                                                    bottom: '-18px',
-                                                    fontSize: '9px',
-                                                    fontFamily: 'monospace',
-                                                    color: isAktif ? '#f8fafc' : '#94a3b8',
-                                                    fontWeight: isAktif ? 'bold' : 'normal',
-                                                }}
-                                            >
-                                                #{t.store}
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            )}
-                        </div>
+                        {/* Grafik Health: terendah, tertinggi, dan semua toko (klik batang = pindah ke toko itu) */}
+                        <GrafikHealth judul="📉 HEALTH TERENDAH DI JARINGAN" toko={terendah} storeAktif={storeAktif} onPilih={switchStore} />
+                        <GrafikHealth judul="📈 HEALTH TERTINGGI DI JARINGAN" toko={tertinggi} storeAktif={storeAktif} onPilih={switchStore} />
+                        {j && <GrafikSemuaToko toko={j.toko} storeAktif={storeAktif} onPilih={switchStore} />}
 
                         {/* Status SKU toko yang diawasi, atau sebaran toko per warna Health di mode Semua Toko */}
                         <div
