@@ -25,6 +25,7 @@ import { useStore } from '../context/StoreContext';
 import { useTimeSimulation } from '../context/TimeSimulationContext';
 import { EventBus } from '../game/EventBus';
 import { api } from '../lib/api';
+import { pakaiKontrolSentuh } from '../utils/perangkat';
 import { angka, rupiahRingkas, statusHealth } from '../lib/format';
 
 const WARNA_STATUS = { AMAN: '#34d399', REORDER: '#fbbf24', OVERSTOCK: '#38bdf8', DEADSTOCK: '#f87171' };
@@ -202,6 +203,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
     const [galat, setGalat] = useState(null);
     const dicobaRef = useRef(new Set());
     const terbuka = mode !== 'hidden';
+    const sentuh = pakaiKontrolSentuh(); // petunjuk tombol keyboard tidak ditampilkan di HP/tablet
     const storeId = currentStore?.id || 74;
     const kunci = modeJaringan ? 'jaringan' : storeId;
     const data = cache[kunci] || null;
@@ -465,6 +467,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
                         }}
                     >
+                        {!sentuh && (
                         <kbd
                             style={{
                                 background: '#0284c7',
@@ -477,6 +480,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                         >
                             E
                         </kbd>
+                        )}
                         <span>Buka Command Center</span>
                     </button>
                 </div>
@@ -770,6 +774,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             }}
                         >
                             <span>Tutup Sidebar</span>
+                            {!sentuh && (
                             <kbd
                                 style={{
                                     background: 'rgba(15, 23, 42, 0.8)',
@@ -781,6 +786,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             >
                                 ESC
                             </kbd>
+                            )}
                         </button>
                     </div>
                 </div>

@@ -14,6 +14,7 @@ import { useStore } from '../context/StoreContext';
 import { EventBus } from '../game/EventBus';
 import { formatStoreName } from '../data/storesRegistry';
 import { angka, statusHealth } from '../lib/format';
+import { pakaiKontrolSentuh } from '../utils/perangkat';
 
 const KELOMPOK = {
     SEHAT: (h) => h >= 80,
@@ -645,7 +646,7 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
                             : <>Health Score belum tersedia: API belum punya <strong>/jaringan/ringkasan</strong> atau tidak terjangkau</>}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <span>Tekan <kbd style={{ padding: '2px 6px', background: 'rgba(30, 41, 59, 0.9)', border: '1px solid rgba(148, 163, 184, 0.3)', borderRadius: '4px', color: '#e2e8f0' }}>ESC</kbd> untuk menutup</span>
+                        {!pakaiKontrolSentuh() && (<span>Tekan <kbd style={{ padding: '2px 6px', background: 'rgba(30, 41, 59, 0.9)', border: '1px solid rgba(148, 163, 184, 0.3)', borderRadius: '4px', color: '#e2e8f0' }}>ESC</kbd> untuk menutup</span>)}
                     </div>
                 </div>
             </div>

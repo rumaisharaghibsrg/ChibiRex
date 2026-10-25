@@ -13,6 +13,7 @@
 import React, { useEffect, useCallback } from 'react';
 import { EventBus } from '../game/EventBus';
 import { PERSONA } from '../lib/npc';
+import { pakaiKontrolSentuh } from '../utils/perangkat';
 import './NPCDialogModal.css';
 
 /**
@@ -176,7 +177,7 @@ export function NPCDialogModal({
 
                 {/* ── Action Footer ───────────────────────────────────────── */}
                 <div className="npc-dialog-footer">
-                    <span className="npc-petunjuk">Pergi, ✕, atau Esc untuk menutup; laporan tetap tersimpan.</span>
+                    <span className="npc-petunjuk">{pakaiKontrolSentuh() ? 'Pergi atau ✕' : 'Pergi, ✕, atau Esc'} untuk menutup; laporan tetap tersimpan.</span>
                     <button
                         onClick={handleContactViaChat}
                         className="npc-btn-secondary"

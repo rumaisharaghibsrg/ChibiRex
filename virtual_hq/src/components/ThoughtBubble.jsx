@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { SentenceWithDot } from './NPCDialogModal';
+import { pakaiKontrolSentuh } from '../utils/perangkat';
 
 // Kamus alat agen untuk tampilan ramah pengguna
 const TOOL_INFO = {
@@ -48,7 +49,7 @@ function AksiHasil({ onJalankanUlang, warna }) {
     return (
         <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
             <span style={{ color: '#64748b', fontSize: '9px', lineHeight: 1.4 }}>
-                Geser, ✕, atau Esc untuk menutup. Hasil tetap tersimpan (klik status di header untuk membuka lagi).
+                {pakaiKontrolSentuh() ? 'Geser atau ✕' : 'Geser, ✕, atau Esc'} untuk menutup. Hasil tetap tersimpan (klik status di header untuk membuka lagi).
             </span>
             <button
                 onClick={onJalankanUlang}
@@ -222,7 +223,7 @@ export function ThoughtBubble({
                             whiteSpace: 'nowrap',
                         }}
                     >
-                        ✕ Esc
+                        {pakaiKontrolSentuh() ? '✕' : '✕ Esc'}
                     </button>
                 )}
             </div>

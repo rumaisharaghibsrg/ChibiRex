@@ -1241,7 +1241,7 @@ function App() {
                             }}
                         >
                             <span>⚡ Dekat Rexa</span>
-                            <kbd className="keycap active">E</kbd>
+                            {!shouldShowMobileControls && <kbd className="keycap active">E</kbd>}
                         </div>
                     )}
 
@@ -1264,7 +1264,7 @@ function App() {
                             }}
                         >
                             <span>📋 Dekat Manajer</span>
-                            <kbd className="keycap active">E</kbd>
+                            {!shouldShowMobileControls && <kbd className="keycap active">E</kbd>}
                         </div>
                     )}
 
@@ -1313,7 +1313,7 @@ function App() {
                         title="Buka / Tutup Smartphone Chat Rexa (Hotkey: C)"
                     >
                         <span>📱 Rexa Chat</span>
-                        <kbd className="keycap active" style={{ fontSize: '9px', padding: '1px 5px' }}>C</kbd>
+                        {!shouldShowMobileControls && <kbd className="keycap active" style={{ fontSize: '9px', padding: '1px 5px' }}>C</kbd>}
                     </button>
 
                     {/* Tombol Emergency Crisis Hub Doni */}
@@ -1410,7 +1410,7 @@ function App() {
                             style={{ position: 'static', transform: 'none' }}
                             title={sedangJalan || adaLog ? 'Buka log agent (jalankan ulang dari bubble)' : modeJaringan ? 'Jalankan Agent Jaringan untuk semua toko' : `Picu analisis inventaris & draf PO Toko ${currentStore?.id || 74}`}
                         >
-                            <kbd className="keycap active">E</kbd>
+                            {!shouldShowMobileControls && <kbd className="keycap active">E</kbd>}
                             <span>{sedangJalan ? 'Lihat Agent' : adaLog ? 'Lihat Hasil Agent' : modeJaringan ? 'Analisis Semua Toko' : 'Analisis Toko'}</span>
                         </button>
                         <button
@@ -1425,7 +1425,7 @@ function App() {
                             }}
                             title="Buka Smartphone Chat dengan Rexa"
                         >
-                            <kbd className="keycap active">C</kbd>
+                            {!shouldShowMobileControls && <kbd className="keycap active">C</kbd>}
                             <span>Chat Copilot</span>
                         </button>
                     </div>
@@ -1442,7 +1442,7 @@ function App() {
                         }}
                         title="Buka Meja Manajer untuk 1-Click Approval PO ke SAP"
                     >
-                        <kbd className="keycap active">E</kbd>
+                        {!shouldShowMobileControls && <kbd className="keycap active">E</kbd>}
                         <span>Review PO Toko</span>
                     </button>
                 )}

@@ -9,6 +9,7 @@
 import React from 'react';
 import { angka, rupiah, statusHealth } from '../lib/format';
 import { formatIndonesianDate } from '../utils/TimeEngine';
+import { pakaiKontrolSentuh } from '../utils/perangkat';
 
 const tombol = (warna) => ({
     padding: '4px 9px',
@@ -36,6 +37,7 @@ export function AgentJaringanBubble({
     onBukaToko,
 }) {
     if (!visible) return null;
+    const sentuh = pakaiKontrolSentuh(); // tanpa petunjuk Esc di HP/tablet
 
     // Posisi seperti bubble agent toko: di atas Rexa, atau di bawahnya kalau Rexa dekat tepi atas layar.
     const bubbleX = screenPos ? Math.max(220, Math.min(screenPos.x, 800)) : 240;
@@ -79,7 +81,7 @@ export function AgentJaringanBubble({
                 <span style={{ fontSize: '10px', padding: '3px 9px', borderRadius: '20px', fontWeight: '700', color: warna, border: `1px solid ${warna}66`, background: `${warna}22` }}>
                     {status}{berjalan ? ` · ${detik} dtk` : ''}
                 </span>
-                <button onClick={onTutup} title="Tutup (Esc): lanjut berjalan, laporan tetap tersimpan" style={tombol('#cbd5e1')}>✕ Esc</button>
+                <button onClick={onTutup} title="Tutup (Esc): lanjut berjalan, laporan tetap tersimpan" style={tombol('#cbd5e1')}>{sentuh ? '✕' : '✕ Esc'}</button>
             </div>
 
             {berjalan && (
@@ -147,7 +149,7 @@ export function AgentJaringanBubble({
             {!berjalan && (
                 <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                     <span style={{ color: '#64748b', fontSize: '9px', lineHeight: 1.4 }}>
-                        Pergi, ✕, atau Esc untuk menutup. Laporan tetap tersimpan (klik status di header untuk membuka lagi).
+                        {sentuh ? 'Pergi atau ✕' : 'Pergi, ✕, atau Esc'} untuk menutup. Laporan tetap tersimpan (klik status di header untuk membuka lagi).
                     </span>
                     <button onClick={onJalankanUlang} style={{ ...tombol(warna), padding: '5px 10px' }}>
                         ↻ {laporan || galat ? 'Jalankan Ulang' : 'Jalankan'}

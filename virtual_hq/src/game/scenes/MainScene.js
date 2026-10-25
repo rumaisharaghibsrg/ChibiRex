@@ -16,6 +16,7 @@
 import * as Phaser from 'phaser';
 import { EventBus } from '../EventBus';
 import { playEmergencyKlaxonSFX } from '../StoreCrisisState';
+import { labelInteraksi } from '../../utils/perangkat';
 
 // ─── Konstanta Layout (Compact & Cozy Startup Office) ───────────────────────
 const TILE_SIZE      = 32;   // px per tile
@@ -673,7 +674,7 @@ export class MainScene extends Phaser.Scene {
         this._rexaPrompt = this.add.text(
             this.rexaSprite.x,
             this.rexaSprite.y + 36,
-            '⚡ [E: Analisis Toko]  💬 [C: Chat]',
+            labelInteraksi('⚡ [E: Analisis Toko]  💬 [C: Chat]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',
@@ -693,7 +694,7 @@ export class MainScene extends Phaser.Scene {
         this._managerPrompt = this.add.text(
             this.managerSprite.x,
             this.managerSprite.y + 36,
-            '📋 [Tekan E untuk Review PO]',
+            labelInteraksi('📋 [Tekan E untuk Review PO]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',
@@ -713,7 +714,7 @@ export class MainScene extends Phaser.Scene {
         this._mayaPrompt = this.add.text(
             this.mayaSprite.x,
             this.mayaSprite.y + 36,
-            '📦 [Tekan E untuk Audit Stok]',
+            labelInteraksi('📦 [Tekan E untuk Audit Stok]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',
@@ -733,7 +734,7 @@ export class MainScene extends Phaser.Scene {
         this._citraPrompt = this.add.text(
             this.citraSprite.x,
             this.citraSprite.y + 36,
-            '💼 [Tekan E untuk Realokasi Kas]',
+            labelInteraksi('💼 [Tekan E untuk Realokasi Kas]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',
@@ -753,7 +754,7 @@ export class MainScene extends Phaser.Scene {
         this._rianPrompt = this.add.text(
             this.rianSprite.x,
             this.rianSprite.y + 36,
-            '🛡️ [Tekan E untuk Guardrail Status]',
+            labelInteraksi('🛡️ [Tekan E untuk Guardrail Status]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',
@@ -773,7 +774,7 @@ export class MainScene extends Phaser.Scene {
         this._budiPrompt = this.add.text(
             this.budiSprite.x,
             this.budiSprite.y + 36,
-            '📊 [Tekan E untuk Store Intelligence]',
+            labelInteraksi('📊 [Tekan E untuk Store Intelligence]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',
@@ -793,7 +794,7 @@ export class MainScene extends Phaser.Scene {
         this._coffeePrompt = this.add.text(
             482,
             295,
-            '☕ [Tekan E: Buat Kopi]',
+            labelInteraksi('☕ [Tekan E: Buat Kopi]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',
@@ -813,7 +814,7 @@ export class MainScene extends Phaser.Scene {
         this._chairPrompt = this.add.text(
             0,
             0,
-            '🪑 [Tekan E: Duduk]',
+            labelInteraksi('🪑 [Tekan E: Duduk]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',
@@ -1141,9 +1142,9 @@ export class MainScene extends Phaser.Scene {
                 this.isNearDoni = nearDoni;
                 if (this._doniPrompt) {
                     if (isCrisis) {
-                        this._doniPrompt.setText('🚨 [Tekan E: Tinjau Krisis Toko]').setStyle({ backgroundColor: '#dc2626', stroke: '#991b1b' });
+                        this._doniPrompt.setText(labelInteraksi('🚨 [Tekan E: Tinjau Krisis Toko]')).setStyle({ backgroundColor: '#dc2626', stroke: '#991b1b' });
                     } else {
-                        this._doniPrompt.setText('🏃 [Tekan E: Koordinasi Doni]').setStyle({ backgroundColor: '#0284c7', stroke: '#075985' });
+                        this._doniPrompt.setText(labelInteraksi('🏃 [Tekan E: Koordinasi Doni]')).setStyle({ backgroundColor: '#0284c7', stroke: '#075985' });
                     }
                     this._doniPrompt.setPosition(this.doniSprite.x, this.doniSprite.y + 36);
                     this._doniPrompt.setVisible(nearDoni && !this.isPlayerFrozen);
@@ -1289,7 +1290,7 @@ export class MainScene extends Phaser.Scene {
             if (this._chairPrompt) {
                 const showChairPrompt = !!nearest && !nearCoffee && !nearRexa && !nearMgr && !nearMaya && !nearCitra && !nearRian && !nearBudi && !nearTV && !this.isNearDoni && !this.isPlayerFrozen;
                 if (showChairPrompt) {
-                    this._chairPrompt.setText('🪑 [Tekan E: Duduk]');
+                    this._chairPrompt.setText(labelInteraksi('🪑 [Tekan E: Duduk]'));
                     this._chairPrompt.setStyle({ backgroundColor: '#475569', stroke: '#1e293b' });
                     this._chairPrompt.setPosition(nearest.x, nearest.y + 20);
                     this._chairPrompt.setVisible(true);
@@ -1300,7 +1301,7 @@ export class MainScene extends Phaser.Scene {
         } else {
             // Player sedang dalam kondisi duduk (Sitting State)
             if (this._chairPrompt) {
-                this._chairPrompt.setText('🪑 [Tekan E: Berdiri]');
+                this._chairPrompt.setText(labelInteraksi('🪑 [Tekan E: Berdiri]'));
                 this._chairPrompt.setStyle({ backgroundColor: '#dc2626', stroke: '#991b1b' });
                 this._chairPrompt.setPosition(this.player.x, this.player.y + 22);
                 this._chairPrompt.setVisible(!this.isPlayerFrozen);
@@ -2187,13 +2188,13 @@ export class MainScene extends Phaser.Scene {
     /** Pulihkan teks & gaya prompt proximity NPC ke kondisi default */
     _restoreNPCPrompt(npcId) {
         if (npcId === 'maya' && this._mayaPrompt) {
-            this._mayaPrompt.setText('📦 [Tekan E untuk Audit Stok]').setStyle({ backgroundColor: '#db2777', stroke: '#9d174d' });
+            this._mayaPrompt.setText(labelInteraksi('📦 [Tekan E untuk Audit Stok]')).setStyle({ backgroundColor: '#db2777', stroke: '#9d174d' });
         } else if (npcId === 'citra' && this._citraPrompt) {
-            this._citraPrompt.setText('💼 [Tekan E untuk Realokasi Kas]').setStyle({ backgroundColor: '#0284c7', stroke: '#075985' });
+            this._citraPrompt.setText(labelInteraksi('💼 [Tekan E untuk Realokasi Kas]')).setStyle({ backgroundColor: '#0284c7', stroke: '#075985' });
         } else if (npcId === 'rian' && this._rianPrompt) {
-            this._rianPrompt.setText('🛡️ [Tekan E untuk Guardrail Status]').setStyle({ backgroundColor: '#dc2626', stroke: '#991b1b' });
+            this._rianPrompt.setText(labelInteraksi('🛡️ [Tekan E untuk Guardrail Status]')).setStyle({ backgroundColor: '#dc2626', stroke: '#991b1b' });
         } else if (npcId === 'budi' && this._budiPrompt) {
-            this._budiPrompt.setText('📊 [Tekan E untuk Store Intelligence]').setStyle({ backgroundColor: '#059669', stroke: '#065f46' });
+            this._budiPrompt.setText(labelInteraksi('📊 [Tekan E untuk Store Intelligence]')).setStyle({ backgroundColor: '#059669', stroke: '#065f46' });
         }
     }
 
@@ -2478,7 +2479,7 @@ export class MainScene extends Phaser.Scene {
         this._doniPrompt = this.add.text(
             startX,
             startY + 36,
-            '🏃 [Tekan E: Koordinasi Doni]',
+            labelInteraksi('🏃 [Tekan E: Koordinasi Doni]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',
@@ -2738,7 +2739,7 @@ export class MainScene extends Phaser.Scene {
         this._tvPrompt = this.add.text(
             tvX,
             tvY + 26,
-            '🖥️ [Tekan E: Inspeksi Smart TV]',
+            labelInteraksi('🖥️ [Tekan E: Inspeksi Smart TV]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',

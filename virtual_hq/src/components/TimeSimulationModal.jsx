@@ -13,6 +13,7 @@ import { EventBus } from '../game/EventBus';
 import { calculateNewDate } from '../utils/TimeEngine';
 import { api, DATA_BERUBAH } from '../lib/api';
 import { angka, rupiahRingkas, statusHealth } from '../lib/format';
+import { pakaiKontrolSentuh } from '../utils/perangkat';
 
 export function TimeSimulationModal({ isOpen, onClose }) {
     const {
@@ -494,7 +495,7 @@ export function TimeSimulationModal({ isOpen, onClose }) {
                         <span>Koreografi Time Warp: <strong>VFX Distorsi 2.0s di Phaser</strong></span>
                     </div>
                     <div>
-                        Tekan <kbd style={{ padding: '2px 6px', background: 'rgba(30, 41, 59, 0.9)', border: '1px solid rgba(148, 163, 184, 0.3)', borderRadius: '4px', color: '#e2e8f0' }}>ESC</kbd> untuk menutup
+                        {!pakaiKontrolSentuh() && (<span>Tekan <kbd style={{ padding: '2px 6px', background: 'rgba(30, 41, 59, 0.9)', border: '1px solid rgba(148, 163, 184, 0.3)', borderRadius: '4px', color: '#e2e8f0' }}>ESC</kbd> untuk menutup</span>)}
                     </div>
                 </div>
             </div>

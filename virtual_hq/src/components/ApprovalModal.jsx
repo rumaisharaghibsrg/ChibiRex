@@ -15,6 +15,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { SentenceWithDot } from './NPCDialogModal';
 import { api, beritahuDataBerubah } from '../lib/api';
+import { pakaiKontrolSentuh } from '../utils/perangkat';
 
 function formatRupiah(num) {
     if (num === null || num === undefined) return 'Rp 0';
@@ -628,7 +629,7 @@ export function ApprovalModal({ isOpen, store, onClose }) {
                             cursor: 'pointer',
                         }}
                     >
-                        Tutup [Esc]
+                        {pakaiKontrolSentuh() ? 'Tutup' : 'Tutup [Esc]'}
                     </button>
                 </div>
             </div>
