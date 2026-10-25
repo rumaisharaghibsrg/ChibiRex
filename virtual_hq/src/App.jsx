@@ -688,9 +688,13 @@ function App() {
             window.removeEventListener('mobile-action-pressed', triggerProximityAction);
             window.removeEventListener('action-button-pressed', triggerProximityAction);
             window.removeEventListener('trigger-smart-action', triggerProximityAction);
-            clearAllTimers();
         };
-    }, [handleTriggerAgent, handleOpenApprovalModal, handleTVProximity, handleOpenTVInspect, handleToggleChat, handleOpenChat, handleCloseChat, handleOpenCrisisModal, handleOpenRegionalModal, handleOpenTimeModal, handleOpenNpcModal, clearAllTimers, triggerProximityAction]);
+    }, [handleTriggerAgent, handleOpenApprovalModal, handleTVProximity, handleOpenTVInspect, handleToggleChat, handleOpenChat, handleCloseChat, handleOpenCrisisModal, handleOpenRegionalModal, handleOpenTimeModal, handleOpenNpcModal, triggerProximityAction]);
+
+    // Timer agent (polling dan hitung mundur pencairan pemain) hanya dibersihkan saat App dilepas. Kalau ikut cleanup
+    // efek listener di atas, timer terhapus setiap handler berganti identitas (misalnya data toko dimuat ulang saat
+    // agent selesai), sehingga bubble tidak pernah tertutup dan pemain tetap beku.
+    useEffect(() => clearAllTimers, [clearAllTimers]);
 
     return (
         <div
