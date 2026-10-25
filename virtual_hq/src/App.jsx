@@ -28,7 +28,7 @@ import MobileRexaCallButton from './components/MobileRexaCallButton';
 import MobileDrawerMenu from './components/MobileDrawerMenu';
 import { useStore } from './context/StoreContext';
 import { useTimeSimulation } from './context/TimeSimulationContext';
-import { api, beritahuDataBerubah } from './lib/api';
+import { api, beritahuDataBerubah, urlDashboard } from './lib/api';
 import { laporanNpc } from './lib/npc';
 import './game/StoreCrisisState';
 
@@ -1102,6 +1102,29 @@ function App() {
                         </div>
                     )}
 
+                    {/* Kembali ke dashboard web untuk toko yang sama */}
+                    <a
+                        href={urlDashboard(currentStore?.id || 74)}
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 12px',
+                            borderRadius: '9999px',
+                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                            border: '1px solid rgba(52, 211, 153, 0.45)',
+                            color: '#6ee7b7',
+                            fontSize: '11px',
+                            fontFamily: 'monospace',
+                            fontWeight: '700',
+                            textDecoration: 'none',
+                            transition: 'all 0.15s ease',
+                        }}
+                        title="Kembali ke dashboard Rexa untuk toko yang sedang diawasi"
+                    >
+                        <span>📊 Dashboard</span>
+                    </a>
+
                     {/* Tombol Interkom Smartphone Rexa [C] */}
                     <button
                         onClick={handleToggleChat}
@@ -1384,6 +1407,8 @@ function App() {
                 formattedDate={formattedDate}
                 daysOffset={daysOffset}
                 stepCount={stepCount}
+                apiOnline={apiOnline}
+                dashboardHref={urlDashboard(currentStore?.id || 74)}
             />
         </div>
     );

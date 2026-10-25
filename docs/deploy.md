@@ -7,6 +7,7 @@ Panduan untuk penanggung jawab deploy dan presenter. Kondisi per 22 Okt 2026.
 | Bagian | Di mana | Keterangan |
 |---|---|---|
 | Dashboard | AWS Amplify `rexa-dashboard` (cabang `main`) | https://main.d30b19xkk8lknt.amplifyapp.com |
+| Virtual HQ (kantor 2D) | Amplify yang sama, subfolder `/hq/` | https://main.d30b19xkk8lknt.amplifyapp.com/hq/index.html, dibuka dari tombol **Mode Virtual HQ** di sidebar dashboard (toko yang sedang dibuka ikut terbawa). Origin sama dengan dashboard, jadi CORS API dan Copilot tidak perlu diubah |
 | API (tools, guardrail, tiruan SAP) | AWS Lambda `chibirex-api-function`, container image ECR `chibirex-api`, Function URL | Region `ap-southeast-2`, akun proyek tim (Moonshot Mode) |
 | Data analitik (Vs, ROP, skor risiko) | DuckDB di dalam image | Hanya dibaca |
 | Data transaksi (PO, hold, jejak agent, audit) dan tiruan SAP | Amazon EFS `rexa-state`, access point `/rexa`, terpasang di `/mnt/rexa` | Dipakai bersama semua instance Lambda dan tidak hilang saat cold start |
@@ -43,6 +44,7 @@ Variabel lingkungan Lambda: `CHIBIREX_STATE_DB`, `CHIBIREX_SAP_MOCK_DB` (keduany
 5. Klik **Jalankan Agent**. Langkah agent tampil dalam ±20 detik (Claude Sonnet 4.6; ±40–60 detik dengan Ollama). Setelah itu lakukan **1-Click Approval** untuk satu draf PO dan tunjukkan nomor PO SAP.
    Lalu majukan waktu lewat kontrol tanggal di kanan atas (**+7**, atau **Otomatis 1 hari / 10 dtk**; **−1/−7** untuk mundur kalau terlalu jauh): stok berkurang, PO yang disetujui berstatus "Dalam pengiriman" lalu "Sudah tiba", dan Health Score serta daftar prioritas berubah. Jalankan agent lagi untuk menunjukkan ia bereaksi ke kondisi baru. Jeda mode otomatis sebelum menjelaskan angka. Tombol **Kembali ke 31 Des 2016** di menu yang sama mengembalikan tanggal dan stok ke data awal tanpa menghapus PO dan riwayat.
    Sudut pandang manajer area: buka menu **Semua Toko** (statistik 80 toko tanpa berpindah toko), klik **Analisis Semua Toko** (±25 detik, tidak butuh laptop), lalu **Buka toko** pada toko prioritas pertama dan jalankan agent toko itu.
+   Versi visual: tombol **Mode Virtual HQ** di sidebar membuka kantor 2D untuk toko yang sama (staf membacakan data toko, Smart TV menampilkan statistik jaringan, Doni melaporkan krisis dari data); tombol **Dashboard** di header game kembali ke dashboard.
 6. Skenario tambahan dari menu **Skenario Uji** di header dashboard: **Uji Runaway PO** (circuit breaker terbuka; manajer mereset di **Audit & Guardrails**), **Simulasi selisih stok** (lalu jalankan agent lagi), dan **Audit stok selesai**. Versi terminalnya, diarahkan ke API online:
    ```powershell
    $env:CHIBIREX_API_URL = "<Function URL Lambda>"
@@ -57,7 +59,7 @@ Login CLI berlaku sekitar 12 jam: `aws login --profile rexa`.
 
 - **API**: Docker Desktop menyala, lalu `powershell -ExecutionPolicy Bypass -File deploy\deploy_lambda.ps1` (build, uji di kontainer, push ke ECR, perbarui Lambda; `-UjiSaja` untuk uji tanpa deploy). Konfigurasi VPC, EFS, dan variabel lingkungan tidak ikut berubah.
 - **Chatbot Copilot**: `powershell -ExecutionPolicy Bypass -File deploy\deploy_copilot.ps1` (zip folder `copilot/`; membuat Lambda `rexa-copilot` kalau belum ada atau memperbaruinya, mengatur Function URL + CORS, lalu menguji satu pertanyaan). Lambda API ada di VPC tanpa internet keluar, jadi tidak bisa memanggil Bedrock; karena itu chatbot berjalan di Lambda terpisah di luar VPC.
-- **Dashboard**: `powershell -ExecutionPolicy Bypass -File deploy\deploy_dashboard.ps1` (build dengan alamat API dan, kalau ada, alamat Copilot dari Lambda, lalu upload ke Amplify). Deploy dashboard setelah Copilot pertama kali dibuat.
+- **Dashboard**: `powershell -ExecutionPolicy Bypass -File deploy\deploy_dashboard.ps1` (build dashboard dan Virtual HQ dengan alamat API dan, kalau ada, alamat Copilot dari Lambda; Virtual HQ dipasang di `dist/hq`; lalu upload ke Amplify). Deploy dashboard setelah Copilot pertama kali dibuat.
 - Jangan deploy dari salinan kode lain selain repo ini, supaya versi terbaru tidak tertimpa.
 
 ## Kalau bermasalah

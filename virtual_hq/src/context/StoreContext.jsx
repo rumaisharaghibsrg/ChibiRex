@@ -5,6 +5,12 @@ import { api, DATA_BERUBAH } from '../lib/api';
 
 const StoreContext = createContext(null);
 
+// Dibuka dari tombol "Mode Virtual HQ" di dashboard dengan ?store=...: mulai di toko yang sama.
+const TOKO_AWAL = (() => {
+    const id = typeof window === 'undefined' ? NaN : Number(new URLSearchParams(window.location.search).get('store'));
+    return STORES_MASTER_REGISTRY.find((s) => s.id === id) || DEFAULT_STORE;
+})();
+
 // Baris GET /jaringan/ringkasan (atau GET /stores kalau statistik jaringan belum ada di API) ke bentuk yang dipakai game.
 const dariApi = (t) => ({
     id: t.store,
@@ -18,7 +24,7 @@ const dariApi = (t) => ({
 });
 
 export function StoreProvider({ children }) {
-    const [currentStore, setCurrentStore] = useState(DEFAULT_STORE);
+    const [currentStore, setCurrentStore] = useState(TOKO_AWAL);
     const [storesList, setStoresList] = useState(STORES_MASTER_REGISTRY);
     const [isLoadingStores, setIsLoadingStores] = useState(false);
     const [statsTersedia, setStatsTersedia] = useState(false); // Health Score per toko dari API
@@ -26,7 +32,7 @@ export function StoreProvider({ children }) {
     // Inisialisasi window global agar kode Phaser / non-React dapat membaca cabang aktif secara sinkron
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            window.CURRENT_STORE = DEFAULT_STORE;
+            window.CURRENT_STORE = TOKO_AWAL;
         }
     }, []);
 

@@ -9,6 +9,11 @@ import { EventBus } from '../game/EventBus';
 export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 export const COPILOT_URL = (import.meta.env.VITE_COPILOT_URL || '').replace(/\/$/, '');
 
+// Dashboard Rexa: di Amplify, Virtual HQ dipasang di /hq/ pada domain yang sama (deploy/deploy_dashboard.ps1), jadi
+// '../' kembali ke dashboard; saat pengembangan, dashboard berjalan di Vite port 5173.
+export const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL || (import.meta.env.DEV ? 'http://localhost:5173/' : '../');
+export const urlDashboard = (store) => `${DASHBOARD_URL}?store=${store}`;
+
 // Nama yang tercatat di audit log API untuk keputusan dari game.
 export const OLEH = 'Manajer (Virtual HQ)';
 

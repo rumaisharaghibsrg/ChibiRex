@@ -4,6 +4,10 @@
 export const API_URL = (import.meta.env?.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 // Lambda Copilot (chatbot dengan Claude di Bedrock, copilot/ di repo). Kosong: chatbot menjawab cepat dari data saja.
 export const COPILOT_URL = (import.meta.env?.VITE_COPILOT_URL || '').replace(/\/$/, '');
+// Virtual HQ (folder virtual_hq/): di Amplify dipasang di /hq/ pada domain yang sama (deploy\deploy_dashboard.ps1);
+// saat pengembangan, Vite-nya berjalan di port 8080.
+export const VIRTUAL_HQ_URL = import.meta.env?.VITE_VIRTUAL_HQ_URL ||
+  (import.meta.env?.DEV ? 'http://localhost:8080/' : '/hq/index.html');
 
 export class ApiError extends Error {
   constructor(status, kode, pesan, detail) {

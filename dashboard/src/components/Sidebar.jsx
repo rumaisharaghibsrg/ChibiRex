@@ -9,7 +9,8 @@ import {
   CheckCircle2,
   AlertOctagon,
   CalendarDays,
-  Network
+  Network,
+  Gamepad2
 } from 'lucide-react';
 import { rupiahRingkas } from '../lib/format';
 
@@ -22,6 +23,7 @@ export default function Sidebar({
   explorationBudget = 0,
   jumlahHold = 0,
   breakerTerbuka = false,
+  virtualHqUrl,
   user,
   onLogout
 }) {
@@ -147,6 +149,23 @@ export default function Sidebar({
                     </button>
                   );
                 })}
+
+                {/* Pindah ke mode Virtual HQ (kantor 2D, data API yang sama) untuk toko yang sedang dibuka */}
+                {virtualHqUrl && (
+                  <a
+                    href={virtualHqUrl}
+                    title="Buka Virtual HQ: kantor 2D dengan agent dan staf Rexa, memakai data toko yang sama"
+                    className="flex-1 sm:flex-initial lg:w-full flex items-center justify-between px-3 py-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#0f172a] to-[#1e3a5f] hover:from-[#1e293b] hover:to-[#1e4976] shadow-[0_4px_14px_rgba(15,23,42,0.25)] transition-all duration-150"
+                  >
+                    <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                      <Gamepad2 className="w-4 h-4 shrink-0 text-sky-300" />
+                      <span className="text-left truncate">Mode Virtual HQ</span>
+                    </div>
+                    <span className="whitespace-nowrap text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-1.5 bg-sky-400/20 text-sky-200">
+                      2D
+                    </span>
+                  </a>
+                )}
 
                 {/* Guardrails button on mobile within the wrapped button group */}
                 <button

@@ -2,7 +2,8 @@
 Deploy dashboard React ke AWS Amplify (aplikasi rexa-dashboard, cabang main) tanpa sambungan GitHub.
 Alamat API diambil otomatis dari Function URL Lambda, jadi dashboard selalu mengarah ke API yang benar. Kalau Lambda
 Copilot (deploy\deploy_copilot.ps1) sudah ada, chatbot dashboard memakai URL-nya; kalau belum, chatbot menjawab
-cepat dari data saja.
+cepat dari data saja. Virtual HQ (folder virtual_hq/) ikut di-build dengan alamat yang sama dan dipasang di /hq/,
+dibuka dari tombol "Mode Virtual HQ" di sidebar dashboard.
 
 Prasyarat: Node.js, .venv repo (untuk membuat zip), dan login AWS CLI:  aws login --profile rexa
 Jalankan dari mana saja di dalam repo:
@@ -37,19 +38,34 @@ $copilotUrl = aws lambda get-function-url-config --function-name $FungsiCopilot 
 $adaCopilot = ($LASTEXITCODE -eq 0)
 $ErrorActionPreference = "Stop"
 
-Write-Host "1. Build dashboard (VITE_API_URL=$apiUrl; Copilot AI: $(if ($adaCopilot) { 'ya' } else { 'belum di-deploy' }))"
-Push-Location dashboard
+$env:VITE_API_URL = $apiUrl
+if ($adaCopilot) { $env:VITE_COPILOT_URL = $copilotUrl.Trim().TrimEnd("/") }
 try {
-    npm ci --no-audit --no-fund; Cek "npm ci"
-    $env:VITE_API_URL = $apiUrl
-    if ($adaCopilot) { $env:VITE_COPILOT_URL = $copilotUrl.Trim().TrimEnd("/") }
-    npm run build; Cek "npm run build"
+    Write-Host "1. Build dashboard (VITE_API_URL=$apiUrl; Copilot AI: $(if ($adaCopilot) { 'ya' } else { 'belum di-deploy' }))"
+    Push-Location dashboard
+    try {
+        npm ci --no-audit --no-fund; Cek "npm ci dashboard"
+        npm run build; Cek "npm run build dashboard"
+    } finally {
+        Pop-Location
+    }
+
+    Write-Host "2. Build Virtual HQ ke dist/hq (alamat API dan Copilot sama dengan dashboard)"
+    Push-Location virtual_hq
+    try {
+        npm ci --no-audit --no-fund; Cek "npm ci virtual_hq"
+        npm run build; Cek "npm run build virtual_hq"
+    } finally {
+        Pop-Location
+    }
+    # Build Virtual HQ memakai path relatif, jadi bisa disajikan dari subfolder /hq/ di domain yang sama.
+    Remove-Item dashboard\dist\hq -Recurse -Force -ErrorAction SilentlyContinue
+    Copy-Item virtual_hq\dist -Destination dashboard\dist\hq -Recurse
 } finally {
     Remove-Item Env:VITE_API_URL, Env:VITE_COPILOT_URL -ErrorAction SilentlyContinue
-    Pop-Location
 }
 
-Write-Host "2. Kemas dist ke zip"
+Write-Host "3. Kemas dist ke zip"
 # Compress-Archive di PowerShell 5.1 menulis path dengan '\', yang membuat Amplify gagal menyajikan folder assets.
 $zip = Join-Path $env:TEMP "rexa-dashboard.zip"
 & .venv\Scripts\python.exe -I -c @"
@@ -62,7 +78,7 @@ with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
 "@ $zip
 Cek "membuat zip"
 
-Write-Host "3. Upload ke Amplify ($App/$Cabang)"
+Write-Host "4. Upload ke Amplify ($App/$Cabang)"
 $dep = aws amplify create-deployment --app-id $appId --branch-name $Cabang --profile $Profil --region $Region `
     --output json | ConvertFrom-Json
 Cek "create-deployment"
@@ -94,4 +110,4 @@ do {
 } while ($status -in @("PENDING", "PROVISIONING", "RUNNING"))
 Remove-Item $zip -ErrorAction SilentlyContinue
 if ($status -ne "SUCCEED") { throw "Deploy Amplify berstatus $status" }
-Write-Host "Selesai: https://$Cabang.$domain"
+Write-Host "Selesai: https://$Cabang.$domain (Virtual HQ: https://$Cabang.$domain/hq/index.html)"

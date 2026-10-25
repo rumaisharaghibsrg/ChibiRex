@@ -31,6 +31,9 @@ hasil pengganti.
    VITE_COPILOT_URL=<Function URL Lambda rexa-copilot>
    ```
    Domain tempat game dibuka harus diizinkan di `CHIBIREX_CORS_ORIGINS` Lambda API dan di CORS Lambda Copilot.
+4. Dashboard lokal (`cd dashboard`, `npm run dev`, port 5173) punya tombol **Mode Virtual HQ** yang membuka game ini di port 8080; tombol **Dashboard** di header game kembali ke port 5173. Toko yang dibuka ikut lewat `?store=`.
+
+Online, game ini ikut `deploy\deploy_dashboard.ps1`: di-build dengan alamat API dan Copilot yang sama dengan dashboard lalu dipasang di `/hq/` pada domain Amplify dashboard (origin sama, jadi CORS tidak perlu diubah). Build memakai path relatif, jadi buka lewat `/hq/index.html` atau `/hq/` (dengan garis miring di akhir).
 
 Cheat demo (tahan U+R): U+R+1..4 meminta Doni memeriksa krisis Maya, Citra, Rian, atau Pak Budi di data toko yang
 diawasi; kalau datanya normal, cheat hanya memberi tahu. U+R saja menyalakan atau mematikan pemeriksaan otomatis tiap

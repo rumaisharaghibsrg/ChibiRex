@@ -20,6 +20,8 @@ export default function MobileDrawerMenu({
     formattedDate,
     daysOffset,
     stepCount,
+    apiOnline,
+    dashboardHref,
 }) {
     if (!isOpen) return null;
 
@@ -220,6 +222,28 @@ export default function MobileDrawerMenu({
                         </span>
                     </button>
 
+                    {/* Kembali ke dashboard web */}
+                    <a
+                        href={dashboardHref}
+                        style={{
+                            minHeight: '46px',
+                            padding: '10px 14px',
+                            borderRadius: '10px',
+                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                            border: '1px solid rgba(52, 211, 153, 0.4)',
+                            color: '#6ee7b7',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                        }}
+                    >
+                        <span style={{ fontSize: '18px' }}>📊</span>
+                        <span>Kembali ke Dashboard</span>
+                    </a>
+
                     {/* Panduan & Bantuan */}
                     <button
                         onClick={() => { onClose(); onOpenHelpModal(); }}
@@ -246,7 +270,9 @@ export default function MobileDrawerMenu({
                 {/* Footer Info */}
                 <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid rgba(148, 163, 184, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ fontSize: '10px', color: '#64748b' }}>
-                        API: <span style={{ color: '#38bdf8' }}>:8000 ONLINE</span>
+                        API: <span style={{ color: apiOnline === false ? '#f87171' : '#38bdf8' }}>
+                            {apiOnline === null ? 'MEMERIKSA' : apiOnline ? 'ONLINE' : 'OFFLINE'}
+                        </span>
                     </div>
                     <div style={{ fontSize: '10px', color: '#475569', fontFamily: 'monospace' }}>
                         v2.0 Mobile
