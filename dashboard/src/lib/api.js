@@ -60,6 +60,7 @@ export const api = {
   // Toko dan ringkasan
   stores: () => request('/stores'),
   ringkasan: (store) => request(`/stores/${store}/ringkasan`),
+  rekap: (store) => request(`/stores/${store}/rekap`),
   prioritas: (store, params) => request(`/stores/${store}/prioritas${query(params)}`),
   realokasi: (store) => request(`/stores/${store}/reallocation`),
 

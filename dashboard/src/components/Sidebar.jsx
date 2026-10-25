@@ -7,7 +7,8 @@ import {
   Compass, 
   LogOut, 
   CheckCircle2,
-  AlertOctagon
+  AlertOctagon,
+  CalendarDays
 } from 'lucide-react';
 import { rupiahRingkas } from '../lib/format';
 
@@ -43,6 +44,12 @@ export default function Sidebar({
       icon: ArrowRightLeft,
       badge: modalDiselamatkan > 0 ? rupiahRingkas(modalDiselamatkan) : null,
       badgeColor: 'bg-emerald-100 text-emerald-800'
+    },
+    {
+      id: "rekap",
+      label: "Rekap Agent",
+      icon: CalendarDays,
+      badge: null
     }
   ];
 

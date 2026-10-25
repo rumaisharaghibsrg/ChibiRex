@@ -129,11 +129,13 @@ def connect(path: Path) -> sqlite3.Connection:
 
 # Kolom yang ditambahkan setelah tabel pertama kali dibuat; ditambahkan otomatis ke database lama.
 KOLOM_TAMBAHAN = {
-    # hari_tiba: hari simulasi saat barang PO yang disetujui (atau stok uji hold) masuk gudang.
-    "purchase_orders": [("sap_po_number", "text"), ("sap_dikirim_pada", "text"), ("hari_tiba", "integer")],
-    "holds": [("hari_tiba", "integer")],
+    # hari_tiba: hari simulasi saat barang PO yang disetujui (atau stok uji hold) masuk gudang. hari_dibuat,
+    # hari_diputuskan, hari_sim: hari simulasi kejadiannya, untuk rekap agent per hari (GET /stores/{store}/rekap).
+    "purchase_orders": [("sap_po_number", "text"), ("sap_dikirim_pada", "text"), ("hari_tiba", "integer"),
+                        ("hari_dibuat", "integer"), ("hari_diputuskan", "integer")],
+    "holds": [("hari_tiba", "integer"), ("hari_dibuat", "integer")],
     # Mode antrian: MENUNGGU -> BERJALAN -> SELESAI/GAGAL. Baris lama (tanpa status) dibaca dari `berhasil`.
-    "agent_runs": [("status", "text"), ("mulai_pada", "text"), ("pesan", "text")],
+    "agent_runs": [("status", "text"), ("mulai_pada", "text"), ("pesan", "text"), ("hari_sim", "integer")],
 }
 
 

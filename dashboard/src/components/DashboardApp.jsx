@@ -12,6 +12,7 @@ import AiCopilotWidget from './AiCopilotWidget';
 import AgentRunPanel from './AgentRunPanel';
 import PendingPoCard from './PendingPoCard';
 import KpiGrid from './KpiGrid';
+import RekapAgent from './RekapAgent';
 import {
   Bell,
   CheckCircle,
@@ -357,6 +358,9 @@ export default function DashboardApp({ user, onLogout }) {
               />
             </div>
           )}
+
+          {/* ── TAB 4: REKAP AGENT PER HARI SIMULASI ── */}
+          {activeTab === 'rekap' && <RekapAgent store={store} refreshKey={refreshKey} />}
 
           {/* ── TAB 3: REALOKASI MODAL ── */}
           {activeTab === 'reallocation' && (

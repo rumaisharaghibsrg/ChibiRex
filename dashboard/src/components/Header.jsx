@@ -98,6 +98,11 @@ export default function Header({
           title: "Capital Reallocation Engine",
           subtitle: "Modal dari reorder yang ditahan dialihkan ke SKU yang penjualannya naik"
         };
+      case 'rekap':
+        return {
+          title: "Rekap Agent per Hari",
+          subtitle: "Apa yang dilakukan agent dan diputuskan manajer di setiap hari simulasi"
+        };
       default:
         return {
           title: "Rexa Inventory Copilot",

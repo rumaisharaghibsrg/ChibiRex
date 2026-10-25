@@ -295,6 +295,71 @@ class OtomatisSimulasi(Request):
     oleh: str = Field(default="manajer", min_length=1, max_length=100)
 
 
+class RunRekap(BaseModel):
+    run_id: str
+    waktu: str = Field(description="Waktu nyata jejak disimpan")
+    status: str
+    model: str | None
+    durasi_dtk: float
+    token_input: int
+    token_output: int
+    jumlah_langkah: int
+    ringkasan: str | None = Field(description="Ringkasan akhir agent, atau penyebab kalau GAGAL")
+
+
+class PoRekap(BaseModel):
+    po_id: str
+    deskripsi: str | None
+    qty: int
+    nilai_idr: float
+    status: StatusPO = Field(description="Status sekarang")
+    dibuat_oleh: str
+    sap_po_number: str | None = None
+    pelanggaran: list[str] = Field(default_factory=list)
+
+
+class HoldRekap(BaseModel):
+    hold_id: str
+    deskripsi: str | None
+    modal_diselamatkan_idr: float
+    qty_uji: int
+    dibuat_oleh: str
+
+
+class HariRekap(BaseModel):
+    hari_ke: int | None = Field(description="Hari simulasi; null untuk kejadian sebelum rekap per hari dicatat")
+    tanggal: date | None
+    run: list[RunRekap]
+    po_dibuat: list[PoRekap] = Field(description="Draf PO yang dibuat hari itu (termasuk yang ditahan guardrail)")
+    hold: list[HoldRekap]
+    po_disetujui: list[PoRekap] = Field(description="PO yang disetujui manajer hari itu")
+    po_ditolak: int
+    modal_diselamatkan_idr: float
+    nilai_draf_idr: float
+    token_input: int
+    token_output: int
+
+
+class TotalRekap(BaseModel):
+    run: int
+    run_gagal: int
+    hold: int
+    modal_diselamatkan_idr: float
+    po_dibuat: int
+    po_ditahan_guardrail: int
+    po_disetujui: int
+    nilai_disetujui_idr: float
+    po_ditolak: int
+    token_input: int
+    token_output: int
+
+
+class RekapToko(BaseModel):
+    store: int
+    hari: list[HariRekap] = Field(description="Terbaru dulu")
+    total: TotalRekap
+
+
 class Toko(BaseModel):
     store: int
     kota: str

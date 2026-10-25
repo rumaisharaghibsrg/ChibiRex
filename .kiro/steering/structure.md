@@ -103,6 +103,7 @@ Key components:
 | `CapitalReallocationCard.jsx` | Reallocation from held reorders to rising SKUs; button opens the target draft PO |
 | `GuardrailsModal.jsx` | Live guardrail status, manager reset of the circuit breaker, pending stock audits, audit log |
 | `KpiGrid.jsx` | Key metric cards (reallocation tab) |
+| `RekapAgent.jsx` | "Rekap Agent" tab: agent runs, holds, draft POs, and manager decisions per simulated day (`GET /stores/{store}/rekap`); CSV download and print/PDF |
 | `AiCopilotWidget.jsx` | Chat with Rexa Copilot (`POST {VITE_COPILOT_URL}/tanya`, Claude on Bedrock); falls back to quick answers from dashboard data (`lib/copilot.js`) |
 | `HealthScoreCard.jsx`, `FormulaModal.jsx`, `ScenarioBar.jsx`, `AgenticPipelineVisualizer.jsx` | Leftovers from the original design; not used |
 

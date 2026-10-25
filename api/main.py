@@ -25,8 +25,8 @@ from api import guardrails, sap, simulasi, state
 from api.agent_runner import AgentSedangBerjalan, PenjalanAgent, jalankan_agent_lokal
 from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AgentRunMulai, AgentRunStatus, AgentRunTugas,
                          AuditEntry, DraftPORequest, GeserSimulasi, Hold, HoldRequest, KembaliSimulasi, Keputusan,
-                         LangkahAgent, OtomatisSimulasi, Prioritas, PurchaseOrder, Realokasi, RingkasanToko, Sku,
-                         StatusGuardrail, StatusPO, StatusSimulasi, StatusStok, StatusWorker, StokFisik,
+                         LangkahAgent, OtomatisSimulasi, Prioritas, PurchaseOrder, Realokasi, RekapToko, RingkasanToko,
+                         Sku, StatusGuardrail, StatusPO, StatusSimulasi, StatusStok, StatusWorker, StokFisik,
                          StokFisikRequest, Substitusi, Toko)
 from api.settings import Settings
 from engine import basket, config
@@ -270,9 +270,64 @@ def _antrikan_agent(s: Settings, tugas: str, store: int) -> dict:
         run_id = uuid4().hex[:12]
         con.execute(
             """insert into agent_runs (run_id, waktu, tugas, store, model, jawaban, langkah, durasi_dtk, token_input,
-                   token_output, berhasil, status) values (?, ?, ?, ?, '', '', '[]', 0, 0, 0, 0, 'MENUNGGU')""",
-            (run_id, sekarang.isoformat(timespec="seconds"), tugas, store))
+                   token_output, berhasil, status, hari_sim)
+               values (?, ?, ?, ?, '', '', '[]', 0, 0, 0, 0, 'MENUNGGU', ?)""",
+            (run_id, sekarang.isoformat(timespec="seconds"), tugas, store, simulasi.hari_ini(con, s, sekarang)))
         return _run_dari_baris(con.execute("select * from agent_runs where run_id = ?", (run_id,)).fetchone())
+
+
+def _rekap(con, store: int) -> dict:
+    """Rekap agent per hari simulasi: run agent, tindakannya (hold, draf PO), dan keputusan manajer pada hari itu."""
+    hari: dict = {}
+
+    def slot(h):
+        if h not in hari:
+            hari[h] = {"hari_ke": h, "tanggal": simulasi.tanggal(h) if h is not None else None, "run": [],
+                       "po_dibuat": [], "hold": [], "po_disetujui": [], "po_ditolak": 0, "token_input": 0,
+                       "token_output": 0}
+        return hari[h]
+
+    for r in con.execute("""select * from agent_runs where store = ? and coalesce(status, '') not in
+                            ('MENUNGGU', 'BERJALAN') order by waktu""", (store,)):
+        d = slot(r["hari_sim"])
+        d["run"].append({"run_id": r["run_id"], "waktu": r["waktu"],
+                         "status": r["status"] or ("SELESAI" if r["berhasil"] else "GAGAL"), "model": r["model"] or None,
+                         "durasi_dtk": r["durasi_dtk"], "token_input": r["token_input"],
+                         "token_output": r["token_output"], "jumlah_langkah": len(json.loads(r["langkah"])),
+                         "ringkasan": r["jawaban"] or r["pesan"] or None})
+        d["token_input"] += r["token_input"]
+        d["token_output"] += r["token_output"]
+    for p in con.execute("select * from purchase_orders where store = ? order by dibuat_pada", (store,)):
+        po = {k: p[k] for k in ("po_id", "deskripsi", "qty", "nilai_idr", "status", "dibuat_oleh", "sap_po_number")}
+        po["pelanggaran"] = [x["kode"] for x in json.loads(p["pelanggaran"])]
+        slot(p["hari_dibuat"])["po_dibuat"].append(po)
+        if p["status"] == "APPROVED":
+            slot(p["hari_diputuskan"])["po_disetujui"].append(po)
+        elif p["status"] == "REJECTED":
+            slot(p["hari_diputuskan"])["po_ditolak"] += 1
+    for h in con.execute("select * from holds where store = ? order by dibuat_pada", (store,)):
+        slot(h["hari_dibuat"])["hold"].append(
+            {k: h[k] for k in ("hold_id", "deskripsi", "modal_diselamatkan_idr", "qty_uji", "dibuat_oleh")})
+
+    daftar = sorted(hari.values(), key=lambda d: (d["hari_ke"] is None, -(d["hari_ke"] or 0)))
+    for d in daftar:
+        d["modal_diselamatkan_idr"] = sum(h["modal_diselamatkan_idr"] for h in d["hold"])
+        d["nilai_draf_idr"] = sum(p["nilai_idr"] for p in d["po_dibuat"])
+    semua_po = [p for d in daftar for p in d["po_dibuat"]]
+    total = {
+        "run": sum(len(d["run"]) for d in daftar),
+        "run_gagal": sum(r["status"] == "GAGAL" for d in daftar for r in d["run"]),
+        "hold": sum(len(d["hold"]) for d in daftar),
+        "modal_diselamatkan_idr": sum(d["modal_diselamatkan_idr"] for d in daftar),
+        "po_dibuat": len(semua_po),
+        "po_ditahan_guardrail": sum(p["status"] == "DITAHAN_GUARDRAIL" for p in semua_po),
+        "po_disetujui": sum(len(d["po_disetujui"]) for d in daftar),
+        "nilai_disetujui_idr": sum(p["nilai_idr"] for d in daftar for p in d["po_disetujui"]),
+        "po_ditolak": sum(d["po_ditolak"] for d in daftar),
+        "token_input": sum(d["token_input"] for d in daftar),
+        "token_output": sum(d["token_output"] for d in daftar),
+    }
+    return {"store": store, "hari": daftar, "total": total}
 
 
 def _routes(app: FastAPI) -> None:
@@ -379,11 +434,11 @@ def _routes(app: FastAPI) -> None:
             po_id = f"PO-{uuid4().hex[:10].upper()}"
             con.execute(
                 """insert into purchase_orders (po_id, inventory_id, store, deskripsi, vendor_number, vendor_name,
-                   qty, harga_beli_usd, nilai_idr, status, pelanggaran, alasan, dibuat_oleh, dibuat_pada)
-                   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   qty, harga_beli_usd, nilai_idr, status, pelanggaran, alasan, dibuat_oleh, dibuat_pada, hari_dibuat)
+                   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (po_id, sku["inventory_id"], sku["store"], sku["deskripsi"], sku["vendor_number"], sku["vendor_name"],
                  qty, sku["harga_beli_usd"], nilai, status, json.dumps(langgar, ensure_ascii=False), body.alasan,
-                 body.dibuat_oleh, sekarang.isoformat(timespec="seconds")))
+                 body.dibuat_oleh, sekarang.isoformat(timespec="seconds"), simulasi.hari_ini(con, s, sekarang)))
             _simpan_idempotency(con, idempotency_key, "draft_purchase_order", request_hash, po_id, sekarang)
             state.audit(con, sekarang, body.dibuat_oleh, "draft_purchase_order", po_id,
                         {"inventory_id": sku["inventory_id"], "qty": qty, "nilai_idr": nilai, "status": status,
@@ -451,9 +506,11 @@ def _routes(app: FastAPI) -> None:
                 hari_tiba = simulasi.hari_ini(con, s, sekarang) + math.ceil(sku["lead_time_rata"])
             con.execute(
                 """update purchase_orders set status = ?, diputuskan_oleh = ?, diputuskan_pada = ?,
-                   catatan_keputusan = ?, sap_po_number = ?, sap_dikirim_pada = ?, hari_tiba = ? where po_id = ?""",
+                   catatan_keputusan = ?, sap_po_number = ?, sap_dikirim_pada = ?, hari_tiba = ?, hari_diputuskan = ?
+                   where po_id = ?""",
                 (status_baru, body.oleh, sekarang.isoformat(timespec="seconds"), body.catatan, sap_po,
-                 sekarang.isoformat(timespec="seconds") if sap_po else None, hari_tiba, po_id))
+                 sekarang.isoformat(timespec="seconds") if sap_po else None, hari_tiba,
+                 simulasi.hari_ini(con, s, sekarang), po_id))
             state.audit(con, sekarang, body.oleh, f"po_{status_baru.lower()}", po_id,
                         {"catatan": body.catatan, "sap_po_number": sap_po})
             return _po(con, po_id)
@@ -510,11 +567,11 @@ def _routes(app: FastAPI) -> None:
                 con.execute(
                     """insert into holds (hold_id, inventory_id, store, deskripsi, qty_ditahan, modal_ditahan_idr,
                            qty_uji, nilai_uji_idr, modal_diselamatkan_idr, review_pada, status, alasan, dibuat_oleh,
-                           dibuat_pada, hari_tiba)
-                       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'AKTIF', ?, ?, ?, ?)""",
+                           dibuat_pada, hari_tiba, hari_dibuat)
+                       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'AKTIF', ?, ?, ?, ?, ?)""",
                     (hold_id, sku["inventory_id"], sku["store"], sku["deskripsi"], qty, modal_ditahan, qty_uji,
                      nilai_uji, modal_ditahan - nilai_uji, review.isoformat(), body.alasan, body.dibuat_oleh,
-                     sekarang.isoformat(timespec="seconds"), hari + math.ceil(sku["lead_time_rata"])))
+                     sekarang.isoformat(timespec="seconds"), hari + math.ceil(sku["lead_time_rata"]), hari))
                 _simpan_idempotency(con, idempotency_key, "hold_reorder", request_hash, hold_id, sekarang)
                 state.audit(con, sekarang, body.dibuat_oleh, "hold_reorder", hold_id,
                             {"inventory_id": sku["inventory_id"], "modal_diselamatkan_idr": modal_ditahan - nilai_uji,
@@ -671,21 +728,25 @@ def _routes(app: FastAPI) -> None:
         di akhir run; dalam mode antrian ini juga menutup tugas antrian dengan status SELESAI/GAGAL."""
         s = _settings(request)
         _cek_worker(s, token)
-        waktu = s.clock().isoformat(timespec="seconds")
+        sekarang = s.clock()
+        waktu = sekarang.isoformat(timespec="seconds")
         with state.transaksi(s.state_db) as con:
+            # hari_sim: hari simulasi saat run masuk antrian (dipertahankan), atau saat jejaknya disimpan (mode lokal).
             con.execute(
                 """insert into agent_runs (run_id, waktu, tugas, store, model, jawaban, langkah, durasi_dtk,
-                       token_input, token_output, berhasil, status, pesan)
-                   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       token_input, token_output, berhasil, status, pesan, hari_sim)
+                   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    on conflict (run_id) do update set waktu = excluded.waktu, tugas = excluded.tugas,
                        store = excluded.store, model = excluded.model, jawaban = excluded.jawaban,
                        langkah = excluded.langkah, durasi_dtk = excluded.durasi_dtk,
                        token_input = excluded.token_input, token_output = excluded.token_output,
-                       berhasil = excluded.berhasil, status = excluded.status, pesan = excluded.pesan""",
+                       berhasil = excluded.berhasil, status = excluded.status, pesan = excluded.pesan,
+                       hari_sim = coalesce(agent_runs.hari_sim, excluded.hari_sim)""",
                 (body.run_id, waktu, body.tugas, body.store, body.model, body.jawaban,
                  json.dumps([l.model_dump() for l in body.langkah], ensure_ascii=False, default=str),
                  body.durasi_dtk, body.token_input, body.token_output, int(body.berhasil),
-                 "SELESAI" if body.berhasil else "GAGAL", None if body.berhasil else body.jawaban))
+                 "SELESAI" if body.berhasil else "GAGAL", None if body.berhasil else body.jawaban,
+                 simulasi.hari_ini(con, s, sekarang)))
         return {**body.model_dump(), "waktu": waktu}
 
     @app.get("/agent-runs", response_model=list[AgentRun], tags=[AGENT])
@@ -895,6 +956,14 @@ def _routes(app: FastAPI) -> None:
                 "po_disetujui": po.get("APPROVED", (0, 0))[0],
                 "po_ditahan_guardrail": po.get("DITAHAN_GUARDRAIL", (0, 0))[0],
                 "modal_diselamatkan_idr": diselamatkan, "exploration_budget_idr": uji}
+
+    @app.get("/stores/{store}/rekap", response_model=RekapToko, tags=[DASHBOARD])
+    def rekap_toko(store: int, request: Request):
+        """Rekap agent per hari simulasi (terbaru dulu): run agent beserta ringkasan dan tokennya, Hold Reorder dan draf
+        PO yang dibuat, serta PO yang disetujui atau ditolak manajer pada hari itu. Kejadian sebelum hari simulasi
+        dicatat dikelompokkan dengan `hari_ke` null."""
+        with state.baca(_settings(request).state_db) as con:
+            return _rekap(con, store)
 
     @app.get("/audit-log", response_model=list[AuditEntry], tags=[GUARDRAIL])
     def audit_log(request: Request, limit: int = Query(50, ge=1, le=500)):
