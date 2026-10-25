@@ -52,6 +52,7 @@ export const api = {
   // Jam simulasi: waktu maju dari 31 Des 2016 (data terakhir Bibitor)
   simulasi: () => request('/simulasi'),
   majuSimulasi: (hari, oleh) => request('/simulasi/maju', { method: 'POST', body: { hari, oleh } }),
+  mundurSimulasi: (hari, oleh) => request('/simulasi/mundur', { method: 'POST', body: { hari, oleh } }),
   kembaliSimulasi: (oleh) => request('/simulasi/kembali', { method: 'POST', body: { oleh } }),
   otomatisSimulasi: (aktif, detikPerHari, oleh) => request('/simulasi/otomatis',
     { method: 'POST', body: { aktif, detik_per_hari: detikPerHari ?? null, oleh } }),

@@ -86,6 +86,19 @@ export default function DashboardApp({ user, onLogout }) {
     }
   };
 
+  const handleMundurSimulasi = async (hari) => {
+    try {
+      const s = await api.mundurSimulasi(hari, penyetuju);
+      terimaSim(s);
+      showToast({
+        type: 'info',
+        text: `Waktu simulasi mundur ke ${tanggal(s.tanggal)} (hari +${s.hari_ke}); stok kembali seperti tanggal itu. PO dan hold tetap tercatat.`,
+      });
+    } catch (e) {
+      showToast({ type: 'warn', text: e.message });
+    }
+  };
+
   const handleKembaliSimulasi = async () => {
     try {
       terimaSim(await api.kembaliSimulasi(penyetuju));
@@ -229,6 +242,7 @@ export default function DashboardApp({ user, onLogout }) {
           setStore={setStore}
           sim={sim}
           onMajuSimulasi={handleMajuSimulasi}
+          onMundurSimulasi={handleMundurSimulasi}
           onOtomatisSimulasi={handleOtomatisSimulasi}
           onKembaliSimulasi={handleKembaliSimulasi}
           apiOk={!error}

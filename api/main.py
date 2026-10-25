@@ -24,11 +24,10 @@ from agent.prompt import TUGAS_DEFAULT
 from api import guardrails, sap, simulasi, state
 from api.agent_runner import AgentSedangBerjalan, PenjalanAgent, jalankan_agent_lokal
 from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AgentRunMulai, AgentRunStatus, AgentRunTugas,
-                         AuditEntry, DraftPORequest, Hold, HoldRequest, KembaliSimulasi, Keputusan, LangkahAgent,
-                         MajuSimulasi,
-                         OtomatisSimulasi, Prioritas, PurchaseOrder, Realokasi, RingkasanToko, Sku, StatusGuardrail,
-                         StatusPO, StatusSimulasi, StatusStok, StatusWorker, StokFisik, StokFisikRequest, Substitusi,
-                         Toko)
+                         AuditEntry, DraftPORequest, GeserSimulasi, Hold, HoldRequest, KembaliSimulasi, Keputusan,
+                         LangkahAgent, OtomatisSimulasi, Prioritas, PurchaseOrder, Realokasi, RingkasanToko, Sku,
+                         StatusGuardrail, StatusPO, StatusSimulasi, StatusStok, StatusWorker, StokFisik,
+                         StokFisikRequest, Substitusi, Toko)
 from api.settings import Settings
 from engine import basket, config
 from engine.format import angka, rupiah
@@ -807,7 +806,7 @@ def _routes(app: FastAPI) -> None:
             return simulasi.status(con, s, s.clock())
 
     @app.post("/simulasi/maju", response_model=StatusSimulasi, tags=[DASHBOARD])
-    def maju_simulasi(body: MajuSimulasi, request: Request):
+    def maju_simulasi(body: GeserSimulasi, request: Request):
         """Majukan waktu simulasi: stok berkurang sesuai permintaan harian, dan barang dari PO yang disetujui tiba
         setelah lead time vendor. Paling jauh `hari_maks` hari (satu kuartal)."""
         s = _settings(request)
@@ -815,6 +814,19 @@ def _routes(app: FastAPI) -> None:
         with state.transaksi(s.state_db) as con:
             hasil = simulasi.atur(con, s, sekarang, hari=simulasi.hari_ini(con, s, sekarang) + body.hari)
             state.audit(con, sekarang, body.oleh, "simulasi_maju", None, {"hari": body.hari, "hari_ke": hasil["hari_ke"]})
+        return hasil
+
+    @app.post("/simulasi/mundur", response_model=StatusSimulasi, tags=[DASHBOARD])
+    def mundur_simulasi(body: GeserSimulasi, request: Request):
+        """Mundurkan waktu simulasi (paling awal 31 Des 2016). Stok kembali persis seperti pada tanggal itu, karena
+        permintaan harian simulasi selalu sama untuk hari yang sama. PO dan hold yang dibuat sesudahnya tetap tercatat
+        dan jadwal tibanya tidak berubah; untuk mengulang dari stok awal, pakai `POST /simulasi/kembali`."""
+        s = _settings(request)
+        sekarang = s.clock()
+        with state.transaksi(s.state_db) as con:
+            hasil = simulasi.atur(con, s, sekarang, hari=max(0, simulasi.hari_ini(con, s, sekarang) - body.hari))
+            state.audit(con, sekarang, body.oleh, "simulasi_mundur", None,
+                        {"hari": body.hari, "hari_ke": hasil["hari_ke"]})
         return hasil
 
     @app.post("/simulasi/kembali", response_model=StatusSimulasi, tags=[DASHBOARD])

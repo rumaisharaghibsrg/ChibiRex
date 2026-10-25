@@ -9,6 +9,7 @@ import {
   Play,
   Pause,
   FastForward,
+  Rewind,
   RotateCcw
 } from 'lucide-react';
 import { tanggal } from '../lib/format';
@@ -44,6 +45,7 @@ export default function Header({
   setStore,
   sim,
   onMajuSimulasi,
+  onMundurSimulasi,
   onOtomatisSimulasi,
   onKembaliSimulasi,
   apiOk = true,
@@ -285,16 +287,30 @@ export default function Header({
                 </p>
               </div>
 
-              <div className="flex gap-2">
+              {/* Mundur membatalkan waktu (stok persis seperti hari itu); maju menjalankan permintaan harian. */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {[7, 1].map((n) => (
+                  <button
+                    key={`mundur-${n}`}
+                    onClick={() => onMundurSimulasi?.(n)}
+                    disabled={sim.hari_ke === 0}
+                    title={`Mundur ${n} hari`}
+                    className="inline-flex items-center justify-center gap-1 px-2 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold disabled:opacity-45 disabled:cursor-not-allowed"
+                  >
+                    <Rewind className="w-3.5 h-3.5" />
+                    −{n}
+                  </button>
+                ))}
                 {[1, 7].map((n) => (
                   <button
-                    key={n}
+                    key={`maju-${n}`}
                     onClick={() => onMajuSimulasi?.(n)}
                     disabled={diBatas}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#1b4d3e] hover:bg-[#143d31] text-white text-xs font-bold disabled:opacity-45 disabled:cursor-not-allowed"
+                    title={`Maju ${n} hari`}
+                    className="inline-flex items-center justify-center gap-1 px-2 py-2 rounded-xl bg-[#1b4d3e] hover:bg-[#143d31] text-white text-xs font-bold disabled:opacity-45 disabled:cursor-not-allowed"
                   >
                     <FastForward className="w-3.5 h-3.5 text-[#a2d2bf]" />
-                    +{n} hari
+                    +{n}
                   </button>
                 ))}
               </div>

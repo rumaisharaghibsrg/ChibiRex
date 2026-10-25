@@ -96,6 +96,24 @@ def test_batas_hari_maks_dan_validasi(analytics_db, tmp_path):
         assert client.post("/simulasi/otomatis", json={"aktif": True, "detik_per_hari": 1}).status_code == 422
 
 
+def test_mundur_mengembalikan_stok_hari_itu(client):
+    def mundur(hari):
+        return client.post("/simulasi/mundur", json={"hari": hari, "oleh": "manajer uji"}).json()
+
+    maju(client, 7)
+    stok_hari_7 = stok(client, 10)["stok_akhir"]
+    maju(client, 3)
+    po = setujui_draf(client, 30, "mundur-po-0001")  # disetujui hari 10, tiba hari 18
+    assert mundur(3)["tanggal"] == "2017-01-07"
+    assert stok(client, 10)["stok_akhir"] == stok_hari_7  # sama persis dengan saat hari 7 sebelumnya
+    # Keputusan sesudahnya tetap tercatat dan jadwal tibanya tidak berubah.
+    assert client.get(f"/purchase-orders/{po['po_id']}").json()["tgl_tiba"] == "2017-01-18"
+    assert stok(client, 30)["stok_dalam_pengiriman"] == po["qty"]
+    assert mundur(30)["hari_ke"] == 0  # paling awal 31 Des 2016
+    assert stok(client, 10)["stok_akhir"] == 50
+    assert client.post("/simulasi/mundur", json={"hari": 0}).status_code == 422
+
+
 def test_kembali_ke_awal_tanpa_menghapus_data(client):
     tiba = setujui_draf(client, 10, "kembali-po-0001")  # disetujui hari 0, tiba hari 8
     maju(client, 10)

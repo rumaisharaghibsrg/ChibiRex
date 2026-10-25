@@ -278,7 +278,9 @@ class StatusSimulasi(BaseModel):
     hari_maks: int
 
 
-class MajuSimulasi(Request):
+class GeserSimulasi(Request):
+    """Body POST /simulasi/maju dan /simulasi/mundur."""
+
     hari: int = Field(ge=1, le=30)
     oleh: str = Field(default="manajer", min_length=1, max_length=100)
 

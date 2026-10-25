@@ -104,7 +104,8 @@ Satu kali jalan butuh ±20 detik dengan Claude Sonnet 4.6 (±30-60 detik dengan 
 Data Bibitor berhenti di 31 Des 2016, jadi waktu dimajukan dari tanggal itu (`api/simulasi.py`). Setiap hari simulasi, stok setiap SKU berkurang sesuai permintaan harian dari data (acak tetapi sama untuk SKU dan hari yang sama), dan barang dari PO yang disetujui serta stok uji Hold Reorder tiba setelah lead time vendor. Status stok, prediksi habis, saran PO, Health Score, realokasi, dan prioritas agent ikut berubah.
 
 - `GET /simulasi` → `hari_ke`, `tanggal`, `otomatis`, `detik_per_hari`, `hari_maks` (90 hari).
-- `POST /simulasi/maju` body `{"hari": 1-30, "oleh": "..."}`: tombol "+1 hari" dan "+7 hari".
+- `POST /simulasi/maju` body `{"hari": 1-30, "oleh": "..."}`: tombol "+1" dan "+7".
+- `POST /simulasi/mundur` body sama: tombol "−1" dan "−7" (paling awal 31 Des 2016). Stok kembali persis seperti pada tanggal itu karena permintaan harian simulasi selalu sama untuk hari yang sama; PO dan hold yang dibuat sesudahnya tetap tercatat dan jadwal tibanya tidak berubah.
 - `POST /simulasi/otomatis` body `{"aktif": true, "detik_per_hari": 10|30|60}`: satu hari simulasi tiap N detik nyata; `{"aktif": false}` untuk jeda. Tidak ada proses latar: hari dihitung dari waktu nyata sejak terakhir diatur.
 - Dashboard memeriksa `GET /simulasi` berkala (tiap ≤5 detik saat otomatis, 15 detik saat jeda) dan memuat ulang data setiap hari berganti.
 - Field baru: SKU `stok_dalam_pengiriman` (barang PO disetujui yang belum tiba; reorder memakai stok gudang + dalam pengiriman, jadi SKU yang sedang dikirim tidak dipesan ulang), PO `tgl_tiba`. `ringkasan.per_tanggal` = tanggal simulasi.
