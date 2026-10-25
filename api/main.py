@@ -25,8 +25,8 @@ from api import guardrails, sap, simulasi, state
 from api.agent_runner import AgentSedangBerjalan, PenjalanAgent, jalankan_agent_lokal
 from api.schemas import (INVENTORY_ID, AgentRun, AgentRunIn, AgentRunMulai, AgentRunStatus, AgentRunTugas,
                          AuditEntry, DraftPORequest, GeserSimulasi, Hold, HoldRequest, KembaliSimulasi, Keputusan,
-                         LangkahAgent, OtomatisSimulasi, Prioritas, PurchaseOrder, Realokasi, RekapToko, RingkasanToko,
-                         Sku, StatusGuardrail, StatusPO, StatusSimulasi, StatusStok, StatusWorker, StokFisik,
+                         LangkahAgent, OtomatisSimulasi, PeluangTransfer, Prioritas, PurchaseOrder, Realokasi,
+                         RekapToko, RingkasanJaringan, RingkasanToko, Sku, StatusGuardrail, StatusPO, StatusSimulasi, StatusStok, StatusWorker, StokFisik,
                          StokFisikRequest, Substitusi, Toko)
 from api.settings import Settings
 from engine import basket, config
@@ -57,6 +57,46 @@ HEALTH_SQL = """
         count(*) filter (where r.level_risiko = 'TINGGI') as risiko_tinggi
     from sku_metrics s left join risiko_stockout r using (inventory_id)
     where s.store = ? and s.status_stok <> 'TIDAK_AKTIF'
+"""
+
+# Dashboard jaringan: angka yang sama dengan HEALTH_SQL, untuk semua toko sekaligus.
+JARINGAN_SQL = """
+    select s.store, any_value(s.kota) as kota, count(*) as sku_aktif,
+        avg(case when s.status_stok <> 'REORDER' then 1.0 else 0 end) as ketersediaan,
+        avg(case when s.status_stok not in ('OVERSTOCK', 'DEADSTOCK') then 1.0 else 0 end) as perputaran,
+        coalesce(sum(s.nilai_stok_idr), 0) as nilai_stok,
+        coalesce(sum(case when s.status_stok in ('OVERSTOCK', 'DEADSTOCK') then s.nilai_stok_idr end), 0) as tertahan,
+        count(*) filter (where r.level_risiko = 'TINGGI') as risiko_tinggi,
+        count(*) filter (where s.status_stok = 'REORDER') as perlu_reorder,
+        count(*) filter (where s.status_stok = 'OVERSTOCK') as overstock,
+        count(*) filter (where s.status_stok = 'DEADSTOCK') as deadstock
+    from sku_metrics s left join risiko_stockout r using (inventory_id)
+    where s.status_stok <> 'TIDAK_AKTIF'
+    group by s.store order by s.store
+"""
+
+# Calon transfer antar toko: merek yang perlu reorder di satu toko, padahal toko lain kelebihan stok merek yang sama
+# (OVERSTOCK/DEADSTOCK, di atas target stok). Tiga calon donor per SKU penerima, urut dari nilai PO yang bisa
+# dihindari; stok donor dibagi di _bagi_transfer. Jarak dan ongkos kirim antar toko belum dihitung.
+TRANSFER_SQL = """
+    with butuh as (
+        select brand, store, kota, inventory_id, deskripsi, saran_qty_po, harga_beli_usd from sku_metrics
+        where perlu_reorder and saran_qty_po > 0 and harga_beli_usd is not null and data_confidence >= ?
+    ),
+    lebih as (
+        select brand, store, kota, inventory_id, status_stok, floor(stok_akhir - target_stok)::bigint as kelebihan
+        from sku_metrics where status_stok in ('OVERSTOCK', 'DEADSTOCK') and stok_akhir - target_stok >= 1
+    ),
+    pasangan as (
+        select b.*, l.store as dari_toko, l.kota as dari_kota, l.inventory_id as dari_inventory_id,
+            l.status_stok as status_dari, l.kelebihan, least(b.saran_qty_po, l.kelebihan) as qty,
+            row_number() over (partition by b.inventory_id order by l.kelebihan desc, l.store) as urut
+        from butuh b join lebih l on l.brand = b.brand and l.store <> b.store
+    )
+    select brand as merek, deskripsi, dari_toko, dari_kota, dari_inventory_id, status_dari,
+        kelebihan as kelebihan_unit, store as ke_toko, kota as ke_kota, inventory_id as ke_inventory_id,
+        saran_qty_po, harga_beli_usd
+    from pasangan where urut <= 3 order by saran_qty_po * harga_beli_usd desc, urut limit 5000
 """
 
 SKU_SQL = """
@@ -274,6 +314,56 @@ def _antrikan_agent(s: Settings, tugas: str, store: int) -> dict:
                values (?, ?, ?, ?, '', '', '[]', 0, 0, 0, 0, 'MENUNGGU', ?)""",
             (run_id, sekarang.isoformat(timespec="seconds"), tugas, store, simulasi.hari_ini(con, s, sekarang)))
         return _run_dari_baris(con.execute("select * from agent_runs where run_id = ?", (run_id,)).fetchone())
+
+
+def _health(h: dict) -> tuple[dict, int]:
+    """Tiga komponen Inventory Health (0-1) dan skornya (0-100), dari baris HEALTH_SQL atau JARINGAN_SQL."""
+    nilai = {"KETERSEDIAAN": h["ketersediaan"] or 0, "PERPUTARAN": h["perputaran"] or 0,
+             "STABILITAS_KAS": 1 - h["tertahan"] / h["nilai_stok"] if h["nilai_stok"] else 1}
+    return nilai, round(sum(nilai.values()) / len(nilai) * 100)
+
+
+def _bagi_transfer(calon: list[dict], maks: int = 50) -> list[dict]:
+    """Bagi stok donor: total yang diambil dari satu SKU asal tidak melebihi kelebihannya, dan setiap SKU penerima
+    mendapat satu donor. `calon` sudah urut dari penerima dengan nilai PO terbesar."""
+    sisa, terisi, hasil = {}, set(), []
+    for c in calon:
+        if c["ke_inventory_id"] in terisi:
+            continue
+        qty = min(c["saran_qty_po"], sisa.setdefault(c["dari_inventory_id"], c["kelebihan_unit"]))
+        if qty <= 0:
+            continue
+        sisa[c["dari_inventory_id"]] -= qty
+        terisi.add(c["ke_inventory_id"])
+        hasil.append({**{k: v for k, v in c.items() if k not in ("saran_qty_po", "harga_beli_usd")},
+                      "qty": qty, "nilai_idr": round(qty * c["harga_beli_usd"] * config.KURS_USD_IDR)})
+        if len(hasil) >= maks:
+            break
+    return sorted(hasil, key=lambda t: -t["nilai_idr"])
+
+
+def _data_jaringan(cur, s: Settings) -> dict:
+    """Statistik semua toko dan peluang transfer pada hari simulasi sekarang. Mensimulasikan 276 ribu SKU butuh
+    beberapa detik, jadi hasilnya disimpan per (data analitik, hari simulasi, barang yang dipesan) dan dipakai ulang."""
+    with state.baca(s.state_db) as con:
+        hari = simulasi.hari_ini(con, s, s.clock())
+        tiba = simulasi.kedatangan(con, None, None)
+        sidik = json.dumps([s.analytics_db.stat().st_mtime_ns, sorted(tiba)])
+        kunci = f"{hari}:{hashlib.sha256(sidik.encode()).hexdigest()[:16]}"
+        row = con.execute("select isi from cache_jaringan where kunci = ?", (kunci,)).fetchone()
+    if row:
+        return json.loads(row["isi"])
+    simulasi.terapkan(cur, s)  # semua toko
+    rel = cur.execute(JARINGAN_SQL)
+    toko = [dict(zip([d[0] for d in rel.description], r)) for r in rel.fetchall()]
+    rel = cur.execute(TRANSFER_SQL, [s.data_confidence_min])
+    transfer = _bagi_transfer([dict(zip([d[0] for d in rel.description], r)) for r in rel.fetchall()])
+    isi = {"hari": hari, "toko": toko, "transfer": transfer}
+    with state.transaksi(s.state_db) as con:
+        con.execute("delete from cache_jaringan")  # cukup simpan hari terakhir
+        con.execute("insert into cache_jaringan values (?, ?, ?)",
+                    (kunci, json.dumps(isi, default=float), s.clock().isoformat(timespec="seconds")))
+    return isi
 
 
 def _rekap(con, store: int) -> dict:
@@ -663,7 +753,8 @@ def _routes(app: FastAPI) -> None:
         _cek_worker(s, token)
         sekarang = s.clock()
         with state.transaksi(s.state_db) as con:
-            for tabel in ("purchase_orders", "holds", "stok_fisik", "idempotency", "agent_runs", "audit_log"):
+            for tabel in ("purchase_orders", "holds", "stok_fisik", "idempotency", "agent_runs", "audit_log",
+                          "cache_jaringan"):
                 con.execute(f"delete from {tabel}")
             con.execute("update circuit_breaker set terbuka = 0, alasan = null, berubah_pada = ? where id = 1",
                         (sekarang.isoformat(timespec="seconds"),))
@@ -935,8 +1026,7 @@ def _routes(app: FastAPI) -> None:
                                          [store]).fetchall())
         if not jumlah_status:
             raise galat(404, "TOKO_TIDAK_ADA", f"Toko {store} tidak ditemukan.")
-        nilai = {"KETERSEDIAAN": h["ketersediaan"] or 0, "PERPUTARAN": h["perputaran"] or 0,
-                 "STABILITAS_KAS": 1 - h["tertahan"] / h["nilai_stok"] if h["nilai_stok"] else 1}
+        nilai, skor = _health(h)
         komponen = [{"kode": k, "nama": nama, "nilai": round(100 * nilai[k], 1), "penjelasan": penjelasan}
                     for k, nama, penjelasan in KOMPONEN_HEALTH]
 
@@ -948,7 +1038,7 @@ def _routes(app: FastAPI) -> None:
                 """select coalesce(sum(modal_diselamatkan_idr), 0), coalesce(sum(nilai_uji_idr), 0) from holds
                    where store = ? and status = 'AKTIF'""", (store,)).fetchone()
         return {"store": store, "kota": h["kota"] or "", "per_tanggal": simulasi.tanggal(hari),
-                "health_score": round(sum(nilai.values()) / len(nilai) * 100),
+                "health_score": skor,
                 "rumus": "Rata-rata tiga komponen dengan bobot sama", "komponen": komponen,
                 "sku_aktif": h["sku_aktif"], "jumlah_status": jumlah_status, "nilai_stok_idr": h["nilai_stok"],
                 "modal_tertahan_idr": h["tertahan"], "sku_risiko_tinggi": h["risiko_tinggi"],
@@ -956,6 +1046,51 @@ def _routes(app: FastAPI) -> None:
                 "po_disetujui": po.get("APPROVED", (0, 0))[0],
                 "po_ditahan_guardrail": po.get("DITAHAN_GUARDRAIL", (0, 0))[0],
                 "modal_diselamatkan_idr": diselamatkan, "exploration_budget_idr": uji}
+
+    @app.get("/jaringan/ringkasan", response_model=RingkasanJaringan, tags=[DASHBOARD])
+    def ringkasan_jaringan(request: Request, cur=Depends(_duck)):
+        """Statistik semua toko pada tanggal simulasi sekarang, untuk dashboard "Semua Toko" dan agent jaringan.
+        Health Score dan komponennya sama dengan `GET /stores/{store}/ringkasan`."""
+        s = _settings(request)
+        data = _data_jaringan(cur, s)
+        with state.baca(s.state_db) as con:
+            po = {r["store"]: r for r in con.execute(
+                """select store, count(*) as n, coalesce(sum(nilai_idr), 0) as nilai from purchase_orders
+                   where status = 'DRAFT' group by store""")}
+            hold = {r["store"]: r for r in con.execute(
+                """select store, count(*) as n, coalesce(sum(modal_diselamatkan_idr), 0) as modal from holds
+                   where status = 'AKTIF' group by store""")}
+        toko = []
+        for h in data["toko"]:
+            nilai, skor = _health(h)
+            p, d = po.get(h["store"]), hold.get(h["store"])
+            toko.append({
+                "store": h["store"], "kota": h["kota"] or "", "health_score": skor,
+                "ketersediaan": round(100 * nilai["KETERSEDIAAN"], 1), "perputaran": round(100 * nilai["PERPUTARAN"], 1),
+                "stabilitas_kas": round(100 * nilai["STABILITAS_KAS"], 1), "sku_aktif": h["sku_aktif"],
+                "perlu_reorder": h["perlu_reorder"], "overstock": h["overstock"], "deadstock": h["deadstock"],
+                "sku_risiko_tinggi": h["risiko_tinggi"], "nilai_stok_idr": h["nilai_stok"],
+                "modal_tertahan_idr": h["tertahan"], "po_menunggu": p["n"] if p else 0,
+                "nilai_po_menunggu_idr": p["nilai"] if p else 0, "hold_aktif": d["n"] if d else 0,
+                "modal_diselamatkan_idr": d["modal"] if d else 0})
+        def jumlah(k):
+            return sum(t[k] for t in toko)
+
+        return {"per_tanggal": simulasi.tanggal(data["hari"]), "hari_ke": data["hari"], "jumlah_toko": len(toko),
+                "health_rata": round(jumlah("health_score") / len(toko), 1) if toko else 0,
+                **{k: jumlah(k) for k in ("nilai_stok_idr", "modal_tertahan_idr", "perlu_reorder", "sku_risiko_tinggi",
+                                          "po_menunggu", "nilai_po_menunggu_idr", "modal_diselamatkan_idr")},
+                "toko": toko}
+
+    @app.get("/jaringan/transfer", response_model=PeluangTransfer, tags=[DASHBOARD])
+    def peluang_transfer(request: Request, limit: int = Query(20, ge=1, le=50), cur=Depends(_duck)):
+        """Peluang transfer stok antar toko sebagai pengganti PO baru: merek yang perlu reorder di satu toko, padahal
+        toko lain kelebihan stok merek yang sama (OVERSTOCK/DEADSTOCK). Urut dari nilai pembelian yang bisa dihindari.
+        Hanya rekomendasi; jarak dan ongkos kirim antar toko belum diperhitungkan."""
+        data = _data_jaringan(cur, _settings(request))
+        transfer = data["transfer"][:limit]
+        return {"per_tanggal": simulasi.tanggal(data["hari"]), "transfer": transfer,
+                "total_nilai_idr": sum(t["nilai_idr"] for t in transfer)}
 
     @app.get("/stores/{store}/rekap", response_model=RekapToko, tags=[DASHBOARD])
     def rekap_toko(store: int, request: Request):

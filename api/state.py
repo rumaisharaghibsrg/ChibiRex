@@ -110,6 +110,13 @@ create table if not exists simulasi (
 );
 insert or ignore into simulasi values (1, 0, 0, 60, null);
 
+-- Statistik semua toko (GET /jaringan/*) untuk hari simulasi terakhir yang dihitung; kunci = hari + barang dipesan.
+create table if not exists cache_jaringan (
+    kunci text primary key,
+    isi text not null,
+    dibuat_pada text not null
+);
+
 create table if not exists audit_log (
     id integer primary key autoincrement,
     waktu text not null,

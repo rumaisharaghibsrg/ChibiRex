@@ -88,6 +88,11 @@ export default function Header({
           title: "Executive Inventory Dashboard",
           subtitle: "Kesehatan inventaris, modal kas, dan tindakan agent Rexa untuk toko yang dipilih"
         };
+      case 'jaringan':
+        return {
+          title: "Network Dashboard · Semua Toko",
+          subtitle: "Statistik semua toko sekaligus dan agent jaringan yang mendeteksi toko paling kritis"
+        };
       case 'reorder':
         return {
           title: "Smart Reorder & Predictive Stockout",
@@ -127,7 +132,13 @@ export default function Header({
 
       {/* Right Controls (Wrap rapi tanpa terpotong di HP/tablet) */}
       <div ref={kontrolRef} className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full md:w-auto justify-start md:justify-end">
-        {/* Branch Selector (GET /stores) */}
+        {/* Branch Selector (GET /stores); halaman Semua Toko tidak terikat satu toko */}
+        {activeTab === 'jaringan' ? (
+          <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-xs font-bold text-slate-800">
+            <MapPin className="w-3.5 h-3.5 text-[#1b4d3e] shrink-0" />
+            <span>Semua toko ({stores.length})</span>
+          </div>
+        ) : (
         <div className="relative">
           <button
             onClick={() => alihkan('toko')}
@@ -164,6 +175,7 @@ export default function Header({
           </div>
           )}
         </div>
+        )}
 
         {/* Autonomy Level Pill (informasi; hanya Level 2 yang berjalan) */}
         <div className="relative">

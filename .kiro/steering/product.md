@@ -10,6 +10,7 @@
 - **Numbers from data, not from LLM**: reorder points, demand velocity (Vs), stockout risk scores, and complementarity status are all pre-computed by the offline analytics pipeline. The LLM only selects actions and explains them.
 - **Capital reallocation**: budget freed by held reorders is redirected to trending-up SKUs; 10% exploration budget is preserved per hold to prevent a "death spiral".
 - **SAP integration**: approved POs are posted to an SAP S/4HANA OData V2 mock (`API_PURCHASEORDER_PROCESS_SRV`); a real SAP endpoint can be substituted via environment variable.
+- **Network view (all stores)**: the "Semua Toko" page shows every store's health and stock statistics side by side, plus inter-store transfer opportunities (excess stock in one store covering another store's reorder). A read-only network agent (Claude Sonnet 4.6) scans all stores, picks the 3-5 most critical with data-backed reasons and actions, and selects the best transfers; every store and transfer it names is validated against the API before the report is accepted.
 - **Simulation clock**: the Bibitor data ends on 31 Dec 2016; the dashboard advances time from there (+1/+7 days or automatic). Stock depletes by daily demand, approved POs arrive after the vendor lead time, and health score and agent priorities change accordingly.
 
 ## Domain Language

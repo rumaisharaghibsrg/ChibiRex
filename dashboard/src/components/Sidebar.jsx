@@ -8,7 +8,8 @@ import {
   LogOut, 
   CheckCircle2,
   AlertOctagon,
-  CalendarDays
+  CalendarDays,
+  Network
 } from 'lucide-react';
 import { rupiahRingkas } from '../lib/format';
 
@@ -29,6 +30,12 @@ export default function Sidebar({
       id: "dashboard",
       label: "Dashboard Utama",
       icon: LayoutDashboard,
+      badge: null
+    },
+    {
+      id: "jaringan",
+      label: "Semua Toko",
+      icon: Network,
       badge: null
     },
     {

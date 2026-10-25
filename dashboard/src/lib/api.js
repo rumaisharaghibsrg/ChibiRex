@@ -64,6 +64,10 @@ export const api = {
   prioritas: (store, params) => request(`/stores/${store}/prioritas${query(params)}`),
   realokasi: (store) => request(`/stores/${store}/reallocation`),
 
+  // Semua toko (dashboard jaringan): statistik per toko dan peluang transfer stok antar toko
+  jaringan: () => request('/jaringan/ringkasan'),
+  transferJaringan: (limit = 20) => request(`/jaringan/transfer${query({ limit })}`),
+
   // SKU
   daftarSku: (params) => request(`/sku${query(params)}`),
   sku: (inventoryId) => request(`/sku/${encodeURIComponent(inventoryId)}`),
@@ -94,6 +98,8 @@ export const api = {
   // Copilot (Lambda terpisah): riwayat = [{peran: 'user'|'assistant', teks}]
   tanyaCopilot: (store, pertanyaan, riwayat) => request('/tanya',
     { method: 'POST', body: { store, pertanyaan, riwayat }, base: COPILOT_URL }),
+  // Agent jaringan (Lambda Copilot): menganalisis semua toko, hanya membaca. Biasanya 20-40 detik.
+  analisisJaringan: (bahasa = 'id') => request('/jaringan', { method: 'POST', body: { bahasa }, base: COPILOT_URL }),
 
   // Agent
   mulaiAgent: (store, tugas) => request('/agent-runs/mulai', { method: 'POST', body: { store, tugas } }),

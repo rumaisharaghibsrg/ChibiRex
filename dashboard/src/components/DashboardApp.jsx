@@ -13,6 +13,7 @@ import AgentRunPanel from './AgentRunPanel';
 import PendingPoCard from './PendingPoCard';
 import KpiGrid from './KpiGrid';
 import RekapAgent from './RekapAgent';
+import JaringanToko from './JaringanToko';
 import {
   Bell,
   CheckCircle,
@@ -120,6 +121,13 @@ export default function DashboardApp({ user, onLogout }) {
     } catch (e) {
       showToast({ type: 'warn', text: e.message });
     }
+  };
+
+  // Dari halaman Semua Toko: buka dashboard toko yang dipilih.
+  const bukaToko = (s) => {
+    setStore(s);
+    setActiveTab('dashboard');
+    window.scrollTo({ top: 0 });
   };
 
   const handleAgentSelesai = useCallback((run) => {
@@ -358,6 +366,9 @@ export default function DashboardApp({ user, onLogout }) {
               />
             </div>
           )}
+
+          {/* ── SEMUA TOKO: statistik jaringan dan agent jaringan ── */}
+          {activeTab === 'jaringan' && <JaringanToko refreshKey={refreshKey} onBukaToko={bukaToko} />}
 
           {/* ── TAB 4: REKAP AGENT PER HARI SIMULASI ── */}
           {activeTab === 'rekap' && <RekapAgent store={store} refreshKey={refreshKey} />}

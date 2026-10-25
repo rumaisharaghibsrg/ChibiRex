@@ -32,6 +32,7 @@ Per 24 Okt 2026 **semua** bagian dashboard memakai data API; tidak ada lagi data
 - **`src/lib/useDataToko.js`**: memuat semua data satu toko (ringkasan, SKU REORDER, PO, hold, realokasi, status guardrail, hitung fisik) sekali di `DashboardApp`, lalu dibagikan ke kartu lewat props. Baris tabel Smart Reorder sudah digabung dengan PO dan Hold lewat `inventory_id`. Dimuat ulang setiap toko atau `refreshKey` berubah; setelah ada aksi yang mengubah data, panggil `muatUlang()`.
 - **`src/lib/skenario.js`**: skenario Runaway PO dan selisih stok untuk menu "Skenario Uji" di `Header`.
 - **Chatbot Copilot**: `AiCopilotWidget` mengirim `POST {VITE_COPILOT_URL}/tanya` body `{"store": 74, "pertanyaan": "...", "riwayat": [{"peran": "user"|"assistant", "teks": "..."}]}` ke Lambda `rexa-copilot` (folder `copilot/`). Jawaban `{"jawaban", "model", "alat", "token_input", "token_output"}` berasal dari Claude Haiku 4.5 di Bedrock yang membaca API ini dengan tool baca saja. Kalau `VITE_COPILOT_URL` kosong atau Copilot gagal, jawaban cepat dihitung dari data dashboard (`src/lib/copilot.js`).
+- **`JaringanToko`** (menu "Semua Toko", sejak 25 Okt): statistik semua toko tanpa berpindah toko (KPI jaringan, grafik Health Score 80 toko, tabel yang bisa diurutkan dan dicari, peluang transfer stok) dan **Agent Jaringan** (lihat bagian di bawah). Klik toko di grafik, tabel, atau laporan agent membuka dashboard toko itu.
 - **`AgentRunPanel`**, **`PendingPoCard`**, **`PoApprovalModal`**: panel agent, draf PO, dan 1-Click Approval (sejak 20 Okt).
 - **`Header`** (pilihan toko, level otonomi, Skenario Uji, status API), **`Sidebar`** (badge dari ringkasan dan status breaker), **`TopKeyMetricsRow`**, **`KpiGrid`**, **`ExplorationBudgetCard`**, **`CapitalReallocationCard`**, **`SmartReorderTable`**, **`SuppressionDetailModal`**, **`GuardrailsModal`**, **`AiCopilotWidget`**.
 
@@ -56,6 +57,7 @@ Per 24 Okt 2026 **semua** bagian dashboard memakai data API; tidak ada lagi data
 | `ExplorationBudgetCard` | `GET /stores/{store}/ringkasan`, `GET /holds?store=` | `exploration_budget_idr`; per hold: `qty_uji`, `nilai_uji_idr`, `review_pada` |
 | `CapitalReallocationCard` | `GET /stores/{store}/reallocation` | `dana_tersedia_idr`, `sumber[]`, `tujuan[]` (`deskripsi`, `dialokasikan_idr`), `sisa_dana_idr`, `pesan` |
 | `SmartReorderTable` | `GET /sku?store=&status_stok=REORDER&limit=50`, `GET /purchase-orders?store=`, `GET /holds?store=` | lihat tabel field SKU di bawah; gabungkan status PO/hold lewat `inventory_id` |
+| `JaringanToko` (menu "Semua Toko") | `GET /jaringan/ringkasan`, `GET /jaringan/transfer?limit=20`, `POST {VITE_COPILOT_URL}/jaringan` | per toko: `health_score` + komponen (`ketersediaan`, `perputaran`, `stabilitas_kas`, 0-100), `perlu_reorder`, `overstock`, `deadstock`, `sku_risiko_tinggi`, `modal_tertahan_idr`, `po_menunggu`, `hold_aktif`; total jaringan dan `health_rata`. Transfer: `dari_toko`, `ke_toko`, `qty`, `nilai_idr` (PO yang bisa dihindari) |
 | `RekapAgent` (menu "Rekap Agent") | `GET /stores/{store}/rekap` | per hari simulasi (terbaru dulu): `run[]` (waktu nyata, status, model, token, ringkasan), `hold[]`, `po_dibuat[]` (status sekarang, pelanggaran), `po_disetujui[]`, `po_ditolak`; `total`. Tombol Unduh CSV (pemisah `;`) dan Cetak / Simpan PDF |
 | `PoApprovalModal` | `GET /purchase-orders/{po_id}`, `GET /purchase-orders/{po_id}/sap-payload`, `POST /purchase-orders/{po_id}/approve` atau `/reject` | `qty`, `nilai_idr`, `alasan` (penalaran agent), `pelanggaran[]`, `vendor_name`; setelah approve: `sap_po_number` |
 | `SuppressionDetailModal` | `GET /holds?store=`, `GET /sku/{id}/substitution` | `modal_diselamatkan_idr`, `alasan`, `qty_uji`; substitusi: `status`, `mitra[]` (`jenis`, `lift_alk`) |
@@ -100,6 +102,12 @@ Saran pengelompokan langkah untuk tampilan:
 
 Satu kali jalan butuh ±20 detik dengan Claude Sonnet 4.6 (±30-60 detik dengan Ollama lokal), jadi tampilkan langkah satu per satu selagi berjalan.
 
+## Semua toko dan Agent Jaringan (menu "Semua Toko")
+
+- `GET /jaringan/ringkasan`: statistik semua toko pada tanggal simulasi sekarang. Health Score per toko sama persis dengan `GET /stores/{store}/ringkasan`. Mensimulasikan 276 ribu SKU butuh ±1 detik, jadi hasilnya disimpan di tabel `cache_jaringan` per (hari simulasi, barang yang dipesan); PO dan hold selalu dibaca terbaru.
+- `GET /jaringan/transfer?limit=20`: merek yang perlu reorder di satu toko padahal toko lain OVERSTOCK/DEADSTOCK untuk merek yang sama. `qty` = min(saran PO toko tujuan, kelebihan toko asal); stok satu toko asal tidak dibagi melebihi kelebihannya. Hanya rekomendasi: jarak dan ongkos kirim belum dihitung, dan belum ada aksi transfer di backend.
+- `POST {VITE_COPILOT_URL}/jaringan` body `{"bahasa": "id"|"en"}`: Agent Jaringan (`copilot/jaringan.py`, Claude Sonnet 4.6 di Lambda `rexa-copilot`) membaca kedua endpoint di atas dan detail toko, lalu mengakhiri dengan tool `tetapkan_prioritas`. Jawaban: `ringkasan`, `toko[]` (3-5 toko, angka dari API + `alasan`, `tindakan`), `transfer[]` (dari daftar transfer + `alasan`), `langkah[]`, `model`, `token_input`, `token_output`, `durasi_dtk`, `per_tanggal`. Toko dan transfer yang tidak ada di data ditolak dan dikembalikan ke model. Biasanya 20-30 detik. Agent ini hanya membaca: PO tetap dibuat agent toko dan disetujui manajer. Laporan terakhir disimpan di `localStorage` browser (`rexa.laporanJaringan.v1`) dan diberi tanda kalau tanggal simulasinya sudah berbeda.
+
 ## Jam simulasi (kontrol tanggal di `Header`)
 
 Data Bibitor berhenti di 31 Des 2016, jadi waktu dimajukan dari tanggal itu (`api/simulasi.py`). Setiap hari simulasi, stok setiap SKU berkurang sesuai permintaan harian dari data (acak tetapi sama untuk SKU dan hari yang sama), dan barang dari PO yang disetujui serta stok uji Hold Reorder tiba setelah lead time vendor. Status stok, prediksi habis, saran PO, Health Score, realokasi, dan prioritas agent ikut berubah.
@@ -139,7 +147,7 @@ Belum ada endpoint khusus. Skenario ini cukup berupa urutan panggilan API yang s
 
 - Jangan menambah data tiruan atau KPI tanpa sumber. Angka yang belum ada di API dicatat sebagai kebutuhan endpoint baru.
 - Klaim arsitektur yang benar: Strands Agents (di laptop lewat worker) + Claude Sonnet 4.6 di Amazon Bedrock, FastAPI di Lambda, dan tiruan SAP S/4HANA (OData `API_PURCHASEORDER_PROCESS_SRV`). Bukan SageMaker dan bukan SAP BTP.
-- Chatbot Copilot hanya membaca: jangan menambahkan tool yang mengubah data (PO, hold, persetujuan) ke `copilot/inti.py`.
+- Chatbot Copilot dan Agent Jaringan hanya membaca: jangan menambahkan tool yang mengubah data (PO, hold, persetujuan) ke `copilot/inti.py` atau `copilot/jaringan.py`.
 - Realokasi tidak punya aksi sendiri di backend: dana dipakai saat PO tujuan disetujui, jadi tombolnya membuka draf PO tujuan.
 
 ## Sumber data per modul (untuk label di dashboard)

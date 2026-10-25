@@ -295,6 +295,62 @@ class OtomatisSimulasi(Request):
     oleh: str = Field(default="manajer", min_length=1, max_length=100)
 
 
+class TokoJaringan(BaseModel):
+    store: int
+    kota: str
+    health_score: int
+    ketersediaan: float = Field(description="Komponen Health Score, 0-100")
+    perputaran: float
+    stabilitas_kas: float
+    sku_aktif: int
+    perlu_reorder: int
+    overstock: int
+    deadstock: int
+    sku_risiko_tinggi: int
+    nilai_stok_idr: float
+    modal_tertahan_idr: float
+    po_menunggu: int
+    nilai_po_menunggu_idr: float
+    hold_aktif: int
+    modal_diselamatkan_idr: float
+
+
+class RingkasanJaringan(BaseModel):
+    per_tanggal: date
+    hari_ke: int
+    jumlah_toko: int
+    health_rata: float
+    nilai_stok_idr: float
+    modal_tertahan_idr: float
+    perlu_reorder: int
+    sku_risiko_tinggi: int
+    po_menunggu: int
+    nilai_po_menunggu_idr: float
+    modal_diselamatkan_idr: float
+    toko: list[TokoJaringan]
+
+
+class TransferStok(BaseModel):
+    merek: int
+    deskripsi: str | None
+    dari_toko: int
+    dari_kota: str
+    dari_inventory_id: str
+    status_dari: str = Field(description="OVERSTOCK atau DEADSTOCK di toko asal")
+    kelebihan_unit: int = Field(description="Stok di atas target stok di toko asal")
+    ke_toko: int
+    ke_kota: str
+    ke_inventory_id: str
+    qty: int = Field(description="Yang bisa dipindahkan: min(saran PO toko tujuan, kelebihan toko asal)")
+    nilai_idr: float = Field(description="Nilai pembelian yang tidak perlu dilakukan kalau stok dipindahkan")
+
+
+class PeluangTransfer(BaseModel):
+    per_tanggal: date
+    total_nilai_idr: float
+    transfer: list[TransferStok]
+
+
 class RunRekap(BaseModel):
     run_id: str
     waktu: str = Field(description="Waktu nyata jejak disimpan")

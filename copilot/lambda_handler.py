@@ -1,13 +1,15 @@
 """Handler Lambda `rexa-copilot` (Function URL, payload 2.0). CORS diatur di konfigurasi Function URL.
 
-POST /tanya  {"store": 74, "pertanyaan": "...", "riwayat": [{"peran": "user"|"assistant", "teks": "..."}]}
-GET  /       cek kesehatan dan model yang dipakai.
+POST /tanya     {"store": 74, "pertanyaan": "...", "riwayat": [{"peran": "user"|"assistant", "teks": "..."}]}
+POST /jaringan  {"bahasa": "id"|"en"}: agent jaringan (copilot/jaringan.py) menganalisis semua toko.
+GET  /          cek kesehatan dan model yang dipakai.
 Galat memakai format yang sama dengan API Rexa: {"detail": {"kode": ..., "pesan": ...}}.
 """
 
 import base64
 import json
 
+from copilot import jaringan
 from copilot.inti import MODEL_ID, jawab
 
 
@@ -20,11 +22,18 @@ def _galat(status: int, kode: str, pesan: str) -> dict:
     return _json(status, {"detail": {"kode": kode, "pesan": pesan}})
 
 
-def _baca_permintaan(event: dict) -> tuple[int, str, list]:
+def _body(event: dict) -> dict:
     body = event.get("body") or "{}"
     if event.get("isBase64Encoded"):
         body = base64.b64decode(body).decode()
     data = json.loads(body)
+    if not isinstance(data, dict):
+        raise ValueError("Body harus objek JSON.")
+    return data
+
+
+def _baca_permintaan(event: dict) -> tuple[int, str, list]:
+    data = _body(event)
     store, pertanyaan, riwayat = data.get("store"), data.get("pertanyaan"), data.get("riwayat") or []
     if not isinstance(store, int) or not 1 <= store <= 9999:
         raise ValueError("store harus nomor toko.")
@@ -36,13 +45,29 @@ def _baca_permintaan(event: dict) -> tuple[int, str, list]:
     return store, pertanyaan.strip(), riwayat
 
 
+def _analisis_jaringan(event: dict) -> dict:
+    try:
+        bahasa = _body(event).get("bahasa", "id")
+    except ValueError as e:  # termasuk JSONDecodeError
+        return _galat(422, "PERMINTAAN_TIDAK_VALID", str(e))
+    if bahasa not in jaringan.BAHASA:
+        return _galat(422, "PERMINTAAN_TIDAK_VALID", "bahasa harus id atau en.")
+    try:
+        return _json(200, jaringan.analisis(bahasa))
+    except Exception as e:
+        print(f"JARINGAN_GAGAL: {type(e).__name__}: {e}")
+        return _galat(502, "JARINGAN_GAGAL", "Agent jaringan belum bisa berjalan sekarang. Coba lagi sebentar.")
+
+
 def handler(event, context):
     http = (event.get("requestContext") or {}).get("http") or {}
     metode, path = http.get("method", "POST"), (event.get("rawPath") or "/").rstrip("/")
     if metode == "GET":
-        return _json(200, {"status": "ok", "model": MODEL_ID})
+        return _json(200, {"status": "ok", "model": MODEL_ID, "model_jaringan": jaringan.MODEL_ID})
+    if metode == "POST" and path == "/jaringan":
+        return _analisis_jaringan(event)
     if metode != "POST" or path not in ("", "/tanya"):
-        return _galat(404, "TIDAK_ADA", "Pakai POST /tanya.")
+        return _galat(404, "TIDAK_ADA", "Pakai POST /tanya atau POST /jaringan.")
     try:
         store, pertanyaan, riwayat = _baca_permintaan(event)
     except (ValueError, json.JSONDecodeError) as e:

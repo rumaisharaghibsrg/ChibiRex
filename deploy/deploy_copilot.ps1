@@ -1,5 +1,6 @@
 <#
-Deploy Rexa Copilot (chatbot dashboard) ke AWS Lambda `rexa-copilot` dengan Function URL publik.
+Deploy Rexa Copilot (chatbot dashboard dan agent jaringan halaman "Semua Toko") ke AWS Lambda `rexa-copilot`
+dengan Function URL publik.
 
 Lambda ini sengaja di luar VPC: Lambda API (chibirex-api-function) berada di VPC tanpa akses internet keluar, jadi
 tidak bisa memanggil Bedrock. Copilot membaca data lewat Function URL API (hanya GET) dan bertanya ke Claude di
@@ -15,7 +16,8 @@ param(
     [string]$Fungsi = "rexa-copilot",
     [string]$FungsiApi = "chibirex-api-function",
     [string]$App = "rexa-dashboard",
-    [string]$Model = "au.anthropic.claude-haiku-4-5-20251001-v1:0"
+    [string]$Model = "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+    [string]$ModelJaringan = "au.anthropic.claude-sonnet-4-6"
 )
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
@@ -58,7 +60,7 @@ with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
 "@ $zip
 Cek "membuat zip"
 
-$lingkungan = Tulis-Json "env.json" @{ Variables = @{ REXA_API_URL = $apiUrl; COPILOT_MODEL_ID = $Model; COPILOT_REGION = $Region } }
+$lingkungan = Tulis-Json "env.json" @{ Variables = @{ REXA_API_URL = $apiUrl; COPILOT_MODEL_ID = $Model; COPILOT_REGION = $Region; JARINGAN_MODEL_ID = $ModelJaringan } }
 $cors = Tulis-Json "cors.json" @{ AllowOrigins = $origins; AllowMethods = @("GET", "POST"); AllowHeaders = @("content-type"); MaxAge = 600 }
 
 $ErrorActionPreference = "Continue"  # di PowerShell 5.1, stderr perintah native memicu galat kalau "Stop"
@@ -69,7 +71,7 @@ $ErrorActionPreference = "Stop"
 if (-not $ada) {
     Write-Host "3. Buat Lambda $Fungsi (di luar VPC, role sama dengan Lambda API)"
     aws lambda create-function --function-name $Fungsi --runtime python3.12 --architectures arm64 `
-        --handler copilot.lambda_handler.handler --role $role --zip-file "fileb://$zip" --timeout 60 --memory-size 512 `
+        --handler copilot.lambda_handler.handler --role $role --zip-file "fileb://$zip" --timeout 120 --memory-size 512 `
         --environment $lingkungan --description "Rexa Copilot: chatbot dashboard, Claude di Bedrock, hanya membaca API" `
         @aws --query FunctionArn --output text | Out-Null
     Cek "create-function"
@@ -92,7 +94,7 @@ if (-not $ada) {
     Cek "update-function-code"
     aws lambda wait function-updated-v2 --function-name $Fungsi @aws
     Cek "menunggu kode baru"
-    aws lambda update-function-configuration --function-name $Fungsi --environment $lingkungan --timeout 60 `
+    aws lambda update-function-configuration --function-name $Fungsi --environment $lingkungan --timeout 120 `
         --memory-size 512 @aws --query LastUpdateStatus --output text | Out-Null
     Cek "update-function-configuration"
     aws lambda wait function-updated-v2 --function-name $Fungsi @aws

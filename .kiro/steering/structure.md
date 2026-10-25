@@ -9,7 +9,7 @@ ChibiRex/
 ├── dashboard/      # React + Vite frontend
 ├── engine/         # Offline analytics pipeline (runs separately, produces chibirex.duckdb)
 ├── sap_mock/       # SAP OData V2 mock; mounted inside the API at /sap
-├── copilot/        # Dashboard chatbot: Lambda rexa-copilot (outside VPC), Claude on Bedrock with read-only API tools
+├── copilot/        # Lambda rexa-copilot (outside VPC), read-only API tools: chatbot (inti.py, Haiku 4.5) and network agent (jaringan.py, Sonnet 4.6)
 ├── data/
 │   ├── raw/        # Source CSVs from Kaggle (Bibitor, Instacart, backorders, online retail)
 │   └── processed/  # Generated artifacts: chibirex.duckdb, state.sqlite, sap_mock.sqlite
@@ -103,6 +103,7 @@ Key components:
 | `CapitalReallocationCard.jsx` | Reallocation from held reorders to rising SKUs; button opens the target draft PO |
 | `GuardrailsModal.jsx` | Live guardrail status, manager reset of the circuit breaker, pending stock audits, audit log |
 | `KpiGrid.jsx` | Key metric cards (reallocation tab) |
+| `JaringanToko.jsx` | "Semua Toko" tab: network KPIs, Health Score chart and sortable table for all stores (`GET /jaringan/ringkasan`), inter-store transfer opportunities (`GET /jaringan/transfer`), and the network agent (`POST {VITE_COPILOT_URL}/jaringan`). Clicking a store opens its dashboard |
 | `RekapAgent.jsx` | "Rekap Agent" tab: agent runs, holds, draft POs, and manager decisions per simulated day (`GET /stores/{store}/rekap`); CSV download and print/PDF |
 | `AiCopilotWidget.jsx` | Chat with Rexa Copilot (`POST {VITE_COPILOT_URL}/tanya`, Claude on Bedrock); falls back to quick answers from dashboard data (`lib/copilot.js`) |
 | `HealthScoreCard.jsx`, `FormulaModal.jsx`, `ScenarioBar.jsx`, `AgenticPipelineVisualizer.jsx` | Leftovers from the original design; not used |
