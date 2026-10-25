@@ -9,6 +9,7 @@ ChibiRex/
 ├── dashboard/      # React + Vite frontend
 ├── engine/         # Offline analytics pipeline (runs separately, produces chibirex.duckdb)
 ├── sap_mock/       # SAP OData V2 mock; mounted inside the API at /sap
+├── copilot/        # Dashboard chatbot: Lambda rexa-copilot (outside VPC), Claude on Bedrock with read-only API tools
 ├── data/
 │   ├── raw/        # Source CSVs from Kaggle (Bibitor, Instacart, backorders, online retail)
 │   └── processed/  # Generated artifacts: chibirex.duckdb, state.sqlite, sap_mock.sqlite
@@ -102,7 +103,7 @@ Key components:
 | `CapitalReallocationCard.jsx` | Reallocation from held reorders to rising SKUs; button opens the target draft PO |
 | `GuardrailsModal.jsx` | Live guardrail status, manager reset of the circuit breaker, pending stock audits, audit log |
 | `KpiGrid.jsx` | Key metric cards (reallocation tab) |
-| `AiCopilotWidget.jsx` | Quick answers from API data via `lib/copilot.js` (no LLM yet) |
+| `AiCopilotWidget.jsx` | Chat with Rexa Copilot (`POST {VITE_COPILOT_URL}/tanya`, Claude on Bedrock); falls back to quick answers from dashboard data (`lib/copilot.js`) |
 | `HealthScoreCard.jsx`, `FormulaModal.jsx`, `ScenarioBar.jsx`, `AgenticPipelineVisualizer.jsx` | Leftovers from the original design; not used |
 
 ## engine/

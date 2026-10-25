@@ -105,6 +105,9 @@ npm run lint      # oxlint
 # Deploy API to AWS Lambda (from repo root)
 .\deploy\deploy_lambda.ps1
 
-# Deploy dashboard to AWS Amplify (app rexa-dashboard)
+# Deploy the chatbot Lambda rexa-copilot (outside the VPC; Claude on Bedrock via IAM role)
+.\deploy\deploy_copilot.ps1
+
+# Deploy dashboard to AWS Amplify (app rexa-dashboard); picks up the API and Copilot URLs
 .\deploy\deploy_dashboard.ps1
 ```
