@@ -1,0 +1,365 @@
+/* ==========================================================================
+   CrisisCommandModal.css — Tactical Red Alert Emergency Hub Modal
+   ========================================================================== */
+
+.crisis-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(2, 6, 23, 0.85);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    padding: 16px;
+    animation: crisisOverlayFadeIn 0.2s ease-out;
+}
+
+@keyframes crisisOverlayFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.crisis-modal-card {
+    position: relative;
+    width: 100%;
+    max-width: 580px;
+    max-height: calc(100vh - 48px);
+    background: linear-gradient(165deg, #1e1114 0%, #0f172a 60%, #020617 100%);
+    border: 2px solid #ef4444;
+    border-radius: 20px;
+    box-shadow: 0 0 50px rgba(239, 68, 68, 0.35),
+                0 25px 60px rgba(0, 0, 0, 0.9),
+                inset 0 1px 1px rgba(254, 202, 202, 0.3);
+    color: #f8fafc;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: crisisCardPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crisis-modal-card.normal-mode {
+    border-color: #38bdf8;
+    box-shadow: 0 0 40px rgba(56, 189, 248, 0.25), 0 25px 60px rgba(0, 0, 0, 0.9);
+}
+
+@keyframes crisisCardPop {
+    from { transform: scale(0.92) translateY(20px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* ── Alert Top Banner ────────────────────────────────────────────────────── */
+.crisis-top-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    background: linear-gradient(90deg, #b91c1c 0%, #7f1d1d 100%);
+    border-bottom: 1px solid rgba(254, 202, 202, 0.2);
+}
+
+.crisis-modal-card.normal-mode .crisis-top-banner {
+    background: linear-gradient(90deg, #0369a1 0%, #0f172a 100%);
+    border-bottom-color: rgba(56, 189, 248, 0.3);
+}
+
+.crisis-banner-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #ffffff;
+}
+
+.crisis-badge-urgent {
+    background: #ef4444;
+    color: #ffffff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+    animation: pulseBadge 1s infinite alternate;
+}
+
+.crisis-badge-normal {
+    background: #10b981;
+    color: #ffffff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+}
+
+@keyframes pulseBadge {
+    from { opacity: 0.75; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1.05); }
+}
+
+.crisis-close-btn {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #cbd5e1;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.15s ease;
+}
+
+.crisis-close-btn:hover {
+    background: #ef4444;
+    color: #ffffff;
+    border-color: #ef4444;
+}
+
+/* ── Content Scroll Area ─────────────────────────────────────────────────── */
+.crisis-content-body {
+    padding: 20px 22px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ── Doni Speech Bubble ──────────────────────────────────────────────────── */
+.crisis-doni-dialog {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 14px;
+    padding: 14px 16px;
+}
+
+.crisis-doni-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    border: 2px solid #fdba74;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+    box-shadow: 0 0 16px rgba(249, 115, 22, 0.4);
+}
+
+.crisis-doni-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.crisis-doni-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: #fb923c;
+    letter-spacing: 0.04em;
+}
+
+.crisis-doni-text {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #e2e8f0;
+    margin: 0;
+}
+
+/* ── Telemetry Problem Card ──────────────────────────────────────────────── */
+.crisis-telemetry-card {
+    background: rgba(2, 6, 23, 0.6);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.crisis-modal-card.normal-mode .crisis-telemetry-card {
+    border-color: rgba(56, 189, 248, 0.3);
+}
+
+.crisis-source-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-family: monospace;
+    font-weight: 700;
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.15);
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    align-self: flex-start;
+}
+
+.crisis-problem-headline {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+}
+
+.crisis-metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    background: rgba(15, 23, 42, 0.8);
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.crisis-metric-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.crisis-metric-label {
+    font-size: 10px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: monospace;
+}
+
+.crisis-metric-val {
+    font-size: 15px;
+    font-weight: 800;
+    color: #f87171;
+    font-family: monospace;
+}
+
+.crisis-metric-limit {
+    font-size: 11px;
+    color: #cbd5e1;
+    font-family: monospace;
+}
+
+.crisis-problem-desc {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #cbd5e1;
+    margin: 0;
+}
+
+/* ── Actions Footer ──────────────────────────────────────────────────────── */
+.crisis-actions-footer {
+    padding: 16px 22px;
+    background: rgba(15, 23, 42, 0.85);
+    border-top: 1px solid rgba(148, 163, 184, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.crisis-btn-resolve {
+    width: 100%;
+    padding: 12px 18px;
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    border: 1px solid #f87171;
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 18px rgba(220, 38, 38, 0.5);
+    transition: all 0.2s ease;
+    animation: pulseButton 1.5s infinite alternate;
+}
+
+@keyframes pulseButton {
+    from { transform: translateY(0); box-shadow: 0 4px 18px rgba(220, 38, 38, 0.4); }
+    to { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(220, 38, 38, 0.7); }
+}
+
+.crisis-btn-resolve:hover {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    transform: translateY(-2px);
+}
+
+.crisis-btn-row {
+    display: flex;
+    gap: 10px;
+}
+
+.crisis-btn-secondary {
+    flex: 1;
+    padding: 9px 14px;
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 10px;
+    color: #cbd5e1;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: monospace;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.crisis-btn-secondary:hover {
+    background: rgba(51, 65, 85, 0.9);
+    color: #ffffff;
+    border-color: #38bdf8;
+}
+
+/* ── Simulation Presets Buttons (In Normal State) ─────────────────────────── */
+.crisis-sim-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.crisis-sim-btn {
+    padding: 10px;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 10px;
+    color: #e2e8f0;
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.crisis-sim-btn:hover {
+    background: rgba(220, 38, 38, 0.15);
+    border-color: #ef4444;
+    color: #ffffff;
+}
+
+.crisis-sim-title {
+    font-weight: 700;
+    color: #f87171;
+}

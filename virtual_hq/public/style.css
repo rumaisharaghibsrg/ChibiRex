@@ -1,0 +1,451 @@
+/* Virtual HQ — Global Styles & Modern Corporate Cyberpunk UI */
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: #0b0c16;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'SF Pro Text', 'JetBrains Mono', 'Fira Code', monospace;
+    color: #e2e8f0;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.6);
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(94, 234, 212, 0.25);
+    border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(94, 234, 212, 0.45);
+}
+
+#app {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 20%, #151828 0%, #090a12 100%);
+    user-select: none;
+}
+
+/* Phaser canvas container styling — Fullscreen Edge-to-Edge */
+#game-container {
+    width: 100% !important;
+    height: 100% !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    position: absolute !important;
+    inset: 0 !important;
+    overflow: hidden !important;
+    z-index: 1;
+}
+
+#game-container canvas {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    image-rendering: pixelated;
+}
+
+/* Mobile Controls Floating Overlay (Directive v5.1 & v5.3) */
+.mobile-controls-overlay {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    pointer-events: none !important;
+    z-index: 45 !important;
+    overflow: hidden !important;
+    transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.mobile-controls-overlay.is-hidden {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+}
+
+.mobile-controls-overlay > * {
+    pointer-events: auto !important;
+}
+
+.mobile-controls-overlay.is-hidden > * {
+    pointer-events: none !important;
+}
+
+/* 3D Keyboard Keycap Component */
+kbd.keycap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    color: #f8fafc;
+    background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+    border: 1px solid #475569;
+    border-bottom: 2px solid #0f172a;
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    vertical-align: middle;
+}
+
+kbd.keycap.active {
+    background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+    color: #0f172a;
+    border-color: #fbbf24;
+    border-bottom: 1px solid #78350f;
+    transform: translateY(1px);
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+}
+
+/* Keyframe Animations */
+@keyframes pulse-glow {
+    0% {
+        box-shadow: 0 0 15px rgba(243, 156, 18, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 30px rgba(243, 156, 18, 0.7), 0 0 10px rgba(255, 255, 255, 0.4);
+    }
+}
+
+@keyframes pulse-cyan {
+    0% {
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 30px rgba(56, 189, 248, 0.7), 0 0 10px rgba(255, 255, 255, 0.4);
+    }
+}
+
+@keyframes float-badge {
+    0%, 100% {
+        transform: translate(-50%, 0);
+    }
+    50% {
+        transform: translate(-50%, -4px);
+    }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes radar-pulse {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
+    70% {
+        transform: scale(1.6);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(0.95);
+        opacity: 0;
+    }
+}
+
+/* Action Pills for Proximity Interactions */
+.action-pill {
+    position: absolute;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 16px;
+    border-radius: 9999px;
+    font-family: 'JetBrains Mono', 'Segoe UI', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid;
+    animation: float-badge 2.4s ease-in-out infinite;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 100;
+}
+
+.action-pill:active {
+    transform: translateX(-50%) translateY(2px) scale(0.97);
+}
+
+.action-pill-rexa {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.95) 0%, rgba(217, 119, 6, 0.98) 100%);
+    color: #0b0f19;
+    border-color: rgba(251, 191, 36, 0.9);
+    box-shadow: 
+        0 4px 20px rgba(245, 158, 11, 0.45),
+        0 0 0 1px rgba(255, 255, 255, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.action-pill-rexa:hover {
+    box-shadow: 
+        0 6px 28px rgba(245, 158, 11, 0.75),
+        0 0 0 2px rgba(251, 191, 36, 0.9),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    transform: translateX(-50%) translateY(-2px) scale(1.04);
+}
+
+.action-pill-manager {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.95) 0%, rgba(2, 132, 199, 0.98) 100%);
+    color: #0b0f19;
+    border-color: rgba(56, 189, 248, 0.9);
+    box-shadow: 
+        0 4px 20px rgba(14, 165, 233, 0.45),
+        0 0 0 1px rgba(255, 255, 255, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.action-pill-manager:hover {
+    box-shadow: 
+        0 6px 28px rgba(14, 165, 233, 0.75),
+        0 0 0 2px rgba(56, 189, 248, 0.9),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    transform: translateX(-50%) translateY(-2px) scale(1.04);
+}
+
+/* Status Indicators & Badges */
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-dot.live {
+    background-color: #10b981;
+    box-shadow: 0 0 8px #10b981;
+    animation: live-dot 2s ease-in-out infinite;
+}
+
+.status-dot.pulse-amber {
+    background-color: #f59e0b;
+    box-shadow: 0 0 8px #f59e0b;
+    animation: live-dot 1s ease-in-out infinite;
+}
+
+@keyframes live-dot {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.35;
+        transform: scale(0.8);
+    }
+}
+
+.hud-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(51, 65, 85, 0.8);
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #94a3b8;
+}
+
+/* Subtle Red Dot Indicator (Graceful Fallback Easter Egg) */
+.subtle-red-dot {
+    display: inline-block;
+    color: #ef4444 !important;
+    font-weight: 900 !important;
+    font-size: 1.25em !important;
+    line-height: 0.8 !important;
+    transform: translateY(-1px);
+    transition: transform 0.15s ease;
+    user-select: none;
+}
+
+.subtle-red-dot:hover {
+    transform: scale(1.6);
+}
+
+/* ==========================================================================
+   MOBILE-FIRST & PORTRAIT UX TRANSFORMATION (Directive v5.0)
+   ========================================================================== */
+
+@keyframes slideUpBottomSheet {
+    from {
+        transform: translateY(100%);
+        opacity: 0.7;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Modal Overlays: align to bottom (Bottom Sheet layout) - Enforced z-index 99999 (Directive v5.3) */
+    .modal-overlay,
+    .help-modal-overlay,
+    .npc-dialog-overlay,
+    .npc-dialog-backdrop,
+    .crisis-modal-overlay,
+    .regional-modal-overlay,
+    .approval-modal-overlay,
+    .time-modal-overlay {
+        position: fixed !important;
+        inset: 0 !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        z-index: 99999 !important;
+        align-items: flex-end !important;
+        justify-content: center !important;
+        padding: 0 !important;
+        background: rgba(2, 6, 23, 0.88) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+    }
+
+    /* Modal Cards: Full-width Bottom Sheet */
+    .modal-card,
+    .help-modal-card,
+    .npc-dialog-card,
+    .crisis-modal-card,
+    .regional-modal-card,
+    .approval-modal-card,
+    .time-modal-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: 86vh !important;
+        border-radius: 22px 22px 0 0 !important;
+        border-bottom: none !important;
+        margin: 0 !important;
+        z-index: 100000 !important;
+        animation: slideUpBottomSheet 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.85) !important;
+    }
+
+    /* Smart TV Inspect Mode in Mobile: Full-width Bottom Sheet */
+    #smart-tv-responsive-container.mode-inspect {
+        position: fixed !important;
+        inset: 0 !important;
+        top: auto !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 86vh !important;
+        max-height: 86vh !important;
+        border-radius: 22px 22px 0 0 !important;
+        z-index: 100000 !important;
+        border-bottom: none !important;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.85) !important;
+        animation: slideUpBottomSheet 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    /* Grabber handle indicator at top of bottom sheets */
+    .help-modal-card::before,
+    .npc-dialog-card::before,
+    .crisis-modal-card::before,
+    .regional-modal-card::before,
+    .approval-modal-card::before,
+    .time-modal-card::before {
+        content: '';
+        display: block;
+        width: 44px;
+        height: 5px;
+        background: rgba(148, 163, 184, 0.4);
+        border-radius: 9999px;
+        margin: 8px auto 6px auto;
+        flex-shrink: 0;
+    }
+
+    /* Modal contents scrollable */
+    .help-modal-body,
+    .npc-dialog-body,
+    .crisis-modal-body {
+        max-height: calc(86vh - 80px) !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+
+    /* Regional Store Grid in Mobile: 2 compact columns */
+    .regional-store-grid {
+        grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)) !important;
+        gap: 8px !important;
+        padding: 12px 14px !important;
+    }
+
+    /* Smartphone Chat Intercom Container Mobile */
+    .smartphone-chat-container {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 85vh !important;
+        max-height: 85vh !important;
+        border-radius: 20px 20px 0 0 !important;
+        border-bottom: none !important;
+    }
+
+    /* Hide Desktop Proximity Keycaps on Mobile */
+    kbd.keycap {
+        display: none !important;
+    }
+
+    /* Hide desktop FAB Help on mobile (it is in Drawer menu) */
+    .help-fab-btn {
+        display: none !important;
+    }
+}

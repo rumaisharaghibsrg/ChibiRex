@@ -1,0 +1,277 @@
+/**
+ * NPCDialogModal.css — Styling untuk Quick NPC Dialog & Fallback Data Showcase
+ */
+
+.npc-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(8, 10, 20, 0.78);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99998;
+    padding: 16px;
+    animation: npc-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes npc-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.npc-dialog-card {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(11, 15, 29, 0.96));
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 30px rgba(56, 189, 248, 0.15);
+    overflow: hidden;
+    color: #f8fafc;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    animation: npc-slide-up 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes npc-slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ── Top Header Banner ─────────────────────────────────────────────────────── */
+.npc-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    background: rgba(30, 41, 59, 0.5);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.npc-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.npc-avatar-box {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1.5px solid rgba(56, 189, 248, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.npc-title-box {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.npc-name {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #f8fafc;
+}
+
+.npc-role-tag {
+    font-size: 11px;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.npc-location-pill {
+    font-size: 9px;
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.npc-close-btn {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.npc-close-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* ── Content Body ─────────────────────────────────────────────────────────── */
+.npc-dialog-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Dialogue Speech Bubble */
+.npc-speech-card {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-left: 3px solid #38bdf8;
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative;
+}
+
+.npc-speech-label {
+    font-size: 10px;
+    font-weight: bold;
+    color: #38bdf8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.npc-speech-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #e2e8f0;
+    margin: 0;
+}
+
+/* Subtle Red Dot Indicator Styling */
+.subtle-red-dot {
+    display: inline-block;
+    color: #ef4444 !important;
+    font-weight: 900 !important;
+    font-size: 1.25em !important;
+    line-height: 0.8 !important;
+    transform: translateY(-1px);
+    transition: transform 0.15s ease;
+    user-select: none;
+}
+
+.subtle-red-dot:hover {
+    transform: scale(1.6);
+}
+
+/* Supporting Metrics Grid */
+.npc-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.npc-metric-item {
+    background: rgba(30, 41, 59, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.npc-metric-label {
+    font-size: 10px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.npc-metric-value {
+    font-size: 13px;
+    font-weight: bold;
+    color: #f8fafc;
+}
+
+/* Fallback Notice Bar (Dev Badge) */
+.npc-fallback-tag {
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 6px;
+    color: #fca5a5;
+}
+
+/* ── Action Footer ────────────────────────────────────────────────────────── */
+.npc-dialog-footer {
+    padding: 14px 20px;
+    background: rgba(15, 23, 42, 0.8);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.npc-btn-secondary {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: #e2e8f0;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.npc-btn-secondary:hover {
+    background: rgba(51, 65, 85, 0.9);
+    border-color: #94a3b8;
+    color: #ffffff;
+}
+
+.npc-btn-primary {
+    background: linear-gradient(135deg, #0284c7, #0369a1);
+    border: 1px solid rgba(56, 189, 248, 0.5);
+    color: #ffffff;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.npc-btn-primary:hover {
+    background: linear-gradient(135deg, #0369a1, #075985);
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.5);
+}
