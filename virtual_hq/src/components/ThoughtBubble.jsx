@@ -53,6 +53,7 @@ export function ThoughtBubble({
     screenPos,
     countdown,
     isFallback = false,
+    onTutup,
 }) {
     if (!visible) return null;
 
@@ -176,6 +177,27 @@ export function ThoughtBubble({
                     )}
                     {isFallback ? 'SELESAI' : (status || 'MEMULAI')}
                 </div>
+                {onTutup && (
+                    <button
+                        onClick={onTutup}
+                        title="Tutup (Esc): lanjut berjalan, agent tetap bekerja di latar"
+                        aria-label="Tutup bubble agent"
+                        style={{
+                            marginLeft: '8px',
+                            padding: '2px 7px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(148, 163, 184, 0.35)',
+                            background: 'rgba(30, 41, 59, 0.8)',
+                            color: '#cbd5e1',
+                            fontSize: '10px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                        }}
+                    >
+                        ✕ Esc
+                    </button>
+                )}
             </div>
 
             {/* ── Konten Pemikiran: Saat Analisis Sedang Berjalan ─────────── */}

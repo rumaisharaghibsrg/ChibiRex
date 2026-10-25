@@ -102,6 +102,8 @@ function App() {
     const [summary, setSummary]             = useState('');
     const [errorMessage, setErrorMessage]   = useState('');
     const [countdown, setCountdown]         = useState(5);
+    // Bubble ditutup pemain (✕ / Esc): pemain bebas bergerak, agent tetap dipantau di latar.
+    const [bubbleTertutup, setBubbleTertutup] = useState(false);
 
     const pollingTimerRef   = useRef(null);
     const countdownTimerRef = useRef(null);
@@ -165,14 +167,17 @@ function App() {
                 // MENUNGGU = mode antrian, tugas belum diambil worker agent di laptop.
                 setAgentStatus(data.status === 'MENUNGGU' ? 'MEMULAI' : data.status);
 
+                // Hasil akhir selalu ditampilkan, juga kalau bubble sempat ditutup (pemain tidak dibekukan lagi).
                 if (data.status === 'SELESAI') {
                     berhenti();
                     setSummary(data.jawaban || 'Tinjauan toko selesai. Draf PO siap ditinjau manajer.');
+                    setBubbleTertutup(false);
                     beritahuDataBerubah();
                     startCloseCountdown(8);
                 } else if (data.status === 'GAGAL') {
                     berhenti();
                     setErrorMessage(data.pesan || 'Agent gagal dijalankan.');
+                    setBubbleTertutup(false);
                     beritahuDataBerubah();
                     startCloseCountdown(8);
                 }
@@ -206,6 +211,7 @@ function App() {
         setSummary('');
         setErrorMessage('');
         setCountdown(5);
+        setBubbleTertutup(false);
 
         try {
             // 3. Antrikan agent di API (mode antrian: worker di laptop mengambilnya), lalu pantau langkahnya.
@@ -227,6 +233,13 @@ function App() {
             startCloseCountdown(8);
         }
     }, [agentRunning, isApprovalModalOpen, clearAllTimers, startPolling, startCloseCountdown, currentStore]);
+
+    // ── Tutup bubble agent (✕ / Esc): pemain bisa bergerak lagi, agent tetap bekerja dan dipantau ──
+    const handleTutupBubble = useCallback(() => {
+        setBubbleTertutup(true);
+        EventBus.emit('unfreeze-player');
+        window.dispatchEvent(new CustomEvent('unfreeze-player'));
+    }, []);
 
     // ── Buka Modal Approval saat Tombol 'E' Ditekan di Meja Manajer ───────────
     const handleOpenApprovalModal = useCallback(() => {
@@ -491,7 +504,9 @@ function App() {
             const tag = target?.tagName?.toLowerCase();
             if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
 
-            if (e.key === 'c' || e.key === 'C') {
+            if (e.key === 'Escape' && agentRunning && !bubbleTertutup && !isAnyModalOpen) {
+                handleTutupBubble();
+            } else if (e.key === 'c' || e.key === 'C') {
                 handleToggleChat();
             } else if (e.key.toLowerCase() === 'x' || e.key === 'h' || e.key === 'H' || e.key === '?') {
                 e.preventDefault();
@@ -504,7 +519,7 @@ function App() {
 
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [handleToggleChat, handleToggleHelpModal, triggerProximityAction]);
+    }, [handleToggleChat, handleToggleHelpModal, triggerProximityAction, agentRunning, bubbleTertutup, isAnyModalOpen, handleTutupBubble]);
 
     // ── Setup Event Listeners dari Phaser & Window ────────────────────────────
     useEffect(() => {
@@ -945,7 +960,10 @@ function App() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     {agentRunning ? (
                         <div
+                            onClick={() => setBubbleTertutup(false)}
+                            title={bubbleTertutup ? 'Klik untuk melihat langkah agent lagi' : 'Agent Rexa sedang bekerja (Esc untuk lanjut berjalan)'}
                             style={{
+                                cursor: bubbleTertutup ? 'pointer' : 'default',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '8px',
@@ -961,7 +979,7 @@ function App() {
                             }}
                         >
                             <span className="status-dot pulse-amber" />
-                            <span>⚡ REXA IN PATROL · LANGKAH #{stepCount || 1}</span>
+                            <span>⚡ REXA IN PATROL · LANGKAH #{stepCount || 1}{bubbleTertutup ? ' · LIHAT' : ''}</span>
                         </div>
                     ) : isApprovalModalOpen ? (
                         <div
@@ -1201,7 +1219,8 @@ function App() {
 
                 {/* ── Visualisasi Pemikiran (Thought Bubble React) ─────────── */}
                 <ThoughtBubble
-                    visible={agentRunning}
+                    visible={agentRunning && !bubbleTertutup}
+                    onTutup={handleTutupBubble}
                     status={agentStatus}
                     currentStep={currentStep}
                     stepCount={stepCount}
