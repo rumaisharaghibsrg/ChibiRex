@@ -3,7 +3,7 @@
  *
  * Ditampilkan melayang di atas sprite Rexa pada koordinat layar yang sinkron dengan Phaser.
  * Menampilkan status analitik, langkah tool terbaru dengan styling futuristik,
- * dan ringkasan eksekutif dengan progress bar countdown.
+ * dan ringkasan eksekutif; bubble hanya ditutup pemain (✕, Esc, atau bergeser).
  */
 
 import React from 'react';
@@ -43,6 +43,33 @@ const TOOL_INFO = {
     },
 };
 
+// Baris aksi setelah run selesai: bubble tidak tertutup otomatis; hasil tetap tersimpan setelah ditutup.
+function AksiHasil({ onJalankanUlang, warna }) {
+    return (
+        <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <span style={{ color: '#64748b', fontSize: '9px', lineHeight: 1.4 }}>
+                Geser, ✕, atau Esc untuk menutup. Hasil tetap tersimpan (klik status di header untuk membuka lagi).
+            </span>
+            <button
+                onClick={onJalankanUlang}
+                style={{
+                    padding: '5px 10px',
+                    borderRadius: '8px',
+                    border: `1px solid ${warna}`,
+                    background: 'rgba(15, 23, 42, 0.9)',
+                    color: warna,
+                    fontSize: '10px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                ↻ Jalankan Ulang
+            </button>
+        </div>
+    );
+}
+
 export function ThoughtBubble({
     visible,
     status,
@@ -51,9 +78,9 @@ export function ThoughtBubble({
     summary,
     errorMessage,
     screenPos,
-    countdown,
     isFallback = false,
     onTutup,
+    onJalankanUlang,
 }) {
     if (!visible) return null;
 
@@ -302,24 +329,7 @@ export function ThoughtBubble({
                     </div>
 
                     {/* Progress Bar Countdown Penutupan */}
-                    {countdown > 0 && (
-                        <div style={{ marginTop: '10px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '9px', marginBottom: '3px' }}>
-                                <span>Menutup otomatis & membuka kontrol</span>
-                                <span>{countdown}s</span>
-                            </div>
-                            <div style={{ height: '3px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
-                                <div
-                                    style={{
-                                        height: '100%',
-                                        backgroundColor: '#34d399',
-                                        width: `${(countdown / 5) * 100}%`,
-                                        transition: 'width 1s linear',
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    )}
+                    {onJalankanUlang && <AksiHasil onJalankanUlang={onJalankanUlang} warna="#34d399" />}
                 </div>
             )}
 
@@ -345,24 +355,7 @@ export function ThoughtBubble({
                         {errorMessage || 'Agent gagal dijalankan.'}
                     </div>
 
-                    {countdown > 0 && (
-                        <div style={{ marginTop: '10px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '9px', marginBottom: '3px' }}>
-                                <span>Menutup dalam</span>
-                                <span>{countdown}s</span>
-                            </div>
-                            <div style={{ height: '3px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
-                                <div
-                                    style={{
-                                        height: '100%',
-                                        backgroundColor: '#f87171',
-                                        width: `${(countdown / 5) * 100}%`,
-                                        transition: 'width 1s linear',
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    )}
+                    {onJalankanUlang && <AksiHasil onJalankanUlang={onJalankanUlang} warna="#f87171" />}
                 </div>
             )}
 

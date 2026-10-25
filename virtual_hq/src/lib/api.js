@@ -94,6 +94,8 @@ export const api = {
     // Agent Rexa (worker di laptop, mode antrian)
     mulaiAgent: (store) => request('/agent-runs/mulai', { method: 'POST', body: { store } }),
     statusAgent: (runId) => request(`/agent-runs/${runId}`),
+    agentAktif: () => request('/agent-runs/aktif'),
+    riwayatAgent: (limit = 30) => request(`/agent-runs${query({ limit })}`),
     statusWorker: () => request('/agent-runs/worker'),
 
     // Copilot (Lambda terpisah): riwayat = [{peran: 'user'|'assistant', teks}]

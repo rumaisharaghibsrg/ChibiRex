@@ -38,7 +38,6 @@ function App() {
     const { currentStore, switchStore } = useStore();
     const { daysOffset, isWarping, formattedDate, apiOnline } = useTimeSimulation();
     const [currentScene, setCurrentScene] = useState('');
-    const [playerPos, setPlayerPos]       = useState({ x: 0, y: 0 });
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
     // ── Status Regional Command Center (80 Cabang DuckDB) ────────────────────
@@ -94,112 +93,90 @@ function App() {
     );
 
     // ── Status Sesi AI Agent Rexa ─────────────────────────────────────────────
+    // agentRunning = run sedang berjalan. Hasil run terakhir (status, langkah, ringkasan) tetap tersimpan setelah run
+    // selesai; bubble tidak pernah tertutup otomatis, hanya oleh pemain (bergeser, ✕, atau Esc), dan bisa dibuka lagi
+    // dari header. Run terakhir toko yang diawasi dibaca dari API, jadi hasilnya tetap ada setelah halaman dimuat ulang.
     const [agentRunning, setAgentRunning]   = useState(false);
     const [agentStatus, setAgentStatus]     = useState(''); // 'MEMULAI', 'BERJALAN', 'SELESAI', 'GAGAL'
-    const [runId, setRunId]                 = useState(null);
     const [currentStep, setCurrentStep]     = useState(null);
     const [stepCount, setStepCount]         = useState(0);
     const [summary, setSummary]             = useState('');
     const [errorMessage, setErrorMessage]   = useState('');
-    const [countdown, setCountdown]         = useState(5);
-    // Bubble ditutup pemain (✕ / Esc): pemain bebas bergerak, agent tetap dipantau di latar.
-    const [bubbleTertutup, setBubbleTertutup] = useState(false);
+    const [bubbleTerbuka, setBubbleTerbuka] = useState(false);
+    const adaHasil = agentStatus === 'SELESAI' || agentStatus === 'GAGAL';
 
-    const pollingTimerRef   = useRef(null);
-    const countdownTimerRef = useRef(null);
+    const pollingTimerRef = useRef(null);
+    // "Geser untuk menutup": posisi pemain terakhir dan posisinya saat hasil agent mulai terlihat.
+    const posisiPemainRef  = useRef(null);
+    const jangkarRef       = useRef(null);
+    const bubbleTerbukaRef = useRef(false);
+    const agentRunningRef  = useRef(false);
+    useEffect(() => {
+        bubbleTerbukaRef.current = bubbleTerbuka;
+        agentRunningRef.current = agentRunning;
+        jangkarRef.current = bubbleTerbuka && !agentRunning ? posisiPemainRef.current : null;
+    }, [bubbleTerbuka, agentRunning]);
 
-    // ── Bersihkan Timer saat Unmount ──────────────────────────────────────────
     const clearAllTimers = useCallback(() => {
         if (pollingTimerRef.current) {
             clearInterval(pollingTimerRef.current);
             pollingTimerRef.current = null;
         }
-        if (countdownTimerRef.current) {
-            clearInterval(countdownTimerRef.current);
-            countdownTimerRef.current = null;
-        }
     }, []);
 
-    // ── Hitung Mundur Sebelum Menutup Bubble & Unfreeze Player (galat ditampilkan lebih lama) ─────────
-    const startCloseCountdown = useCallback((detik = 5) => {
-        let count = detik;
-        setCountdown(count);
+    // Run selesai atau gagal: pemain dicairkan, bubble dibiarkan seperti apa adanya sampai pemain menutupnya.
+    const selesaiRun = useCallback(() => {
+        setAgentRunning(false);
+        EventBus.emit('unfreeze-player');
+        window.dispatchEvent(new CustomEvent('unfreeze-player'));
+    }, []);
 
-        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
-
-        countdownTimerRef.current = setInterval(() => {
-            count -= 1;
-            setCountdown(count);
-
-            if (count <= 0) {
-                clearInterval(countdownTimerRef.current);
-                countdownTimerRef.current = null;
-
-                // Tutup thought bubble dan kembalikan kontrol gerak ke pemain!
-                setAgentRunning(false);
-                setAgentStatus('');
-                EventBus.emit('unfreeze-player');
-            }
-        }, 1000);
+    // Tampilkan run dari API (GET /agent-runs/{id} atau GET /agent-runs) di state bubble.
+    const terapkanRun = useCallback((run) => {
+        const steps = run.langkah || [];
+        setStepCount(steps.length);
+        setCurrentStep(steps.length > 0 ? steps[steps.length - 1] : null);
+        const status = run.status || (run.berhasil ? 'SELESAI' : 'GAGAL'); // jejak lama belum punya kolom status
+        // MENUNGGU = mode antrian, tugas belum diambil worker agent di laptop.
+        setAgentStatus(status === 'MENUNGGU' ? 'MEMULAI' : status);
+        if (status === 'SELESAI') setSummary(run.jawaban || 'Tinjauan toko selesai. Draf PO siap ditinjau manajer.');
+        if (status === 'GAGAL') setErrorMessage(run.pesan || 'Agent gagal dijalankan.');
+        return status;
     }, []);
 
     // ── Mulai Polling Status Agen Setiap 2000ms ───────────────────────────────
     const startPolling = useCallback((activeRunId) => {
-        if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
-
-        const berhenti = () => {
-            if (pollingTimerRef.current) {
-                clearInterval(pollingTimerRef.current);
-                pollingTimerRef.current = null;
-            }
-        };
+        clearAllTimers();
         let gagalBeruntun = 0;
 
         pollingTimerRef.current = setInterval(async () => {
             try {
-                const data = await api.statusAgent(activeRunId);
+                const status = terapkanRun(await api.statusAgent(activeRunId));
                 gagalBeruntun = 0;
-                const steps = data.langkah || [];
-                const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
-
-                setStepCount(steps.length);
-                setCurrentStep(latestStep);
-                // MENUNGGU = mode antrian, tugas belum diambil worker agent di laptop.
-                setAgentStatus(data.status === 'MENUNGGU' ? 'MEMULAI' : data.status);
-
-                // Hasil akhir selalu ditampilkan, juga kalau bubble sempat ditutup (pemain tidak dibekukan lagi).
-                if (data.status === 'SELESAI') {
-                    berhenti();
-                    setSummary(data.jawaban || 'Tinjauan toko selesai. Draf PO siap ditinjau manajer.');
-                    setBubbleTertutup(false);
+                if (status === 'SELESAI' || status === 'GAGAL') {
+                    clearAllTimers();
                     beritahuDataBerubah();
-                    startCloseCountdown(8);
-                } else if (data.status === 'GAGAL') {
-                    berhenti();
-                    setErrorMessage(data.pesan || 'Agent gagal dijalankan.');
-                    setBubbleTertutup(false);
-                    beritahuDataBerubah();
-                    startCloseCountdown(8);
+                    selesaiRun();
                 }
             } catch (err) {
                 // Satu permintaan gagal (misalnya cold start) belum berarti agent gagal; tiga kali beruntun baru dilaporkan.
                 gagalBeruntun += 1;
                 if (gagalBeruntun < 3) return;
-                berhenti();
+                clearAllTimers();
                 setAgentStatus('GAGAL');
                 setErrorMessage(`Status agent tidak bisa dibaca: ${err.message}`);
-                startCloseCountdown(8);
+                selesaiRun();
             }
         }, 2000);
-    }, [startCloseCountdown]);
+    }, [clearAllTimers, terapkanRun, selesaiRun]);
 
-    // ── Eksekusi Pemanggilan API saat Tombol 'E' Ditekan di Rexa ──────────────
+    // ── Eksekusi Pemanggilan API saat Tombol 'E' Ditekan di Rexa (atau "Jalankan Ulang") ─────────
     const handleTriggerAgent = useCallback(async ({ store } = {}) => {
         if (agentRunning || isApprovalModalOpen) return; // Cegah pemanggilan ganda
 
         const activeStoreId = parseInt(store || currentStore?.id || 74, 10);
 
-        // 1. Bekukan gerakan pemain
+        // 1. Bekukan gerakan pemain selama agent bekerja (Esc atau ✕ melepaskannya)
         EventBus.emit('freeze-player');
 
         // 2. Inisialisasi tampilan ThoughtBubble
@@ -210,19 +187,16 @@ function App() {
         setStepCount(0);
         setSummary('');
         setErrorMessage('');
-        setCountdown(5);
-        setBubbleTertutup(false);
+        setBubbleTerbuka(true);
 
         try {
             // 3. Antrikan agent di API (mode antrian: worker di laptop mengambilnya), lalu pantau langkahnya.
             const data = await api.mulaiAgent(activeStoreId);
-            setRunId(data.run_id);
-            setAgentStatus(data.status === 'MENUNGGU' ? 'MEMULAI' : data.status);
+            terapkanRun(data);
             startPolling(data.run_id);
         } catch (err) {
             // Agent lain sedang berjalan (misalnya dari dashboard): ikuti run itu, jangan mulai yang baru.
             if (err.kode === 'AGENT_SEDANG_BERJALAN' && err.detail?.run_id) {
-                setRunId(err.detail.run_id);
                 setAgentStatus('BERJALAN');
                 startPolling(err.detail.run_id);
                 return;
@@ -230,16 +204,47 @@ function App() {
             console.warn('[VirtualHQ] Agent Rexa tidak bisa dimulai:', err);
             setAgentStatus('GAGAL');
             setErrorMessage(err.message);
-            startCloseCountdown(8);
+            selesaiRun();
         }
-    }, [agentRunning, isApprovalModalOpen, clearAllTimers, startPolling, startCloseCountdown, currentStore]);
+    }, [agentRunning, isApprovalModalOpen, clearAllTimers, startPolling, terapkanRun, selesaiRun, currentStore]);
 
-    // ── Tutup bubble agent (✕ / Esc): pemain bisa bergerak lagi, agent tetap bekerja dan dipantau ──
+    // ── Tutup bubble agent (bergeser, ✕, Esc): hasil tetap tersimpan; kalau agent masih bekerja, ia lanjut di latar ──
     const handleTutupBubble = useCallback(() => {
-        setBubbleTertutup(true);
+        setBubbleTerbuka(false);
         EventBus.emit('unfreeze-player');
         window.dispatchEvent(new CustomEvent('unfreeze-player'));
     }, []);
+
+    // ── Run terakhir toko yang diawasi (saat dibuka dan setiap ganti toko) ─────────────────────────
+    const storeIdAktif = currentStore?.id || 74;
+    useEffect(() => {
+        if (agentRunningRef.current) return undefined;
+        let aktif = true;
+        Promise.all([api.agentAktif().catch(() => null), api.riwayatAgent(30).catch(() => [])]).then(([jalan, runs]) => {
+            if (!aktif || agentRunningRef.current) return;
+            setBubbleTerbuka(false);
+            setSummary('');
+            setErrorMessage('');
+            if (jalan && jalan.store === storeIdAktif) {
+                // Agent untuk toko ini sedang berjalan (misalnya dari dashboard): pantau tanpa membekukan pemain.
+                setAgentRunning(true);
+                terapkanRun(jalan);
+                startPolling(jalan.run_id);
+                return;
+            }
+            const terakhir = runs.find((r) => r.store === storeIdAktif);
+            if (terakhir) {
+                terapkanRun(terakhir);
+            } else {
+                setAgentStatus('');
+                setCurrentStep(null);
+                setStepCount(0);
+            }
+        });
+        return () => {
+            aktif = false;
+        };
+    }, [storeIdAktif, terapkanRun, startPolling]);
 
     // ── Buka Modal Approval saat Tombol 'E' Ditekan di Meja Manajer ───────────
     const handleOpenApprovalModal = useCallback(() => {
@@ -504,7 +509,7 @@ function App() {
             const tag = target?.tagName?.toLowerCase();
             if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
 
-            if (e.key === 'Escape' && agentRunning && !bubbleTertutup && !isAnyModalOpen) {
+            if (e.key === 'Escape' && bubbleTerbuka && !isAnyModalOpen) {
                 handleTutupBubble();
             } else if (e.key === 'c' || e.key === 'C') {
                 handleToggleChat();
@@ -519,12 +524,21 @@ function App() {
 
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [handleToggleChat, handleToggleHelpModal, triggerProximityAction, agentRunning, bubbleTertutup, isAnyModalOpen, handleTutupBubble]);
+    }, [handleToggleChat, handleToggleHelpModal, triggerProximityAction, bubbleTerbuka, isAnyModalOpen, handleTutupBubble]);
 
     // ── Setup Event Listeners dari Phaser & Window ────────────────────────────
     useEffect(() => {
         const onSceneReady = (scene) => setCurrentScene(scene.scene.key);
-        const onPlayerMoved = (pos) => setPlayerPos(pos);
+        const onPlayerMoved = (pos) => {
+            posisiPemainRef.current = pos;
+            if (!bubbleTerbukaRef.current || agentRunningRef.current) return;
+            // Hasil agent sedang dibaca: begitu pemain bergeser lebih dari setengah petak, bubble ditutup.
+            if (!jangkarRef.current) {
+                jangkarRef.current = pos;
+            } else if (Math.hypot(pos.x - jangkarRef.current.x, pos.y - jangkarRef.current.y) > 16) {
+                setBubbleTerbuka(false);
+            }
+        };
         const onRexaProximity = ({ inRange }) => setRexaInRange(inRange);
         const onRexaScreenPos = (pos) => setRexaScreenPos(pos);
         const onManagerProximity = ({ inRange }) => setManagerInRange(inRange);
@@ -959,11 +973,12 @@ function App() {
                 {/* Central Status Indicator */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     {agentRunning ? (
-                        <div
-                            onClick={() => setBubbleTertutup(false)}
-                            title={bubbleTertutup ? 'Klik untuk melihat langkah agent lagi' : 'Agent Rexa sedang bekerja (Esc untuk lanjut berjalan)'}
+                        <button
+                            type="button"
+                            onClick={() => setBubbleTerbuka(true)}
+                            title={bubbleTerbuka ? 'Agent Rexa sedang bekerja (Esc untuk lanjut berjalan)' : 'Klik untuk melihat langkah agent lagi'}
                             style={{
-                                cursor: bubbleTertutup ? 'pointer' : 'default',
+                                cursor: bubbleTerbuka ? 'default' : 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '8px',
@@ -979,8 +994,30 @@ function App() {
                             }}
                         >
                             <span className="status-dot pulse-amber" />
-                            <span>⚡ REXA IN PATROL · LANGKAH #{stepCount || 1}{bubbleTertutup ? ' · LIHAT' : ''}</span>
-                        </div>
+                            <span>⚡ REXA IN PATROL · LANGKAH #{stepCount || 1}{bubbleTerbuka ? '' : ' · LIHAT'}</span>
+                        </button>
+                    ) : adaHasil && !bubbleTerbuka && !isApprovalModalOpen ? (
+                        <button
+                            type="button"
+                            onClick={() => setBubbleTerbuka(true)}
+                            title="Buka lagi hasil agent terakhir untuk toko ini"
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '4px 14px',
+                                borderRadius: '9999px',
+                                background: agentStatus === 'GAGAL' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                border: `1px solid ${agentStatus === 'GAGAL' ? 'rgba(248, 113, 113, 0.5)' : 'rgba(52, 211, 153, 0.5)'}`,
+                                color: agentStatus === 'GAGAL' ? '#f87171' : '#34d399',
+                                fontSize: '11px',
+                                fontFamily: 'monospace',
+                                fontWeight: '700',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            <span>{agentStatus === 'GAGAL' ? '⚠️ AGENT GAGAL' : '✅ HASIL AGENT'} · {stepCount} LANGKAH · LIHAT</span>
+                        </button>
                     ) : isApprovalModalOpen ? (
                         <div
                             style={{
@@ -1219,15 +1256,15 @@ function App() {
 
                 {/* ── Visualisasi Pemikiran (Thought Bubble React) ─────────── */}
                 <ThoughtBubble
-                    visible={agentRunning && !bubbleTertutup}
+                    visible={bubbleTerbuka && (agentRunning || adaHasil)}
                     onTutup={handleTutupBubble}
+                    onJalankanUlang={agentRunning ? null : () => handleTriggerAgent({ store: String(storeIdAktif) })}
                     status={agentStatus}
                     currentStep={currentStep}
                     stepCount={stepCount}
                     summary={summary}
                     errorMessage={errorMessage}
                     screenPos={rexaScreenPos}
-                    countdown={countdown}
                 />
 
                 {/* Pill Aksi Interaktif saat Dekat Rexa */}
