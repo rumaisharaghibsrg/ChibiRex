@@ -5,6 +5,11 @@ import { api, DATA_BERUBAH } from '../lib/api';
 
 const StoreContext = createContext(null);
 
+// Mode Virtual HQ: 'toko' (satu toko yang diawasi) atau 'jaringan' (semua toko, seperti halaman Semua Toko di
+// dashboard). Dibuka dari halaman Semua Toko dengan ?mode=jaringan.
+const MODE_AWAL = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'jaringan'
+    ? 'jaringan' : 'toko';
+
 // Dibuka dari tombol "Mode Virtual HQ" di dashboard dengan ?store=...: mulai di toko yang sama.
 const TOKO_AWAL = (() => {
     const id = typeof window === 'undefined' ? NaN : Number(new URLSearchParams(window.location.search).get('store'));
@@ -28,6 +33,11 @@ export function StoreProvider({ children }) {
     const [storesList, setStoresList] = useState(STORES_MASTER_REGISTRY);
     const [isLoadingStores, setIsLoadingStores] = useState(false);
     const [statsTersedia, setStatsTersedia] = useState(false); // Health Score per toko dari API
+    const [mode, setMode] = useState(MODE_AWAL);
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') window.CURRENT_MODE = mode;
+    }, [mode]);
 
     // Inisialisasi window global agar kode Phaser / non-React dapat membaca cabang aktif secara sinkron
     useEffect(() => {
@@ -81,6 +91,7 @@ export function StoreProvider({ children }) {
                        DEFAULT_STORE;
 
         setCurrentStore(target);
+        setMode('toko');
 
         // Update global runtime
         if (typeof window !== 'undefined') {
@@ -94,8 +105,16 @@ export function StoreProvider({ children }) {
         console.log(`%c[MULTI-TENANT] 🏬 Beralih ke Cabang: ${formatStoreName(target)} (ID: ${target.id})`, 'color: #38bdf8; font-weight: bold;');
     }, [storesList]);
 
+    // 3. Pindah ke mode Semua Toko (staf melapor untuk seluruh jaringan; Rexa menjalankan Agent Jaringan)
+    const keModeJaringan = useCallback(() => {
+        setMode('jaringan');
+        const target = { id: 'SEMUA', city: 'SEMUA TOKO', name: `Semua Toko (${storesList.length})` };
+        EventBus.emit('store-changed', target);
+        window.dispatchEvent(new CustomEvent('store-changed', { detail: target }));
+    }, [storesList.length]);
+
     return (
-        <StoreContext.Provider value={{ currentStore, storesList, isLoadingStores, statsTersedia, switchStore }}>
+        <StoreContext.Provider value={{ currentStore, storesList, isLoadingStores, statsTersedia, switchStore, mode, keModeJaringan }}>
             {children}
         </StoreContext.Provider>
     );

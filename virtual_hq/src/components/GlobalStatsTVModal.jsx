@@ -29,7 +29,9 @@ import { angka, rupiahRingkas, statusHealth } from '../lib/format';
 const WARNA_STATUS = { AMAN: '#34d399', REORDER: '#fbbf24', OVERSTOCK: '#38bdf8', DEADSTOCK: '#f87171' };
 
 export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
-    const { currentStore, switchStore } = useStore();
+    const { currentStore, switchStore, mode: modeHq } = useStore();
+    // Mode Semua Toko: TV menampilkan statistik seluruh jaringan (disimpan dengan kunci 'jaringan').
+    const modeJaringan = modeHq === 'jaringan';
     const { formattedDate } = useTimeSimulation();
     const [hoveredBar, setHoveredBar] = useState(null);
     const [cache, setCache] = useState({}); // toko -> {ringkasan, jaringan, guard, worker, fisik, tanggal}
@@ -38,10 +40,21 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
     const dicobaRef = useRef(new Set());
     const terbuka = mode !== 'hidden';
     const storeId = currentStore?.id || 74;
-    const data = cache[storeId] || null;
+    const kunci = modeJaringan ? 'jaringan' : storeId;
+    const data = cache[kunci] || null;
 
     const muat = useCallback(() => {
         setMemuat(true);
+        if (modeJaringan) {
+            Promise.all([api.jaringan(), api.statusGuardrail(), api.statusWorker().catch(() => null)])
+                .then(([jaringan, guard, worker]) => {
+                    setCache((c) => ({ ...c, jaringan: { ringkasan: null, jaringan, guard, worker, fisik: [], tanggal: formattedDate } }));
+                    setGalat(null);
+                })
+                .catch((e) => setGalat(e.message))
+                .finally(() => setMemuat(false));
+            return;
+        }
         Promise.all([
             api.ringkasan(storeId),
             api.jaringan().catch(() => null), // statistik jaringan opsional (API lama belum punya)
@@ -55,15 +68,15 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
             })
             .catch((e) => setGalat(e.message))
             .finally(() => setMemuat(false));
-    }, [storeId, formattedDate]);
+    }, [storeId, formattedDate, modeJaringan]);
 
-    // Dibaca sekali per toko saat TV pertama kali terlihat; sesudahnya hanya lewat "Muat Ulang".
+    // Dibaca sekali per toko (atau sekali untuk jaringan) saat TV pertama kali terlihat; sesudahnya lewat "Muat Ulang".
     useEffect(() => {
-        if (terbuka && !dicobaRef.current.has(storeId)) {
-            dicobaRef.current.add(storeId);
+        if (terbuka && !dicobaRef.current.has(kunci)) {
+            dicobaRef.current.add(kunci);
             muat();
         }
-    }, [terbuka, storeId, muat]);
+    }, [terbuka, kunci, muat]);
     const usang = data && data.tanggal !== formattedDate;
 
     const r = data?.ringkasan;
@@ -77,11 +90,51 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
         : [];
     const totalSku = statusSku.reduce((t, x) => t + x.jumlah, 0) || 1;
     const persenTertahan = r?.nilai_stok_idr ? Math.round((100 * r.modal_tertahan_idr) / r.nilai_stok_idr) : 0;
+    const siap = Boolean(modeJaringan ? j : r);
+    const tokoSehat = j ? j.toko.filter((t) => t.health_score >= 80).length : 0;
+    const persenTertahanJaringan = j?.nilai_stok_idr ? Math.round((100 * j.modal_tertahan_idr) / j.nilai_stok_idr) : 0;
     const worker = data?.worker;
     const statusAgent = !worker ? { teks: '-', warna: '#94a3b8' }
         : worker.mode === 'antrian'
             ? (worker.aktif ? { teks: 'WORKER AKTIF', warna: '#34d399' } : { teks: 'WORKER MATI', warna: '#f87171' })
             : worker.mode === 'lokal' ? { teks: 'LOKAL', warna: '#34d399' } : { teks: 'NONAKTIF', warna: '#f87171' };
+
+    // Tampilan yang sama untuk kedua mode: angka toko yang diawasi, atau angka seluruh jaringan.
+    const peekKiri = modeJaringan
+        ? { label: 'Health jaringan', nilai: j ? `${angka(j.health_rata)}/100` : galat ? 'Offline' : '...', warna: j ? statusHealth(j.health_rata).warna : '#ffffff' }
+        : { label: `Health Toko ${storeId}`, nilai: r ? `${r.health_score}/100` : galat ? 'Offline' : '...', warna: skor?.warna || '#ffffff' };
+    const peekKanan = modeJaringan
+        ? { label: 'Toko kritis', nilai: j ? `${tokoKritis} toko` : '-' }
+        : { label: 'Rata-rata jaringan', nilai: j ? angka(j.health_rata) : '-' };
+    const kartu = !siap ? [] : modeJaringan ? [
+        { judul: `HEALTH ${j.jumlah_toko} TOKO`, warna: '#38bdf8', nilai: angka(j.health_rata), satuan: '/ 100', warnaNilai: statusHealth(j.health_rata).warna, sub: 'Rata-rata jaringan' },
+        { judul: 'TOKO KRITIS', warna: '#a78bfa', nilai: angka(tokoKritis), satuan: 'toko', sub: `Health < 65 · ${tokoSehat} toko sehat` },
+        { judul: 'PERLU REORDER', warna: '#fbbf24', nilai: angka(j.perlu_reorder), satuan: 'SKU', sub: `${angka(j.sku_risiko_tinggi)} risiko stok habis tinggi` },
+        { judul: 'MODAL TERTAHAN', warna: '#f472b6', nilai: rupiahRingkas(j.modal_tertahan_idr), sub: `${persenTertahanJaringan}% nilai stok jaringan` },
+    ] : [
+        { judul: `HEALTH TOKO ${storeId}`, warna: '#38bdf8', nilai: r.health_score, satuan: '/ 100', warnaNilai: skor?.warna, sub: `${skor.label}${peringkat ? ` · #${peringkat} dari ${j.jumlah_toko}` : ''}` },
+        { judul: `JARINGAN ${j ? j.jumlah_toko : 80} TOKO`, warna: '#a78bfa', nilai: j ? angka(j.health_rata) : '-', sub: j ? `${tokoKritis} toko kritis (< 65)` : 'Statistik jaringan belum tersedia' },
+        { judul: 'PERLU REORDER', warna: '#fbbf24', nilai: angka(r.jumlah_status.REORDER ?? 0), satuan: 'SKU', sub: `${angka(r.sku_risiko_tinggi)} risiko stok habis tinggi` },
+        { judul: 'MODAL TERTAHAN', warna: '#f472b6', nilai: rupiahRingkas(r.modal_tertahan_idr), sub: `${persenTertahan}% nilai stok` },
+    ];
+    const sebaran = !siap ? [] : modeJaringan ? [
+        { kode: 'SEHAT (≥ 80)', jumlah: tokoSehat, warna: '#34d399' },
+        { kode: 'PERHATIAN (65-79)', jumlah: j.toko.length - tokoSehat - tokoKritis, warna: '#fbbf24' },
+        { kode: 'KRITIS (< 65)', jumlah: tokoKritis, warna: '#f87171' },
+    ] : statusSku.map((x) => ({ ...x, warna: WARNA_STATUS[x.kode] }));
+    const totalSebaran = sebaran.reduce((t, x) => t + x.jumlah, 0) || 1;
+    const judulSebaran = !siap ? '' : modeJaringan ? `🏬 SEBARAN ${j.jumlah_toko} TOKO` : `📦 STATUS ${angka(r.sku_aktif)} SKU AKTIF`;
+    const barisStatus = !siap ? [] : [
+        { label: modeJaringan ? '🤖 Worker agent toko' : '🤖 Agent Rexa', ...statusAgent },
+        modeJaringan
+            ? { label: '📋 Draf PO menunggu (jaringan)', teks: `${angka(j.po_menunggu)} PO`, warna: j.po_menunggu ? '#fbbf24' : '#34d399' }
+            : { label: '📦 Maya: hitung fisik', teks: data.fisik.length ? `${data.fisik.length} MENUNGGU AUDIT` : 'TIDAK ADA', warna: data.fisik.length ? '#fbbf24' : '#34d399' },
+        {
+            label: '🛡️ Rian: circuit breaker',
+            teks: data.guard.circuit_breaker_terbuka ? 'TERBUKA' : 'TERTUTUP',
+            warna: data.guard.circuit_breaker_terbuka ? '#f87171' : '#34d399',
+        },
+    ];
 
     // ── Tangani Tombol ESC dan Universal E Toggle untuk Interaksi (Directive v4.8) ─
     useEffect(() => {
@@ -205,15 +258,15 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                     {/* Middle: Key Numbers */}
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '4px 0' }}>
                         <div>
-                            <span style={{ fontSize: '10px', color: '#94a3b8', display: 'block', marginBottom: '-2px' }}>Health Toko {storeId}</span>
-                            <span style={{ fontSize: '15px', fontWeight: '800', color: skor?.warna || '#ffffff', letterSpacing: '-0.3px' }}>
-                                {r ? `${r.health_score}/100` : galat ? 'Offline' : '...'}
+                            <span style={{ fontSize: '10px', color: '#94a3b8', display: 'block', marginBottom: '-2px' }}>{peekKiri.label}</span>
+                            <span style={{ fontSize: '15px', fontWeight: '800', color: peekKiri.warna, letterSpacing: '-0.3px' }}>
+                                {peekKiri.nilai}
                             </span>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                            <span style={{ fontSize: '10px', color: '#94a3b8', display: 'block', marginBottom: '-2px' }}>Rata-rata jaringan</span>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', display: 'block', marginBottom: '-2px' }}>{peekKanan.label}</span>
                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#a78bfa', fontFamily: 'monospace' }}>
-                                {j ? angka(j.health_rata) : '-'}
+                                {peekKanan.nilai}
                             </span>
                         </div>
                     </div>
@@ -309,7 +362,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                     COMMAND CENTER
                                 </h3>
                                 <span style={{ fontSize: '9px', color: '#38bdf8', fontFamily: 'monospace' }}>
-                                    STORE #{storeId} ({currentStore?.city || 'PAENTMARWY'}){data ? ` • data ${data.tanggal}` : ''}
+                                    {modeJaringan ? 'SEMUA TOKO' : `STORE #${storeId} (${currentStore?.city || 'PAENTMARWY'})`}{data ? ` • data ${data.tanggal}` : ''}
                                 </span>
                             </div>
                         </div>
@@ -382,12 +435,12 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             flex: 1,
                         }}
                     >
-                        {!r && (
+                        {!siap && (
                             <div style={{ fontSize: '11px', color: galat ? '#f87171' : '#94a3b8', lineHeight: 1.5 }}>
                                 {galat ? `Data toko tidak bisa dibaca: ${galat}` : 'Memuat data toko...'}
                             </div>
                         )}
-                        {r && (usang || galat) && (
+                        {siap && (usang || galat) && (
                             <div style={{ fontSize: '10px', color: '#fbbf24', lineHeight: 1.5, background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px', padding: '6px 8px' }}>
                                 {galat
                                     ? `Muat ulang terakhir gagal: ${galat}`
@@ -395,74 +448,29 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             </div>
                         )}
 
-                        {r && (
+                        {siap && (
                         <>
                         {/* 4 Kartu KPI Grid 2x2 */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                            <div
-                                style={{
-                                    padding: '10px 12px',
-                                    borderRadius: '10px',
-                                    background: 'rgba(15, 23, 42, 0.6)',
-                                    border: '1px solid rgba(56, 189, 248, 0.18)',
-                                }}
-                            >
-                                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#38bdf8', fontWeight: '700' }}>
-                                    HEALTH TOKO {storeId}
-                                </span>
-                                <div style={{ fontSize: '15px', fontWeight: '800', color: skor?.warna || '#ffffff', margin: '3px 0 1px' }}>
-                                    {r.health_score} <span style={{ fontSize: '10px', color: '#94a3b8' }}>/ 100</span>
+                            {kartu.map((k) => (
+                                <div
+                                    key={k.judul}
+                                    style={{
+                                        padding: '10px 12px',
+                                        borderRadius: '10px',
+                                        background: 'rgba(15, 23, 42, 0.6)',
+                                        border: `1px solid ${k.warna}2e`,
+                                    }}
+                                >
+                                    <span style={{ fontSize: '9px', fontFamily: 'monospace', color: k.warna, fontWeight: '700' }}>
+                                        {k.judul}
+                                    </span>
+                                    <div style={{ fontSize: '15px', fontWeight: '800', color: k.warnaNilai || '#ffffff', margin: '3px 0 1px' }}>
+                                        {k.nilai}{k.satuan && <span style={{ fontSize: '10px', color: '#94a3b8' }}> {k.satuan}</span>}
+                                    </div>
+                                    <span style={{ fontSize: '9px', color: '#94a3b8' }}>{k.sub}</span>
                                 </div>
-                                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{skor.label}{peringkat ? ` · #${peringkat} dari ${j.jumlah_toko}` : ''}</span>
-                            </div>
-                            <div
-                                style={{
-                                    padding: '10px 12px',
-                                    borderRadius: '10px',
-                                    background: 'rgba(15, 23, 42, 0.6)',
-                                    border: '1px solid rgba(167, 139, 250, 0.18)',
-                                }}
-                            >
-                                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#a78bfa', fontWeight: '700' }}>
-                                    JARINGAN {j ? j.jumlah_toko : 80} TOKO
-                                </span>
-                                <div style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', margin: '3px 0 1px' }}>
-                                    {j ? angka(j.health_rata) : '-'}
-                                </div>
-                                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{j ? `${tokoKritis} toko kritis (< 65)` : 'Statistik jaringan belum tersedia'}</span>
-                            </div>
-                            <div
-                                style={{
-                                    padding: '10px 12px',
-                                    borderRadius: '10px',
-                                    background: 'rgba(15, 23, 42, 0.6)',
-                                    border: '1px solid rgba(251, 191, 36, 0.18)',
-                                }}
-                            >
-                                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#fbbf24', fontWeight: '700' }}>
-                                    PERLU REORDER
-                                </span>
-                                <div style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', margin: '3px 0 1px' }}>
-                                    {angka(r.jumlah_status.REORDER ?? 0)} <span style={{ fontSize: '10px', color: '#94a3b8' }}>SKU</span>
-                                </div>
-                                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{angka(r.sku_risiko_tinggi)} risiko stok habis tinggi</span>
-                            </div>
-                            <div
-                                style={{
-                                    padding: '10px 12px',
-                                    borderRadius: '10px',
-                                    background: 'rgba(15, 23, 42, 0.6)',
-                                    border: '1px solid rgba(244, 114, 182, 0.18)',
-                                }}
-                            >
-                                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: '#f472b6', fontWeight: '700' }}>
-                                    MODAL TERTAHAN
-                                </span>
-                                <div style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', margin: '3px 0 1px' }}>
-                                    {rupiahRingkas(r.modal_tertahan_idr)}
-                                </div>
-                                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{persenTertahan}% nilai stok</span>
-                            </div>
+                            ))}
                         </div>
 
                         {/* Grafik toko dengan Health Score terendah (klik untuk berpindah toko) */}
@@ -574,7 +582,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             )}
                         </div>
 
-                        {/* Status SKU toko yang diawasi */}
+                        {/* Status SKU toko yang diawasi, atau sebaran toko per warna Health di mode Semua Toko */}
                         <div
                             style={{
                                 padding: '12px 14px',
@@ -584,11 +592,11 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             }}
                         >
                             <span style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: '700', color: '#e2e8f0', display: 'block', marginBottom: '8px' }}>
-                                📦 STATUS {angka(r.sku_aktif)} SKU AKTIF
+                                {judulSebaran}
                             </span>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                {statusSku.map((x) => {
-                                    const persen = Math.round((100 * x.jumlah) / totalSku);
+                                {sebaran.map((x) => {
+                                    const persen = Math.round((100 * x.jumlah) / totalSebaran);
                                     return (
                                         <div key={x.kode}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', marginBottom: '2px' }}>
@@ -596,7 +604,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                                 <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{angka(x.jumlah)} · {persen}%</span>
                                             </div>
                                             <div style={{ height: '4px', background: 'rgba(30, 41, 59, 0.7)', borderRadius: '2px', overflow: 'hidden' }}>
-                                                <div style={{ width: `${persen}%`, height: '100%', background: WARNA_STATUS[x.kode] }} />
+                                                <div style={{ width: `${persen}%`, height: '100%', background: x.warna }} />
                                             </div>
                                         </div>
                                     );
@@ -604,7 +612,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                             </div>
                         </div>
 
-                        {/* Status agent, audit, dan guardrail */}
+                        {/* Status agent, audit/draf PO, dan guardrail */}
                         <div
                             style={{
                                 padding: '10px 14px',
@@ -617,22 +625,12 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
                                 gap: '5px',
                             }}
                         >
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span style={{ color: '#cbd5e1' }}>🤖 Agent Rexa</span>
-                                <span style={{ color: statusAgent.warna, fontFamily: 'monospace', fontWeight: '700' }}>{statusAgent.teks}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span style={{ color: '#cbd5e1' }}>📦 Maya: hitung fisik</span>
-                                <span style={{ color: data.fisik.length ? '#fbbf24' : '#34d399', fontFamily: 'monospace', fontWeight: '700' }}>
-                                    {data.fisik.length ? `${data.fisik.length} MENUNGGU AUDIT` : 'TIDAK ADA'}
-                                </span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span style={{ color: '#cbd5e1' }}>🛡️ Rian: circuit breaker</span>
-                                <span style={{ color: data.guard.circuit_breaker_terbuka ? '#f87171' : '#34d399', fontFamily: 'monospace', fontWeight: '700' }}>
-                                    {data.guard.circuit_breaker_terbuka ? 'TERBUKA' : 'TERTUTUP'}
-                                </span>
-                            </div>
+                            {barisStatus.map((b) => (
+                                <div key={b.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: '#cbd5e1' }}>{b.label}</span>
+                                    <span style={{ color: b.warna, fontFamily: 'monospace', fontWeight: '700' }}>{b.teks}</span>
+                                </div>
+                            ))}
                         </div>
                         </>
                         )}

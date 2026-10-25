@@ -24,6 +24,7 @@ export default function Sidebar({
   jumlahHold = 0,
   breakerTerbuka = false,
   virtualHqUrl,
+  virtualHqSemua = false,
   user,
   onLogout
 }) {
@@ -150,11 +151,14 @@ export default function Sidebar({
                   );
                 })}
 
-                {/* Pindah ke mode Virtual HQ (kantor 2D, data API yang sama) untuk toko yang sedang dibuka */}
+                {/* Pindah ke mode Virtual HQ (kantor 2D, data API yang sama): toko yang sedang dibuka, atau mode Semua
+                    Toko kalau sedang di halaman Semua Toko */}
                 {virtualHqUrl && (
                   <a
                     href={virtualHqUrl}
-                    title="Buka Virtual HQ: kantor 2D dengan agent dan staf Rexa, memakai data toko yang sama"
+                    title={virtualHqSemua
+                      ? 'Buka Virtual HQ mode Semua Toko: staf melapor untuk seluruh jaringan dan Rexa menjalankan Agent Jaringan'
+                      : 'Buka Virtual HQ: kantor 2D dengan agent dan staf Rexa, memakai data toko yang sama'}
                     className="flex-1 sm:flex-initial lg:w-full flex items-center justify-between px-3 py-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#0f172a] to-[#1e3a5f] hover:from-[#1e293b] hover:to-[#1e4976] shadow-[0_4px_14px_rgba(15,23,42,0.25)] transition-all duration-150"
                   >
                     <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
@@ -162,7 +166,7 @@ export default function Sidebar({
                       <span className="text-left truncate">Mode Virtual HQ</span>
                     </div>
                     <span className="whitespace-nowrap text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-1.5 bg-sky-400/20 text-sky-200">
-                      2D
+                      {virtualHqSemua ? 'Semua' : '2D'}
                     </span>
                   </a>
                 )}

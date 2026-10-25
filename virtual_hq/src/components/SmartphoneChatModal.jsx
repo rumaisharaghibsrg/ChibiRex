@@ -15,7 +15,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { EventBus } from '../game/EventBus';
 import { useStore } from '../context/StoreContext';
 import { api, COPILOT_URL } from '../lib/api';
-import { laporanNpc } from '../lib/npc';
+import { laporanNpc, laporanNpcJaringan } from '../lib/npc';
 import './SmartphoneChatModal.css';
 
 const tunda = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -92,8 +92,9 @@ function detectTargetNPC(query) {
 }
 
 export function SmartphoneChatModal({ isOpen: externalIsOpen, onClose }) {
-    const { currentStore } = useStore();
+    const { currentStore, mode } = useStore();
     const storeId = currentStore?.id || 74;
+    const modeJaringan = mode === 'jaringan';
     const [internalOpen, setInternalOpen] = useState(false);
     const [currentTime, setCurrentTime] = useState('09:41');
     const [inputQuery, setInputQuery] = useState('');
@@ -219,11 +220,11 @@ export function SmartphoneChatModal({ isOpen: externalIsOpen, onClose }) {
         }
         if (npc) {
             try {
-                const l = await laporanNpc(npc.id, storeId);
+                const l = modeJaringan ? await laporanNpcJaringan(npc.id) : await laporanNpc(npc.id, storeId);
                 return {
                     text: `📞 **Laporan ${npc.name} (${npc.role}):**\n\n"${l.dialogue}."\n\n` +
                         l.metrics.map((m) => `• **${m.label}**: ${m.value}`).join('\n'),
-                    tag: `Data API · Toko ${storeId}`,
+                    tag: modeJaringan ? 'Data API · Semua Toko' : `Data API · Toko ${storeId}`,
                 };
             } catch (e) {
                 return { text: `${npc.name} tidak bisa membaca data toko: ${e.message}`, tag: 'API tidak terjangkau' };

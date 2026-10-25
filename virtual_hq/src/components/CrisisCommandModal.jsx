@@ -10,16 +10,20 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { EventBus } from '../game/EventBus';
-import { defaultCrisisState, deteksiKrisis, hasilTerakhir } from '../game/StoreCrisisState';
+import { defaultCrisisState, deteksiKrisis, deteksiKrisisJaringan, hasilTerakhir } from '../game/StoreCrisisState';
 import { useStore } from '../context/StoreContext';
 import { useTimeSimulation } from '../context/TimeSimulationContext';
 import { api, beritahuDataBerubah } from '../lib/api';
 import './CrisisCommandModal.css';
 
 export function CrisisCommandModal({ isOpen, onClose }) {
-    const { currentStore } = useStore();
+    const { currentStore, mode } = useStore();
     const { formattedDate } = useTimeSimulation();
     const storeId = currentStore?.id || 74;
+    // Mode Semua Toko: Doni memeriksa seluruh jaringan (hasil disimpan dengan kunci 'jaringan').
+    const modeJaringan = mode === 'jaringan';
+    const kunci = modeJaringan ? 'jaringan' : storeId;
+    const labelData = modeJaringan ? 'semua toko' : `Toko ${storeId}`;
     const [crisisData, setCrisisData] = useState(defaultCrisisState);
     const [lainnya, setLainnya] = useState([]);
     const [ringkas, setRingkas] = useState('');
@@ -39,21 +43,21 @@ export function CrisisCommandModal({ isOpen, onClose }) {
     const periksa = useCallback(() => {
         setMemeriksa(true);
         setGalat(null);
-        return deteksiKrisis(currentStore)
+        return (modeJaringan ? deteksiKrisisJaringan() : deteksiKrisis(currentStore))
             .then(tampilkan)
             .catch((e) => setGalat(e.message))
             .finally(() => setMemeriksa(false));
-    }, [currentStore, tampilkan]);
+    }, [currentStore, modeJaringan, tampilkan]);
 
     // Saat dibuka (atau toko diganti): tampilkan hasil pemeriksaan terakhir toko ini; periksa hanya kalau belum ada.
     useEffect(() => {
         if (!isOpen) return;
         setResolvedSuccess(false);
         setGalat(null);
-        const tersimpan = hasilTerakhir(currentStore);
+        const tersimpan = hasilTerakhir(kunci);
         if (tersimpan) tampilkan(tersimpan);
         else periksa();
-    }, [isOpen, currentStore, tampilkan, periksa]);
+    }, [isOpen, kunci, tampilkan, periksa]);
 
     const handleClose = useCallback(() => {
         setIsResolving(false);
@@ -96,7 +100,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
         handleClose();
         setTimeout(() => {
             if (aksi.jenis === 'agent') {
-                EventBus.emit('jalankan-agent', { store: String(storeId) });
+                EventBus.emit('jalankan-agent', modeJaringan ? { jaringan: true } : { store: String(storeId) });
             } else if (aksi.jenis === 'npc') {
                 window.dispatchEvent(new CustomEvent('open-npc-dialog-modal', { detail: { npcId: aksi.npcId } }));
             }
@@ -135,7 +139,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                 <div className="crisis-top-banner">
                     <div className="crisis-banner-title">
                         <span>{isCrisis ? '🚨' : '🛡️'}</span>
-                        <span>{isCrisis ? `CRISIS DISPATCH · TOKO #${storeId}` : `STATUS OPERASIONAL · TOKO #${storeId}`}</span>
+                        <span>{`${isCrisis ? 'CRISIS DISPATCH' : 'STATUS OPERASIONAL'} · ${modeJaringan ? 'SEMUA TOKO' : `TOKO #${storeId}`}`}</span>
                         <span className={isCrisis ? 'crisis-badge-urgent' : 'crisis-badge-normal'}>
                             {memeriksa ? 'MEMERIKSA' : galat && !tanggalData ? 'OFFLINE' : isCrisis ? 'URGENT' : 'STABIL'}
                         </span>
@@ -164,7 +168,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                             </div>
                             <p className="crisis-doni-text">
                                 {memeriksa && !tanggalData ? (
-                                    <>"Sebentar, Manager, saya periksa data Toko {storeId} per {formattedDate}..."</>
+                                    <>"Sebentar, Manager, saya periksa data {labelData} per {formattedDate}..."</>
                                 ) : resolvedSuccess ? (
                                     <strong style={{ color: '#4ade80' }}>
                                         🎉 "Circuit breaker sudah direset, Manager. PO baru kembali diproses guardrail seperti biasa."
@@ -173,12 +177,12 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                                     <>"Maaf, Manager, data toko tidak bisa saya baca sekarang: {galat}"</>
                                 ) : isCrisis ? (
                                     <>
-                                        "Manager, data Toko {storeId} per {tanggalData} menunjukkan kondisi <strong>DARURAT</strong> di bagian{' '}
+                                        "Manager, data {labelData} per {tanggalData} menunjukkan kondisi <strong>DARURAT</strong> di bagian{' '}
                                         <strong style={{ color: '#f87171' }}>{crisisData.sourceName}</strong>. Ini angka dari dashboard, bukan perkiraan."
                                     </>
                                 ) : (
                                     <>
-                                        "Tidak ada krisis di Toko {storeId} per {tanggalData}, Manager. {ringkas}"
+                                        "Tidak ada krisis di {labelData} per {tanggalData}, Manager. {ringkas}"
                                     </>
                                 )}
                             </p>

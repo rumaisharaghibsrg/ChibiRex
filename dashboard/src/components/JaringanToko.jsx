@@ -9,9 +9,10 @@ import {
   Truck,
   RefreshCw,
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  Gamepad2
 } from 'lucide-react';
-import { api, COPILOT_URL } from '../lib/api';
+import { api, COPILOT_URL, VIRTUAL_HQ_URL } from '../lib/api';
 import { angka, rupiah, rupiahRingkas, tanggal, waktu } from '../lib/format';
 
 // Ambang warna sama dengan HealthScoreCard di dashboard toko.
@@ -506,12 +507,21 @@ export default function JaringanToko({ refreshKey, onBukaToko }) {
           Data simulasi {tanggal(data.per_tanggal)} (hari +{data.hari_ke}) · {data.jumlah_toko} toko Bibitor. Angka per toko
           sama dengan dashboard tokonya.
         </p>
-        <button
-          onClick={() => setUlang((u) => u + 1)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 self-start"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${memuat ? 'animate-spin' : ''}`} /> Muat ulang
-        </button>
+        <div className="flex gap-2 self-start">
+          <a
+            href={`${VIRTUAL_HQ_URL}?mode=jaringan`}
+            title="Buka Virtual HQ mode Semua Toko: staf melapor untuk seluruh jaringan dan Rexa menjalankan Agent Jaringan"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#0f172a] to-[#1e3a5f] hover:from-[#1e293b] hover:to-[#1e4976] text-xs font-bold text-white"
+          >
+            <Gamepad2 className="w-3.5 h-3.5 text-sky-300" /> Buka di Virtual HQ
+          </a>
+          <button
+            onClick={() => setUlang((u) => u + 1)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${memuat ? 'animate-spin' : ''}`} /> Muat ulang
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">

@@ -22,7 +22,8 @@ const KELOMPOK = {
 };
 
 export function RegionalDashboardModal({ isOpen, onClose }) {
-    const { currentStore, storesList, statsTersedia, switchStore } = useStore();
+    const { currentStore, storesList, statsTersedia, switchStore, mode, keModeJaringan } = useStore();
+    const modeJaringan = mode === 'jaringan';
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'SEHAT' | 'PERHATIAN' | 'KRITIS'
     const [hoveredStoreId, setHoveredStoreId] = useState(null);
@@ -70,9 +71,15 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
         });
     }, [storesList, searchQuery, statusFilter]);
 
+    // Mode Semua Toko: staf melapor untuk seluruh jaringan dan Rexa menjalankan Agent Jaringan
+    const handleSelectJaringan = () => {
+        if (!modeJaringan) keModeJaringan();
+        handleClose();
+    };
+
     // Aksi peralihan toko
     const handleSelectStore = (storeId) => {
-        if (storeId === currentStore.id) {
+        if (storeId === currentStore.id && !modeJaringan) {
             handleClose();
             return;
         }
@@ -197,7 +204,7 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
                                     }}
                                 >
                                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#34d399', boxShadow: '0 0 6px #34d399' }} />
-                                    {formatStoreName(currentStore)}
+                                    {modeJaringan ? `Semua Toko (${storesList.length})` : formatStoreName(currentStore)}
                                 </span>
                             </div>
                         </div>
@@ -390,6 +397,33 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
                         alignContent: 'start',
                     }}
                 >
+                    {/* Kartu mode Semua Toko */}
+                    <div
+                        onClick={handleSelectJaringan}
+                        style={{
+                            gridColumn: '1 / -1',
+                            backgroundColor: modeJaringan ? 'rgba(56, 189, 248, 0.12)' : 'rgba(30, 41, 59, 0.5)',
+                            border: modeJaringan ? '2px solid #38bdf8' : '1px dashed rgba(56, 189, 248, 0.5)',
+                            borderRadius: '12px',
+                            padding: '12px 14px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '12px',
+                        }}
+                    >
+                        <div>
+                            <div style={{ fontSize: '14px', fontWeight: '800', color: '#f8fafc' }}>🌐 SEMUA TOKO ({storesList.length})</div>
+                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '3px' }}>
+                                Staf melapor untuk seluruh jaringan; Rexa menjalankan Agent Jaringan (toko prioritas dan transfer stok).
+                            </div>
+                        </div>
+                        <span style={{ fontSize: '10px', fontWeight: '800', color: '#38bdf8', whiteSpace: 'nowrap' }}>
+                            {modeJaringan ? 'SEDANG AKTIF' : 'PILIH MODE INI'}
+                        </span>
+                    </div>
+
                     {filteredStores.length === 0 ? (
                         <div
                             style={{
@@ -404,7 +438,7 @@ export function RegionalDashboardModal({ isOpen, onClose }) {
                         </div>
                     ) : (
                         filteredStores.map((s) => {
-                            const isCurrent = s.id === currentStore.id;
+                            const isCurrent = !modeJaringan && s.id === currentStore.id;
                             const isHovered = hoveredStoreId === s.id;
                             const status = statusHealth(s.healthScore);
 

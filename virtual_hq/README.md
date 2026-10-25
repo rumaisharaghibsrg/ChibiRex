@@ -27,6 +27,27 @@ isinya tetap tersimpan per toko dan muncul lagi saat dibuka. Data baru hanya dia
 **Periksa Ulang**), dan agent hanya dijalankan lagi lewat **Jalankan Ulang**. Kalau tanggal simulasi sudah berubah sejak
 laporan dibaca, panel menampilkan peringatan. Meja Approval, Ganti Cabang, Simulasi Waktu, dan Panduan tetap modal.
 
+## Mode Semua Toko
+
+Dibuka dengan `?mode=jaringan` (tombol **Mode Virtual HQ** di sidebar saat berada di halaman Semua Toko dashboard, atau
+**Buka di Virtual HQ** di halaman itu), tombol **🌐 SEMUA TOKO** di header game, atau kartu Semua Toko di Ganti Cabang.
+Kantornya sama, tetapi semua untuk seluruh jaringan:
+
+| Di game | Isi (mode Semua Toko) | Endpoint API |
+|---|---|---|
+| Rexa | Agent Jaringan: 3-5 toko prioritas dengan alasan dan tindakan, transfer stok yang disarankan; "Buka toko" masuk ke toko itu | `POST {VITE_COPILOT_URL}/jaringan` |
+| Pak Budi | Health rata-rata, toko merah dan sehat, toko terendah | `GET /jaringan/ringkasan` |
+| Citra | Modal tertahan jaringan, modal diselamatkan, peluang transfer stok antar toko | `GET /jaringan/ringkasan`, `GET /jaringan/transfer` |
+| Rian | Circuit breaker (berlaku untuk semua toko), draf PO menunggu di seluruh jaringan | `GET /guardrails/status`, `GET /jaringan/ringkasan` |
+| Maya | Total SKU perlu reorder, risiko tinggi, overstock, deadstock; toko dengan reorder terbanyak | `GET /jaringan/ringkasan` |
+| Doni | Toko di zona merah dan breaker terbuka; aksi Jalankan Agent Jaringan atau reset breaker | gabungan di atas |
+| Smart TV | KPI jaringan, toko dengan Health terendah, sebaran toko per warna | `GET /jaringan/ringkasan` |
+| Meja Approval | Draf PO dari semua toko | `GET /purchase-orders?status=DRAFT` |
+
+Laporan Agent Jaringan terakhir disimpan di localStorage dengan kunci yang sama dengan halaman Semua Toko dashboard
+(`rexa.laporanJaringan.v1`), jadi di domain yang sama laporan dari dashboard muncul di game dan sebaliknya. Tombol
+**Dashboard** di game kembali ke halaman Semua Toko (`/?tab=jaringan`). Chat Copilot tetap menjawab per toko.
+
 ## Menjalankan
 
 1. API dari root repo: `uvicorn api.main:app` (port 8000). CORS bawaan API sudah mengizinkan `http://localhost:8080`.

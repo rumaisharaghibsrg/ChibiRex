@@ -27,10 +27,10 @@ const KUNCI_KE_NPC = {
 const AMBANG_HEALTH = 65;
 const AMBANG_STABILITAS_KAS = 60;
 
-const hasilPerToko = new Map(); // toko -> {krisis, ringkas, tanggal}
+const hasilPerToko = new Map(); // toko (atau 'jaringan') -> {krisis, ringkas, tanggal}
 
-/** Hasil pemeriksaan terakhir untuk toko ini, atau null kalau belum pernah diperiksa. */
-export const hasilTerakhir = (store) => hasilPerToko.get(store?.id || 74) || null;
+/** Hasil pemeriksaan terakhir untuk toko ini (atau 'jaringan'), atau null kalau belum pernah diperiksa. */
+export const hasilTerakhir = (kunci) => hasilPerToko.get(kunci) || null;
 
 /**
  * Memeriksa data toko. Mengembalikan {krisis: [...], ringkas, tanggal}; krisis kosong berarti tidak ada kondisi darurat.
@@ -122,6 +122,54 @@ export async function deteksiKrisis(store) {
     return hasil;
 }
 
+/**
+ * Mode Semua Toko: Doni memeriksa seluruh jaringan. Krisis: circuit breaker terbuka (berlaku untuk semua toko) dan
+ * toko-toko dengan Health Score di bawah 65. Hasil disimpan dengan kunci 'jaringan'.
+ */
+export async function deteksiKrisisJaringan() {
+    const [j, g] = await Promise.all([api.jaringan(), api.statusGuardrail()]);
+    const krisis = [];
+    if (g.circuit_breaker_terbuka) {
+        krisis.push({
+            crisisId: 'CRISIS_CIRCUIT_BREAKER_TRIPPED',
+            sourceNPC: 'rian',
+            sourceName: 'Rian (Guardrail Sentinel)',
+            sourceLocation: 'Gerbang Server & Konsol Keamanan',
+            title: 'CIRCUIT BREAKER TERBUKA',
+            headline: 'Semua PO baru di seluruh jaringan ditahan guardrail',
+            description: `${g.alasan || 'Guardrail mencatat pelanggaran beruntun.'} PO baru baru bisa dibuat lagi setelah ` +
+                'manajer mereset circuit breaker.',
+            metrics: { label: 'Status circuit breaker', currentValue: 'TERBUKA', thresholdValue: 'Tertutup (normal)', badgeColor: '#ef4444' },
+            action: { jenis: 'reset-breaker', label: '⚡ Reset circuit breaker (keputusan manajer)' },
+        });
+    }
+    const merah = [...j.toko].filter((t) => t.health_score < AMBANG_HEALTH)
+        .sort((a, b) => a.health_score - b.health_score || a.store - b.store);
+    if (merah.length) {
+        const t = merah[0];
+        krisis.push({
+            crisisId: 'CRISIS_JARINGAN_MERAH',
+            sourceNPC: 'budi',
+            sourceName: 'Pak Budi (Store Operations Director)',
+            sourceLocation: 'Smart Screen Area Eksekutif',
+            title: `${merah.length} TOKO DI ZONA MERAH`,
+            headline: `Health Score di bawah ${AMBANG_HEALTH}: ${merah.slice(0, 5).map((x) => `Toko ${x.store} (${x.health_score})`).join(', ')}`,
+            description: `Terendah Toko ${t.store} ${t.kota}: ${t.health_score}/100, ${angka(t.perlu_reorder)} SKU perlu reorder, ` +
+                `modal tertahan ${rupiahRingkas(t.modal_tertahan_idr)}. Agent Jaringan menetapkan urutan penanganan dan transfer stok.`,
+            metrics: { label: 'Toko di zona merah', currentValue: `${merah.length} dari ${j.jumlah_toko}`, thresholdValue: `Health Score minimum ${AMBANG_HEALTH}`, badgeColor: '#dc2626' },
+            action: { jenis: 'agent', label: '🤖 Jalankan Agent Jaringan' },
+        });
+    }
+    const hasil = {
+        krisis: krisis.map((k) => ({ ...k, isCrisis: true, severity: 'CRITICAL', store: 'jaringan' })),
+        ringkas: `Health rata-rata ${angka(j.health_rata)}, ${merah.length} toko merah, circuit breaker ` +
+            `${g.circuit_breaker_terbuka ? 'terbuka' : 'tertutup'}, ${angka(j.po_menunggu)} draf PO menunggu persetujuan.`,
+        tanggal: formatIndonesianDate(j.per_tanggal),
+    };
+    hasilPerToko.set('jaringan', hasil);
+    return hasil;
+}
+
 // Inisialisasi Default State
 export const defaultCrisisState = {
     isCrisis: false,
@@ -198,7 +246,7 @@ if (typeof window !== 'undefined') {
      */
     window.triggerStoreCrisis = async (kunci) => {
         const npc = KUNCI_KE_NPC[kunci];
-        const { krisis } = await deteksiKrisis(window.CURRENT_STORE);
+        const { krisis } = window.CURRENT_MODE === 'jaringan' ? await deteksiKrisisJaringan() : await deteksiKrisis(window.CURRENT_STORE);
         const pilihan = npc ? krisis.find((k) => k.sourceNPC === npc) : krisis[0];
         if (!pilihan) return null;
         window.StoreCrisisState = { ...pilihan, timestamp: Date.now() };

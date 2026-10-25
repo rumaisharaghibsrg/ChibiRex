@@ -25,7 +25,8 @@ export function TimeSimulationModal({ isOpen, onClose }) {
         resetTimeToBaseline,
     } = useTimeSimulation();
 
-    const { currentStore } = useStore();
+    const { currentStore, mode } = useStore();
+    const modeJaringan = mode === 'jaringan';
 
     // Kalkulasi target tanggal untuk pratinjau tombol
     const next1Day = calculateNewDate(currentSimulatedDate, 1);
@@ -39,7 +40,14 @@ export function TimeSimulationModal({ isOpen, onClose }) {
     useEffect(() => {
         if (!isOpen) return undefined;
         let aktif = true;
-        const muat = () => api.ringkasan(storeId)
+        // Mode Semua Toko: angka jaringan (health_rata, total perlu reorder, total modal diselamatkan).
+        const muat = () => (modeJaringan
+            ? api.jaringan().then((j) => ({
+                health_score: j.health_rata,
+                jumlah_status: { REORDER: j.perlu_reorder },
+                modal_diselamatkan_idr: j.modal_diselamatkan_idr,
+            }))
+            : api.ringkasan(storeId))
             .then((r) => aktif && setKondisi(r))
             .catch(() => aktif && setKondisi(null));
         muat();
@@ -48,7 +56,7 @@ export function TimeSimulationModal({ isOpen, onClose }) {
             aktif = false;
             EventBus.removeListener(DATA_BERUBAH, muat);
         };
-    }, [isOpen, storeId]);
+    }, [isOpen, storeId, modeJaringan]);
 
     // Handler tutup modal & unfreeze player
     const handleClose = useCallback(() => {
@@ -201,7 +209,7 @@ export function TimeSimulationModal({ isOpen, onClose }) {
                                 </span>
                             </div>
                             <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>
-                                Simulasi Siklus Operasional: <strong style={{ color: '#e2e8f0' }}>STORE #{currentStore?.id || 74} ({currentStore?.city || 'PAENTMARWY'})</strong>
+                                Simulasi Siklus Operasional: <strong style={{ color: '#e2e8f0' }}>{modeJaringan ? 'SEMUA TOKO' : `STORE #${currentStore?.id || 74} (${currentStore?.city || 'PAENTMARWY'})`}</strong>
                             </div>
                         </div>
                     </div>
@@ -439,7 +447,7 @@ export function TimeSimulationModal({ isOpen, onClose }) {
                 >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{ fontSize: '11px', fontWeight: '800', color: '#38bdf8' }}>
-                            📊 KONDISI TOKO {storeId} PER TANGGAL INI:
+                            📊 KONDISI {modeJaringan ? 'SEMUA TOKO' : `TOKO ${storeId}`} PER TANGGAL INI:
                         </span>
                         <span style={{ fontSize: '10px', color: '#94a3b8' }}>
                             Data API · sama dengan dashboard
@@ -448,9 +456,9 @@ export function TimeSimulationModal({ isOpen, onClose }) {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '10px' }}>
                         <div style={{ padding: '6px 8px', borderRadius: '6px', background: 'rgba(15, 23, 42, 0.6)' }}>
-                            <span style={{ color: '#94a3b8', display: 'block' }}>Health Score:</span>
+                            <span style={{ color: '#94a3b8', display: 'block' }}>{modeJaringan ? 'Health rata-rata:' : 'Health Score:'}</span>
                             <strong style={{ color: kondisi ? statusHealth(kondisi.health_score).warna : '#f8fafc', fontSize: '11px' }}>
-                                {kondisi ? `${kondisi.health_score} / 100` : '-'}
+                                {kondisi ? `${angka(kondisi.health_score)} / 100` : '-'}
                             </strong>
                         </div>
                         <div style={{ padding: '6px 8px', borderRadius: '6px', background: 'rgba(15, 23, 42, 0.6)' }}>

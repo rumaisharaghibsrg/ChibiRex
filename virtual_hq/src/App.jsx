@@ -13,6 +13,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { PhaserGame }   from './PhaserGame';
 import { EventBus }     from './game/EventBus';
 import { ThoughtBubble } from './components/ThoughtBubble';
+import { AgentJaringanBubble } from './components/AgentJaringanBubble';
 import { ApprovalModal } from './components/ApprovalModal';
 import { GlobalStatsTVModal } from './components/GlobalStatsTVModal';
 import { SmartphoneChatModal } from './components/SmartphoneChatModal';
@@ -28,15 +29,19 @@ import MobileRexaCallButton from './components/MobileRexaCallButton';
 import MobileDrawerMenu from './components/MobileDrawerMenu';
 import { useStore } from './context/StoreContext';
 import { useTimeSimulation } from './context/TimeSimulationContext';
-import { api, beritahuDataBerubah, urlDashboard } from './lib/api';
-import { laporanNpc } from './lib/npc';
+import { api, beritahuDataBerubah, COPILOT_URL, urlDashboard, urlDashboardJaringan } from './lib/api';
+import { laporanNpc, laporanNpcJaringan } from './lib/npc';
+import { bacaLaporanJaringan, simpanLaporanJaringan } from './lib/laporanJaringan';
 import './game/StoreCrisisState';
 
 function App() {
     const phaserRef = useRef();
     const { isMobileScreen, isTouch, shouldShowMobileControls } = useDeviceDetect();
-    const { currentStore, switchStore } = useStore();
-    const { daysOffset, isWarping, formattedDate, apiOnline } = useTimeSimulation();
+    const { currentStore, switchStore, mode, keModeJaringan, storesList } = useStore();
+    const { daysOffset, isWarping, formattedDate, isoDate, apiOnline } = useTimeSimulation();
+    // Mode Semua Toko: staf melapor untuk seluruh jaringan dan Rexa menjalankan Agent Jaringan (seperti halaman
+    // Semua Toko di dashboard). Mode toko: semuanya untuk toko yang diawasi.
+    const modeJaringan = mode === 'jaringan';
     const [currentScene, setCurrentScene] = useState('');
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -181,8 +186,56 @@ function App() {
         }, 2000);
     }, [clearAllTimers, terapkanRun, selesaiRun]);
 
+    // ── Mode Semua Toko: Agent Jaringan (Lambda Copilot, POST /jaringan) ─────────────────────────────
+    // Alurnya sama dengan agent toko: pemain bebas bergerak selama analisis, laporan terakhir tersimpan (localStorage,
+    // dipakai bersama halaman Semua Toko di dashboard) dan bisa dibuka kapan saja; "Jalankan Ulang" menganalisis lagi.
+    const [laporanJaringan, setLaporanJaringan] = useState(bacaLaporanJaringan);
+    const [jaringanBerjalan, setJaringanBerjalan] = useState(false);
+    const [galatJaringan, setGalatJaringan]       = useState(null);
+    const [detikJaringan, setDetikJaringan]       = useState(0);
+    const jaringanBerjalanRef = useRef(false);
+    useEffect(() => {
+        if (!jaringanBerjalan) return undefined;
+        const mulai = Date.now();
+        setDetikJaringan(0);
+        const ulang = setInterval(() => setDetikJaringan(Math.round((Date.now() - mulai) / 1000)), 1000);
+        return () => clearInterval(ulang);
+    }, [jaringanBerjalan]);
+
+    const bukaBubble = useCallback(() => {
+        setBubbleTerbuka(true);
+        tandaiPanelDibuka();
+    }, [tandaiPanelDibuka]);
+
+    const jalankanJaringan = useCallback(async () => {
+        if (jaringanBerjalanRef.current) return;
+        bukaBubble();
+        if (!COPILOT_URL) {
+            setGalatJaringan('Agent Jaringan berjalan di Lambda Copilot, yang belum diatur untuk Virtual HQ ini (VITE_COPILOT_URL).');
+            return;
+        }
+        jaringanBerjalanRef.current = true;
+        setJaringanBerjalan(true);
+        setGalatJaringan(null);
+        try {
+            const hasil = { ...(await api.analisisJaringan('id')), dibuat_pada: new Date().toISOString() };
+            setLaporanJaringan(hasil);
+            simpanLaporanJaringan(hasil);
+        } catch (err) {
+            setGalatJaringan(err.message);
+        } finally {
+            jaringanBerjalanRef.current = false;
+            setJaringanBerjalan(false);
+        }
+    }, [bukaBubble]);
+
     // ── Jalankan agent (pertama kali, "Jalankan Ulang", atau "Tugaskan Agent" dari Crisis Hub) ─────────
-    const handleTriggerAgent = useCallback(async ({ store } = {}) => {
+    // Di mode Semua Toko (atau payload {jaringan: true}) yang dijalankan Agent Jaringan.
+    const handleTriggerAgent = useCallback(async ({ store, jaringan } = {}) => {
+        if (jaringan || (modeJaringan && !store)) {
+            jalankanJaringan();
+            return;
+        }
         if (agentRunning) return; // Cegah pemanggilan ganda
 
         const activeStoreId = parseInt(store || currentStore?.id || 74, 10);
@@ -216,20 +269,26 @@ function App() {
             setErrorMessage(err.message);
             selesaiRun();
         }
-    }, [agentRunning, clearAllTimers, startPolling, terapkanRun, selesaiRun, currentStore, tandaiPanelDibuka]);
+    }, [agentRunning, clearAllTimers, startPolling, terapkanRun, selesaiRun, currentStore, tandaiPanelDibuka, modeJaringan, jalankanJaringan]);
+
+    // Status agent sesuai mode: agent toko, atau Agent Jaringan di mode Semua Toko.
+    const sedangJalan = modeJaringan ? jaringanBerjalan : agentRunning;
+    const adaLog = modeJaringan ? Boolean(laporanJaringan || galatJaringan) : adaHasil;
+    const logGagal = modeJaringan ? Boolean(galatJaringan) && !laporanJaringan : agentStatus === 'GAGAL';
 
     // ── Interaksi dengan Rexa (E atau tombol di dekatnya): kalau sudah ada log, bukakan lognya; kalau belum, jalankan ──
-    const bukaBubble = useCallback(() => {
-        setBubbleTerbuka(true);
-        tandaiPanelDibuka();
-    }, [tandaiPanelDibuka]);
     const handleRexa = useCallback(() => {
-        if (agentRunning || adaHasil) bukaBubble();
+        if (sedangJalan || adaLog) bukaBubble();
         else handleTriggerAgent();
-    }, [agentRunning, adaHasil, bukaBubble, handleTriggerAgent]);
+    }, [sedangJalan, adaLog, bukaBubble, handleTriggerAgent]);
 
     // ── Tutup bubble agent (bergeser, ✕, Esc): log tetap tersimpan; kalau agent masih bekerja, ia lanjut di latar ──
     const handleTutupBubble = useCallback(() => setBubbleTerbuka(false), []);
+
+    // Ganti mode (toko <-> Semua Toko): panel yang terbuka milik mode lama, jadi ditutup.
+    useEffect(() => {
+        tutupPanel();
+    }, [mode, tutupPanel]);
 
     // ── Run terakhir toko yang diawasi (saat dibuka dan setiap ganti toko) ─────────────────────────
     const storeIdAktif = currentStore?.id || 74;
@@ -384,13 +443,14 @@ function App() {
         setIsNpcModalOpen(false);
     }, []);
 
+    // target = nomor toko, atau 'jaringan' untuk mode Semua Toko
     const muatLaporanStaf = useCallback(async (id, store) => {
         const kunci = `${id}:${store}`;
         if (memuatStafRef.current.has(kunci)) return; // event buka sering terkirim ganda dalam satu tekan E
         memuatStafRef.current.add(kunci);
         setMemuatStaf((m) => ({ ...m, [kunci]: true }));
         try {
-            const laporan = await laporanNpc(id, store);
+            const laporan = store === 'jaringan' ? await laporanNpcJaringan(id) : await laporanNpc(id, store);
             setLaporanStaf((c) => ({ ...c, [kunci]: { ...laporan, gagal: false, tanggal: tanggalSimRef.current } }));
         } catch (err) {
             console.warn(`[App] Laporan ${id} tidak bisa dibaca:`, err);
@@ -411,14 +471,14 @@ function App() {
 
     const handleOpenNpcModal = useCallback((payload) => {
         const id = (payload?.npcId || payload?.npc || 'maya').toLowerCase();
-        const store = currentStore?.id || 74;
+        const store = modeJaringan ? 'jaringan' : (currentStore?.id || 74);
         setActiveNpcId(id);
         setIsCrisisModalOpen(false);
         setIsNpcModalOpen(true);
         tandaiPanelDibuka();
         // Laporan yang sudah pernah dibaca langsung ditampilkan lagi; baru dibaca dari API kalau belum ada.
         if (!laporanStafRef.current[`${id}:${store}`]) muatLaporanStaf(id, store);
-    }, [currentStore, muatLaporanStaf, tandaiPanelDibuka]);
+    }, [currentStore, modeJaringan, muatLaporanStaf, tandaiPanelDibuka]);
 
     // ── Universal Proximity Interaction Handler (Directive v5.6) ─────────────
     // Dipanggil serentak oleh Keyboard Desktop ('E') dan Smart Action Button Mobile
@@ -829,7 +889,7 @@ function App() {
                                         fontWeight: '700',
                                         fontFamily: 'monospace',
                                     }}>
-                                        #{currentStore?.id || 74}
+                                        {modeJaringan ? '🌐 SEMUA' : `#${currentStore?.id || 74}`}
                                     </span>
                                 </div>
                             </div>
@@ -984,16 +1044,38 @@ function App() {
                                     e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)';
                                 }}
                             >
-                                <span>🏬 STORE #{currentStore?.id || 74} ({currentStore?.city || 'PAENTMARWY'})</span>
+                                <span>{modeJaringan
+                                    ? `🌐 SEMUA TOKO (${storesList.length})`
+                                    : `🏬 STORE #${currentStore?.id || 74} (${currentStore?.city || 'PAENTMARWY'})`}</span>
                                 <span style={{ fontSize: '9px', color: '#6ee7b7' }}>▼ GANTI</span>
                             </span>
+                            {!modeJaringan && (
+                                <button
+                                    type="button"
+                                    onClick={keModeJaringan}
+                                    title="Pindah ke mode Semua Toko: staf melapor untuk seluruh jaringan dan Rexa menjalankan Agent Jaringan"
+                                    style={{
+                                        fontSize: '10px',
+                                        fontFamily: 'monospace',
+                                        padding: '2px 8px',
+                                        borderRadius: '5px',
+                                        backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                                        color: '#7dd3fc',
+                                        border: '1px solid rgba(56, 189, 248, 0.4)',
+                                        fontWeight: '700',
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    🌐 SEMUA TOKO
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
 
                 {/* Central Status Indicator */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    {agentRunning ? (
+                    {sedangJalan ? (
                         <button
                             type="button"
                             onClick={bukaBubble}
@@ -1015,9 +1097,11 @@ function App() {
                             }}
                         >
                             <span className="status-dot pulse-amber" />
-                            <span>⚡ REXA IN PATROL · TOKO {tokoLog} · LANGKAH #{stepCount || 1}{bubbleTerbuka ? '' : ' · LIHAT'}</span>
+                            <span>{modeJaringan
+                                ? `🌐 AGENT JARINGAN · ${detikJaringan} DTK`
+                                : `⚡ REXA IN PATROL · TOKO ${tokoLog} · LANGKAH #${stepCount || 1}`}{bubbleTerbuka ? '' : ' · LIHAT'}</span>
                         </button>
-                    ) : adaHasil && !bubbleTerbuka && !isApprovalModalOpen ? (
+                    ) : adaLog && !bubbleTerbuka && !isApprovalModalOpen ? (
                         <button
                             type="button"
                             onClick={bukaBubble}
@@ -1028,16 +1112,18 @@ function App() {
                                 gap: '8px',
                                 padding: '4px 14px',
                                 borderRadius: '9999px',
-                                background: agentStatus === 'GAGAL' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                                border: `1px solid ${agentStatus === 'GAGAL' ? 'rgba(248, 113, 113, 0.5)' : 'rgba(52, 211, 153, 0.5)'}`,
-                                color: agentStatus === 'GAGAL' ? '#f87171' : '#34d399',
+                                background: logGagal ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                border: `1px solid ${logGagal ? 'rgba(248, 113, 113, 0.5)' : 'rgba(52, 211, 153, 0.5)'}`,
+                                color: logGagal ? '#f87171' : '#34d399',
                                 fontSize: '11px',
                                 fontFamily: 'monospace',
                                 fontWeight: '700',
                                 cursor: 'pointer',
                             }}
                         >
-                            <span>{agentStatus === 'GAGAL' ? '⚠️ AGENT GAGAL' : '✅ HASIL AGENT'} TOKO {tokoLog} · {stepCount} LANGKAH · LIHAT</span>
+                            <span>{modeJaringan
+                                ? (logGagal ? '⚠️ AGENT JARINGAN GAGAL · LIHAT' : `✅ LAPORAN JARINGAN · ${laporanJaringan?.toko?.length ?? 0} TOKO PRIORITAS · LIHAT`)
+                                : `${logGagal ? '⚠️ AGENT GAGAL' : '✅ HASIL AGENT'} TOKO ${tokoLog} · ${stepCount} LANGKAH · LIHAT`}</span>
                         </button>
                     ) : isApprovalModalOpen ? (
                         <div
@@ -1184,7 +1270,7 @@ function App() {
 
                     {/* Kembali ke dashboard web untuk toko yang sama */}
                     <a
-                        href={urlDashboard(currentStore?.id || 74)}
+                        href={modeJaringan ? urlDashboardJaringan() : urlDashboard(currentStore?.id || 74)}
                         style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -1276,8 +1362,25 @@ function App() {
                 />
 
                 {/* ── Visualisasi Pemikiran (Thought Bubble React) ─────────── */}
+                {modeJaringan && (
+                    <AgentJaringanBubble
+                        visible={bubbleTerbuka}
+                        berjalan={jaringanBerjalan}
+                        detik={detikJaringan}
+                        laporan={laporanJaringan}
+                        galat={galatJaringan}
+                        tanggalSekarang={isoDate}
+                        screenPos={rexaScreenPos}
+                        onTutup={handleTutupBubble}
+                        onJalankanUlang={jalankanJaringan}
+                        onBukaToko={(s) => {
+                            setBubbleTerbuka(false);
+                            switchStore(s);
+                        }}
+                    />
+                )}
                 <ThoughtBubble
-                    visible={bubbleTerbuka && (agentRunning || adaHasil)}
+                    visible={!modeJaringan && bubbleTerbuka && (agentRunning || adaHasil)}
                     onTutup={handleTutupBubble}
                     onJalankanUlang={agentRunning ? null : () => handleTriggerAgent({ store: String(tokoLog || storeIdAktif) })}
                     status={agentStatus}
@@ -1305,10 +1408,10 @@ function App() {
                             onClick={handleRexa}
                             className="action-pill action-pill-rexa"
                             style={{ position: 'static', transform: 'none' }}
-                            title={agentRunning || adaHasil ? 'Buka log agent (jalankan ulang dari bubble)' : `Picu analisis inventaris & draf PO Toko ${currentStore?.id || 74}`}
+                            title={sedangJalan || adaLog ? 'Buka log agent (jalankan ulang dari bubble)' : modeJaringan ? 'Jalankan Agent Jaringan untuk semua toko' : `Picu analisis inventaris & draf PO Toko ${currentStore?.id || 74}`}
                         >
                             <kbd className="keycap active">E</kbd>
-                            <span>{agentRunning ? 'Lihat Agent' : adaHasil ? 'Lihat Hasil Agent' : 'Analisis Toko'}</span>
+                            <span>{sedangJalan ? 'Lihat Agent' : adaLog ? 'Lihat Hasil Agent' : modeJaringan ? 'Analisis Semua Toko' : 'Analisis Toko'}</span>
                         </button>
                         <button
                             onClick={handleOpenChat}
@@ -1374,7 +1477,7 @@ function App() {
             {/* ── Modal Approval PO ke SAP S/4HANA (Overlay Penuh) ─────── */}
             <ApprovalModal
                 isOpen={isApprovalModalOpen}
-                store={currentStore?.id || 74}
+                store={modeJaringan ? null : (currentStore?.id || 74)}
                 onClose={handleCloseApprovalModal}
             />
 
@@ -1401,10 +1504,10 @@ function App() {
             <NPCDialogModal
                 isOpen={isNpcModalOpen}
                 npcId={activeNpcId}
-                laporan={laporanStaf[`${activeNpcId}:${storeIdAktif}`]}
-                isLoading={Boolean(memuatStaf[`${activeNpcId}:${storeIdAktif}`])}
+                laporan={laporanStaf[`${activeNpcId}:${modeJaringan ? 'jaringan' : storeIdAktif}`]}
+                isLoading={Boolean(memuatStaf[`${activeNpcId}:${modeJaringan ? 'jaringan' : storeIdAktif}`])}
                 tanggalSekarang={formattedDate}
-                onMuatUlang={() => muatLaporanStaf(activeNpcId, storeIdAktif)}
+                onMuatUlang={() => muatLaporanStaf(activeNpcId, modeJaringan ? 'jaringan' : storeIdAktif)}
                 onClose={handleCloseNpcModal}
             />
 
@@ -1489,7 +1592,9 @@ function App() {
                 daysOffset={daysOffset}
                 stepCount={stepCount}
                 apiOnline={apiOnline}
-                dashboardHref={urlDashboard(currentStore?.id || 74)}
+                dashboardHref={modeJaringan ? urlDashboardJaringan() : urlDashboard(currentStore?.id || 74)}
+                modeJaringan={modeJaringan}
+                jumlahToko={storesList.length}
             />
         </div>
     );

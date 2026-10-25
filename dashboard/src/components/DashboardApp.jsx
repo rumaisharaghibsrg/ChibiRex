@@ -30,16 +30,22 @@ import { useDataToko } from '../lib/useDataToko';
 // Toko demo (Bibitor toko 74): SKU demo Bacardi Gold Rum (draf PO) dan Ciroc Apple Vodka (Hold Reorder).
 const DEMO_STORE = 74;
 
-// Kembali dari Virtual HQ membawa ?store=..., jadi dashboard membuka toko yang sama; parameternya lalu dibersihkan.
-function tokoAwal() {
-  const store = Number(new URLSearchParams(window.location.search).get('store'));
+// Kembali dari Virtual HQ: ?store=... membuka toko yang sama, ?tab=jaringan membuka halaman Semua Toko (dari mode
+// Semua Toko di Virtual HQ). Parameternya lalu dibersihkan dari alamat.
+function paramAwal() {
+  const q = new URLSearchParams(window.location.search);
   if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
-  return Number.isInteger(store) && store > 0 ? store : DEMO_STORE;
+  const store = Number(q.get('store'));
+  return {
+    store: Number.isInteger(store) && store > 0 ? store : DEMO_STORE,
+    tab: q.get('tab') === 'jaringan' ? 'jaringan' : 'dashboard',
+  };
 }
 
 export default function DashboardApp({ user, onLogout }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [store, setStore] = useState(tokoAwal);
+  const [awal] = useState(paramAwal);
+  const [activeTab, setActiveTab] = useState(awal.tab);
+  const [store, setStore] = useState(awal.store);
   const [stores, setStores] = useState([]);
   const [selectedPoId, setSelectedPoId] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0); // naik setiap ada aksi agent/manajer, memicu muat ulang data API
@@ -245,7 +251,8 @@ export default function DashboardApp({ user, onLogout }) {
         explorationBudget={ringkasan?.exploration_budget_idr ?? 0}
         jumlahHold={holdsAktif.length}
         breakerTerbuka={breakerTerbuka}
-        virtualHqUrl={`${VIRTUAL_HQ_URL}?store=${store}`}
+        virtualHqUrl={activeTab === 'jaringan' ? `${VIRTUAL_HQ_URL}?mode=jaringan` : `${VIRTUAL_HQ_URL}?store=${store}`}
+        virtualHqSemua={activeTab === 'jaringan'}
         user={user}
         onLogout={onLogout}
       />

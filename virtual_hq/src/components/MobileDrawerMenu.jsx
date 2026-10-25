@@ -22,6 +22,8 @@ export default function MobileDrawerMenu({
     stepCount,
     apiOnline,
     dashboardHref,
+    modeJaringan = false,
+    jumlahToko = 80,
 }) {
     if (!isOpen) return null;
 
@@ -150,7 +152,7 @@ export default function MobileDrawerMenu({
                     >
                         <div>
                             <div style={{ fontWeight: 800, fontSize: '12px' }}>
-                                🏬 STORE #{currentStore?.id || 74}
+                                {modeJaringan ? '🌐 SEMUA TOKO' : `🏬 STORE #${currentStore?.id || 74}`}
                             </div>
                             <div style={{ fontSize: '10px', color: '#a7f3d0' }}>
                                 {currentStore?.city || 'PAENTMARWY'} · 80 Toko

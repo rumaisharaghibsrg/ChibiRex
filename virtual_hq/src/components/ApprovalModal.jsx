@@ -2,7 +2,7 @@
  * ApprovalModal.jsx — Meja Manajer: 1-Click PO Approval ke SAP S/4HANA
  *
  * Komponen Modal React untuk:
- *  - Mengambil draf PO toko yang diawasi via GET /purchase-orders?store=&status=DRAFT
+ *  - Mengambil draf PO toko yang diawasi via GET /purchase-orders?store=&status=DRAFT (mode Semua Toko: tanpa store)
  *  - Metrik agregat (Total Draf, Estimasi Nilai IDR)
  *  - Eksekusi 1-Click Approval via POST /purchase-orders/{po_id}/approve ke SAP (tiruan OData di API)
  *  - Eksekusi Penolakan via POST /purchase-orders/{po_id}/reject
@@ -40,7 +40,7 @@ export function ApprovalModal({ isOpen, store, onClose }) {
         setLoading(true);
         setErrorMessage(null);
         try {
-            setDraftList(await api.daftarPo({ store, status: 'DRAFT' }));
+            setDraftList(await api.daftarPo({ store: store ?? undefined, status: 'DRAFT' }));
         } catch (err) {
             setDraftList([]);
             setErrorMessage(`Draf PO tidak bisa dibaca: ${err.message}`);
@@ -202,7 +202,7 @@ export function ApprovalModal({ isOpen, store, onClose }) {
                                     Meja Manajer — 1-Click PO Approval ke SAP S/4HANA
                                 </div>
                                 <div style={{ color: '#64748b', fontSize: '11px', marginTop: '1px' }}>
-                                    <SentenceWithDot text={`Draf PO Toko ${store} dari Agent Rexa; tidak ada yang masuk SAP sebelum disetujui`} />
+                                    <SentenceWithDot text={`Draf PO ${store ? `Toko ${store}` : 'semua toko'} dari Agent Rexa; tidak ada yang masuk SAP sebelum disetujui`} />
                                 </div>
                             </div>
                         </div>

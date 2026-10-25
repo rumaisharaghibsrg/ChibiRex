@@ -13,6 +13,7 @@ export const COPILOT_URL = (import.meta.env.VITE_COPILOT_URL || '').replace(/\/$
 // '../' kembali ke dashboard; saat pengembangan, dashboard berjalan di Vite port 5173.
 export const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL || (import.meta.env.DEV ? 'http://localhost:5173/' : '../');
 export const urlDashboard = (store) => `${DASHBOARD_URL}?store=${store}`;
+export const urlDashboardJaringan = () => `${DASHBOARD_URL}?tab=jaringan`;
 
 // Nama yang tercatat di audit log API untuk keputusan dari game.
 export const OLEH = 'Manajer (Virtual HQ)';
@@ -78,6 +79,7 @@ export const api = {
     // Toko dan jaringan
     stores: () => request('/stores'),
     jaringan: () => request('/jaringan/ringkasan'),
+    transferJaringan: (limit = 20) => request(`/jaringan/transfer${query({ limit })}`),
     ringkasan: (store) => request(`/stores/${store}/ringkasan`),
     prioritas: (store, params) => request(`/stores/${store}/prioritas${query(params)}`),
     realokasi: (store) => request(`/stores/${store}/reallocation`),
@@ -101,6 +103,9 @@ export const api = {
     // Copilot (Lambda terpisah): riwayat = [{peran: 'user'|'assistant', teks}]
     tanyaCopilot: (store, pertanyaan, riwayat) => request('/tanya',
         { method: 'POST', body: { store, pertanyaan, riwayat }, base: COPILOT_URL, timeoutMs: 60000 }),
+    // Agent Jaringan (mode Semua Toko): menganalisis semua toko, hanya membaca. Biasanya 20-40 detik.
+    analisisJaringan: (bahasa = 'id') => request('/jaringan',
+        { method: 'POST', body: { bahasa }, base: COPILOT_URL, timeoutMs: 120000 }),
 };
 
 // Data toko berubah (hari simulasi, agent selesai, PO diputuskan, breaker direset): panel yang terbuka memuat ulang.

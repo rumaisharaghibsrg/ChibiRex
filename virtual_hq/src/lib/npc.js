@@ -123,7 +123,97 @@ async function laporanBudi(s) {
     };
 }
 
+// ── Mode Semua Toko: laporan yang sama untuk seluruh jaringan (GET /jaringan/ringkasan dan /jaringan/transfer) ──
+
+async function jaringanBudi() {
+    const j = await api.jaringan();
+    const urut = [...j.toko].sort((a, b) => a.health_score - b.health_score || a.store - b.store);
+    const kritis = urut.filter((t) => t.health_score < 65);
+    const sehat = j.toko.filter((t) => t.health_score >= 80).length;
+    return {
+        dialogue: `Health Score rata-rata ${j.jumlah_toko} toko per ${formatIndonesianDate(j.per_tanggal)}: ` +
+            `${angka(j.health_rata)}. ${kritis.length} toko di zona merah (di bawah 65)` +
+            (kritis.length ? `: ${kritis.slice(0, 4).map((t) => `Toko ${t.store} ${t.kota} (${t.health_score})`).join(', ')}` : '') +
+            `. ${sehat} toko sehat (80 ke atas)`,
+        metrics: [
+            { label: 'Health rata-rata', value: `${angka(j.health_rata)} / 100`, color: statusHealth(j.health_rata).warna },
+            { label: 'Toko kritis (< 65)', value: `${kritis.length} toko`, color: kritis.length ? MERAH : HIJAU },
+            { label: 'Toko sehat (≥ 80)', value: `${sehat} toko`, color: HIJAU },
+            { label: 'Terendah', value: urut.length ? `Toko ${urut[0].store} · ${urut[0].health_score}` : '-', color: KUNING },
+        ],
+    };
+}
+
+async function jaringanCitra() {
+    const [j, t] = await Promise.all([api.jaringan(), api.transferJaringan(20).catch(() => null)]);
+    const persen = j.nilai_stok_idr ? Math.round((100 * j.modal_tertahan_idr) / j.nilai_stok_idr) : 0;
+    const top = t?.transfer?.[0];
+    return {
+        dialogue: `Modal tertahan di seluruh jaringan: ${rupiahRingkas(j.modal_tertahan_idr)} (${persen}% dari nilai stok ` +
+            `${rupiahRingkas(j.nilai_stok_idr)}). Modal yang diselamatkan Hold Reorder: ${rupiah(j.modal_diselamatkan_idr)}. ` +
+            (top
+                ? `${t.transfer.length} transfer stok antar toko teratas bisa menghindari PO senilai ${rupiahRingkas(t.total_nilai_idr)}; ` +
+                  `terbesar ${top.deskripsi} dari toko ${top.dari_toko} ke toko ${top.ke_toko} (${angka(top.qty)} unit, ` +
+                  `${rupiahRingkas(top.nilai_idr)})`
+                : 'Belum ada peluang transfer stok antar toko'),
+        metrics: [
+            { label: 'Modal tertahan (jaringan)', value: `${rupiahRingkas(j.modal_tertahan_idr)} (${persen}%)`, color: persen > 40 ? MERAH : KUNING },
+            { label: 'Modal diselamatkan (Hold)', value: rupiah(j.modal_diselamatkan_idr), color: HIJAU },
+            { label: 'PO bisa dihindari (transfer)', value: t ? rupiahRingkas(t.total_nilai_idr) : '-', color: BIRU },
+            { label: 'Transfer terbesar', value: top ? `Toko ${top.dari_toko} → ${top.ke_toko}` : '-', color: KUNING },
+        ],
+    };
+}
+
+async function jaringanRian() {
+    const [j, g] = await Promise.all([api.jaringan(), api.statusGuardrail()]);
+    return {
+        dialogue: (g.circuit_breaker_terbuka
+            ? `Circuit breaker TERBUKA${g.alasan ? `: ${g.alasan}` : ''}. Semua PO baru di jaringan ditahan sampai manajer mereset`
+            : 'Circuit breaker tertutup; PO baru diproses normal') +
+            `. Draf PO yang menunggu persetujuan di seluruh jaringan: ${angka(j.po_menunggu)} (${rupiah(j.nilai_po_menunggu_idr)}). ` +
+            `Batas PO harian ${rupiah(g.batas_po_harian_idr)} berlaku per toko`,
+        metrics: [
+            {
+                label: 'Circuit breaker',
+                value: g.circuit_breaker_terbuka ? 'TERBUKA' : 'Tertutup (normal)',
+                color: g.circuit_breaker_terbuka ? MERAH : HIJAU,
+            },
+            { label: 'Draf PO menunggu', value: `${angka(j.po_menunggu)} PO`, color: j.po_menunggu ? KUNING : HIJAU },
+            { label: 'Nilai draf PO', value: rupiah(j.nilai_po_menunggu_idr), color: BIRU },
+            { label: 'Batas PO harian (per toko)', value: rupiah(g.batas_po_harian_idr), color: BIRU },
+        ],
+    };
+}
+
+async function jaringanMaya() {
+    const j = await api.jaringan();
+    const terbanyak = [...j.toko].sort((a, b) => b.perlu_reorder - a.perlu_reorder)[0];
+    const overstock = j.toko.reduce((n, t) => n + t.overstock, 0);
+    const deadstock = j.toko.reduce((n, t) => n + t.deadstock, 0);
+    return {
+        dialogue: `${angka(j.perlu_reorder)} SKU di ${j.jumlah_toko} toko perlu reorder; ${angka(j.sku_risiko_tinggi)} berisiko ` +
+            `tinggi kehabisan stok. Reorder terbanyak di Toko ${terbanyak.store} ${terbanyak.kota} ` +
+            `(${angka(terbanyak.perlu_reorder)} SKU). Di sisi lain ${angka(overstock)} SKU overstock dan ${angka(deadstock)} ` +
+            'deadstock menahan modal',
+        metrics: [
+            { label: 'SKU perlu reorder', value: angka(j.perlu_reorder), color: KUNING },
+            { label: 'Risiko tinggi stok habis', value: angka(j.sku_risiko_tinggi), color: MERAH },
+            { label: 'Overstock', value: angka(overstock), color: BIRU },
+            { label: 'Deadstock', value: angka(deadstock), color: MERAH },
+        ],
+    };
+}
+
 const LAPORAN = { maya: laporanMaya, citra: laporanCitra, rian: laporanRian, budi: laporanBudi };
+const LAPORAN_JARINGAN = { maya: jaringanMaya, citra: jaringanCitra, rian: jaringanRian, budi: jaringanBudi };
+
+/** Laporan staf untuk seluruh jaringan (mode Semua Toko): {dialogue, metrics}. Melempar ApiError kalau API gagal. */
+export function laporanNpcJaringan(npcId) {
+    const fungsi = LAPORAN_JARINGAN[npcId];
+    if (!fungsi) return Promise.reject(new Error(`NPC ${npcId} tidak punya laporan data.`));
+    return fungsi();
+}
 
 /** Laporan NPC untuk toko yang diawasi: {dialogue, metrics}. Melempar ApiError kalau API gagal. */
 export function laporanNpc(npcId, storeId) {
