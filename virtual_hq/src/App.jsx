@@ -236,7 +236,10 @@ function App() {
             jalankanJaringan();
             return;
         }
-        if (agentRunning) return; // Cegah pemanggilan ganda
+        // Cegah pemanggilan ganda. Pakai ref, bukan state: satu ketukan TAP di HP mengirim E dan beberapa event cadangan
+        // sekaligus, dan semuanya tiba sebelum state agentRunning sempat berubah.
+        if (agentRunningRef.current) return;
+        agentRunningRef.current = true;
 
         const activeStoreId = parseInt(store || currentStore?.id || 74, 10);
 
@@ -269,7 +272,7 @@ function App() {
             setErrorMessage(err.message);
             selesaiRun();
         }
-    }, [agentRunning, clearAllTimers, startPolling, terapkanRun, selesaiRun, currentStore, tandaiPanelDibuka, modeJaringan, jalankanJaringan]);
+    }, [clearAllTimers, startPolling, terapkanRun, selesaiRun, currentStore, tandaiPanelDibuka, modeJaringan, jalankanJaringan]);
 
     // Status agent sesuai mode: agent toko, atau Agent Jaringan di mode Semua Toko.
     const sedangJalan = modeJaringan ? jaringanBerjalan : agentRunning;
@@ -1391,8 +1394,9 @@ function App() {
                     screenPos={rexaScreenPos}
                 />
 
-                {/* Pill Aksi Interaktif saat Dekat Rexa */}
-                {rexaInRange && !bubbleTerbuka && !isApprovalModalOpen && (
+                {/* Pill Aksi Interaktif saat Dekat Rexa. Di HP/tablet tidak ditampilkan: tombol TAP (analisis) dan tombol
+                    HP (chat) di pojok kanan bawah sudah menjalankan aksi yang sama, dan pill ini menutupi peta. */}
+                {!shouldShowMobileControls && rexaInRange && !bubbleTerbuka && !isApprovalModalOpen && (
                     <div
                         style={{
                             position: 'absolute',
@@ -1431,8 +1435,8 @@ function App() {
                     </div>
                 )}
 
-                {/* Pill Aksi Interaktif saat Dekat Meja Manajer */}
-                {managerInRange && !agentRunning && !isApprovalModalOpen && (
+                {/* Pill Aksi Interaktif saat Dekat Meja Manajer (di HP/tablet lewat tombol TAP) */}
+                {!shouldShowMobileControls && managerInRange && !agentRunning && !isApprovalModalOpen && (
                     <button
                         onClick={handleOpenApprovalModal}
                         className="action-pill action-pill-manager"
