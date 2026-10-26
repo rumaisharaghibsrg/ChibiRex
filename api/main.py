@@ -289,10 +289,13 @@ def _kedaluwarsa_agent(con, s: Settings, sekarang) -> None:
     else:
         saran = ("Tidak ada worker agent yang mengambil tugas dalam {} detik. Jalankan `python -m agent.worker` di "
                  "laptop (atau cek worker otomatisnya), lalu coba lagi.")
-    con.execute("""update agent_runs set status = 'GAGAL', pesan = ? where status = 'MENUNGGU' and waktu < ?""",
-                (saran.format(s.worker_batas_menunggu_dtk), batas_tunggu))
-    con.execute("""update agent_runs set status = 'GAGAL', pesan = ? where status = 'BERJALAN' and mulai_pada < ?""",
-                ("Worker agent berhenti sebelum agent selesai.", batas_jalan))
+    tutup = [("MENUNGGU", "waktu", batas_tunggu, saran.format(s.worker_batas_menunggu_dtk)),
+             ("BERJALAN", "mulai_pada", batas_jalan, "Worker agent berhenti sebelum agent selesai.")]
+    for status, kolom, batas, pesan in tutup:
+        rows = con.execute(f"select run_id, store from agent_runs where status = ? and {kolom} < ?", (status, batas)).fetchall()
+        for r in rows:
+            con.execute("update agent_runs set status = 'GAGAL', pesan = ? where run_id = ?", (pesan, r["run_id"]))
+            state.audit(con, sekarang, "sistem", "agent_gagal", r["run_id"], {"store": r["store"], "pesan": pesan})
 
 
 def _run_dari_baris(row) -> dict:
@@ -318,6 +321,7 @@ def _antrikan_agent(s: Settings, tugas: str, store: int) -> dict:
                    token_output, berhasil, status, hari_sim)
                values (?, ?, ?, ?, '', '', '[]', 0, 0, 0, 0, 'MENUNGGU', ?)""",
             (run_id, sekarang.isoformat(timespec="seconds"), tugas, store, simulasi.hari_ini(con, s, sekarang)))
+        state.audit(con, sekarang, "agent Rexa", "agent_mulai", run_id, {"store": store})
         return _run_dari_baris(con.execute("select * from agent_runs where run_id = ?", (run_id,)).fetchone())
 
 
@@ -874,6 +878,9 @@ def _routes(app: FastAPI) -> None:
                  body.durasi_dtk, body.token_input, body.token_output, int(body.berhasil),
                  "SELESAI" if body.berhasil else "GAGAL", None if body.berhasil else body.jawaban,
                  simulasi.hari_ini(con, s, sekarang)))
+            state.audit(con, sekarang, body.model or "agent Rexa", "agent_selesai" if body.berhasil else "agent_gagal",
+                        body.run_id, {"store": body.store, "langkah": len(body.langkah), "durasi_dtk": body.durasi_dtk,
+                                      **({} if body.berhasil else {"pesan": body.jawaban[:300]})})
         return {**body.model_dump(), "waktu": waktu}
 
     @app.get("/agent-runs", response_model=list[AgentRun], tags=[AGENT])
@@ -900,9 +907,12 @@ def _routes(app: FastAPI) -> None:
                         "Agent belum di-deploy ke AWS (Bedrock + AgentCore). Untuk sementara jalankan agent dari "
                         "versi lokal (uvicorn + Ollama).")
         try:
-            return request.app.state.agent.mulai(tugas, body.store)
+            run = request.app.state.agent.mulai(tugas, body.store)
         except AgentSedangBerjalan as e:
             raise galat(409, "AGENT_SEDANG_BERJALAN", "Agent masih berjalan; tunggu sampai selesai.", run_id=e.run_id)
+        with state.transaksi(s.state_db) as con:
+            state.audit(con, s.clock(), "agent Rexa", "agent_mulai", run["run_id"], {"store": body.store})
+        return run
 
     @app.get("/agent-runs/worker", response_model=StatusWorker, tags=[DASHBOARD])
     def status_worker(request: Request):

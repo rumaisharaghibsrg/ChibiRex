@@ -11,6 +11,7 @@ import GuardrailsModal from './GuardrailsModal';
 import AiCopilotWidget from './AiCopilotWidget';
 import AgentRunPanel from './AgentRunPanel';
 import PendingPoCard from './PendingPoCard';
+import LogAktivitasCard from './LogAktivitasCard';
 import KpiGrid from './KpiGrid';
 import RekapAgent from './RekapAgent';
 import JaringanToko from './JaringanToko';
@@ -336,8 +337,11 @@ export default function DashboardApp({ user, onLogout }) {
                 <div className="lg:col-span-8 h-full">
                   <AgentRunPanel store={store} onSelesai={handleAgentSelesai} onBukaPo={setSelectedPoId} />
                 </div>
-                <div className="lg:col-span-4 h-full">
-                  <PendingPoCard store={store} refreshKey={refreshKey} tanggalSim={sim?.tanggal} onBukaPo={setSelectedPoId} />
+                <div className="lg:col-span-4 h-full flex flex-col gap-8">
+                  <div className="flex-1 min-h-0">
+                    <PendingPoCard store={store} refreshKey={refreshKey} tanggalSim={sim?.tanggal} onBukaPo={setSelectedPoId} />
+                  </div>
+                  <LogAktivitasCard refreshKey={refreshKey} />
                 </div>
               </div>
 

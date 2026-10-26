@@ -49,6 +49,9 @@ def test_alur_antrian_dari_tombol_sampai_selesai(analytics_db, tmp_path):
         assert selesai["mulai_pada"] == SEKARANG.isoformat(timespec="seconds")
         assert [(r["run_id"], r["status"]) for r in client.get("/agent-runs").json()] == [(run["run_id"], "SELESAI")]
         assert client.get("/agent-runs/aktif").json() is None
+        # Log aktivitas dashboard membaca audit log: agent mulai dan selesai tercatat dengan tokonya.
+        audit = [(a["aksi"], a["resource_id"], a["detail"].get("store")) for a in client.get("/audit-log").json()]
+        assert audit == [("agent_selesai", run["run_id"], 1), ("agent_mulai", run["run_id"], 1)]
 
         jam[0] = SEKARANG + timedelta(seconds=60)
         assert client.get("/agent-runs/worker").json()["aktif"] is False
@@ -66,6 +69,8 @@ def test_tugas_tanpa_worker_ditutup_gagal(analytics_db, tmp_path):
         # Riwayat juga membawa penyebabnya, supaya panel yang baru dibuka tidak hanya menulis "agent gagal".
         riwayat = client.get("/agent-runs").json()[0]
         assert riwayat["status"] == "GAGAL" and "agent.worker" in riwayat["pesan"]
+        terakhir = client.get("/audit-log").json()[0]
+        assert (terakhir["aksi"], terakhir["aktor"], terakhir["resource_id"]) == ("agent_gagal", "sistem", run["run_id"])
         assert client.post("/agent-runs/mulai", json={"store": 1}).json()["status"] == "MENUNGGU"  # bisa dicoba lagi
 
 

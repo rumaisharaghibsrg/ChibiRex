@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -20,6 +20,15 @@ CORS_ORIGIN_REGEX = r"https://chibirex-dashboard(-[a-z0-9-]+)?\.vercel\.app"
 
 def di_lambda() -> bool:
     return "AWS_LAMBDA_FUNCTION_NAME" in os.environ
+
+
+WIB = timezone(timedelta(hours=7))
+
+
+def jam_wib() -> datetime:
+    """Jam API dalam WIB, disimpan tanpa zona seperti sebelumnya. Lambda berjalan dalam UTC, jadi tanpa ini jam di
+    dashboard dan Virtual HQ (audit log, rekap agent, log aktivitas) mundur 7 jam dari jam presenter."""
+    return datetime.now(WIB).replace(tzinfo=None)
 
 
 def _path_tulis(env: str, nama: str) -> Path:
@@ -84,4 +93,4 @@ class Settings:
     worker_batas_berjalan_dtk: int = 300  # tugas yang berjalan lebih lama dari ini dianggap macet
     worker_aktif_dtk: int = 15  # worker dianggap aktif kalau terakhir mengambil antrian dalam rentang ini
 
-    clock: Callable[[], datetime] = datetime.now
+    clock: Callable[[], datetime] = jam_wib
