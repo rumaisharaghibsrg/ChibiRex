@@ -5,6 +5,8 @@ dengan Function URL publik.
 Lambda ini sengaja di luar VPC: Lambda API (chibirex-api-function) berada di VPC tanpa akses internet keluar, jadi
 tidak bisa memanggil Bedrock. Copilot membaca data lewat Function URL API (hanya GET) dan bertanya ke Claude di
 Bedrock dengan izin role Lambda (role yang sama dengan Lambda API), tanpa API key. Kode: folder copilot/.
+Kalau agent toko sudah di-deploy ke Bedrock AgentCore (deploy\deploy_agent.ps1), ARN runtime-nya ikut dipasang
+supaya POST /agent bisa membangunkannya.
 
 Prasyarat: .venv repo (untuk membuat zip) dan login AWS CLI:  aws login --profile rexa
   powershell -ExecutionPolicy Bypass -File deploy\deploy_copilot.ps1
@@ -17,7 +19,8 @@ param(
     [string]$FungsiApi = "chibirex-api-function",
     [string]$App = "rexa-dashboard",
     [string]$Model = "au.anthropic.claude-haiku-4-5-20251001-v1:0",
-    [string]$ModelJaringan = "au.anthropic.claude-sonnet-4-6"
+    [string]$ModelJaringan = "au.anthropic.claude-sonnet-4-6",
+    [string]$Agent = "rexa_agent_toko"
 )
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
@@ -61,7 +64,17 @@ with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
 "@ $zip
 Cek "membuat zip"
 
-$lingkungan = Tulis-Json "env.json" @{ Variables = @{ REXA_API_URL = $apiUrl; COPILOT_MODEL_ID = $Model; COPILOT_REGION = $Region; JARINGAN_MODEL_ID = $ModelJaringan } }
+# Runtime agent toko di Bedrock AgentCore (kosong kalau belum di-deploy atau AgentCore tidak tersedia di region ini).
+$ErrorActionPreference = "Continue"
+$runtimeArn = aws bedrock-agentcore-control list-agent-runtimes @aws `
+    --query "agentRuntimes[?agentRuntimeName=='$Agent'].agentRuntimeArn | [0]" --output text 2>$null
+if ($LASTEXITCODE -ne 0 -or -not $runtimeArn -or $runtimeArn.Trim() -eq "None") { $runtimeArn = "" } else { $runtimeArn = $runtimeArn.Trim() }
+$ErrorActionPreference = "Stop"
+Write-Host ("   Agent di Bedrock AgentCore: " + $(if ($runtimeArn) { "ada ($Agent)" } else { "belum di-deploy" }))
+
+$variabel = @{ REXA_API_URL = $apiUrl; COPILOT_MODEL_ID = $Model; COPILOT_REGION = $Region; JARINGAN_MODEL_ID = $ModelJaringan }
+if ($runtimeArn) { $variabel.AGENT_RUNTIME_ARN = $runtimeArn }
+$lingkungan = Tulis-Json "env.json" @{ Variables = $variabel }
 $cors = Tulis-Json "cors.json" @{ AllowOrigins = $origins; AllowMethods = @("GET", "POST"); AllowHeaders = @("content-type"); MaxAge = 600 }
 
 $ErrorActionPreference = "Continue"  # di PowerShell 5.1, stderr perintah native memicu galat kalau "Stop"

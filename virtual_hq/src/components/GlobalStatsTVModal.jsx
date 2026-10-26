@@ -262,6 +262,7 @@ export function GlobalStatsTVModal({ mode = 'hidden', onInspect, onClose }) {
     const persenTertahanJaringan = j?.nilai_stok_idr ? Math.round((100 * j.modal_tertahan_idr) / j.nilai_stok_idr) : 0;
     const worker = data?.worker;
     const statusAgent = !worker ? { teks: '-', warna: '#94a3b8' }
+        : worker.agentcore ? { teks: 'BEDROCK AGENTCORE', warna: '#34d399' }
         : worker.mode === 'antrian'
             ? (worker.aktif ? { teks: 'WORKER AKTIF', warna: '#34d399' } : { teks: 'WORKER MATI', warna: '#f87171' })
             : worker.mode === 'lokal' ? { teks: 'LOKAL', warna: '#34d399' } : { teks: 'NONAKTIF', warna: '#f87171' };

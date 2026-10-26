@@ -2,14 +2,17 @@
 
 POST /tanya     {"store": 74, "pertanyaan": "...", "riwayat": [{"peran": "user"|"assistant", "teks": "..."}]}
 POST /jaringan  {"bahasa": "id"|"en"}: agent jaringan (copilot/jaringan.py) menganalisis semua toko.
+POST /agent     {"run_id": "..."}: bangunkan agent toko di Bedrock AgentCore (copilot/agentcore.py) untuk tugas yang
+                baru masuk antrian API.
 GET  /          cek kesehatan dan model yang dipakai.
 Galat memakai format yang sama dengan API Rexa: {"detail": {"kode": ..., "pesan": ...}}.
 """
 
 import base64
 import json
+import re
 
-from copilot import jaringan
+from copilot import agentcore, jaringan
 from copilot.inti import MODEL_ID, jawab
 
 
@@ -59,15 +62,35 @@ def _analisis_jaringan(event: dict) -> dict:
         return _galat(502, "JARINGAN_GAGAL", "Agent jaringan belum bisa berjalan sekarang. Coba lagi sebentar.")
 
 
+def _bangunkan_agent(event: dict) -> dict:
+    try:
+        run_id = _body(event).get("run_id")
+    except ValueError as e:
+        return _galat(422, "PERMINTAAN_TIDAK_VALID", str(e))
+    if run_id is not None and not (isinstance(run_id, str) and re.fullmatch(r"[0-9a-zA-Z_-]{1,64}", run_id)):
+        return _galat(422, "PERMINTAAN_TIDAK_VALID", "run_id tidak valid.")
+    try:
+        return _json(202, agentcore.bangunkan(run_id))
+    except agentcore.AgentCoreBelumAda:
+        return _galat(503, "AGENTCORE_BELUM_ADA", "Agent belum di-deploy ke Bedrock AgentCore; tugas menunggu worker "
+                                                  "di laptop.")
+    except Exception as e:
+        print(f"AGENTCORE_GAGAL run={run_id}: {type(e).__name__}: {e}")
+        return _galat(502, "AGENTCORE_GAGAL", "Agent di Bedrock AgentCore belum bisa dibangunkan.")
+
+
 def handler(event, context):
     http = (event.get("requestContext") or {}).get("http") or {}
     metode, path = http.get("method", "POST"), (event.get("rawPath") or "/").rstrip("/")
     if metode == "GET":
-        return _json(200, {"status": "ok", "model": MODEL_ID, "model_jaringan": jaringan.MODEL_ID})
+        return _json(200, {"status": "ok", "model": MODEL_ID, "model_jaringan": jaringan.MODEL_ID,
+                           "agentcore": bool(agentcore.RUNTIME_ARN)})
     if metode == "POST" and path == "/jaringan":
         return _analisis_jaringan(event)
+    if metode == "POST" and path == "/agent":
+        return _bangunkan_agent(event)
     if metode != "POST" or path not in ("", "/tanya"):
-        return _galat(404, "TIDAK_ADA", "Pakai POST /tanya atau POST /jaringan.")
+        return _galat(404, "TIDAK_ADA", "Pakai POST /tanya, POST /jaringan, atau POST /agent.")
     try:
         store, pertanyaan, riwayat = _baca_permintaan(event)
     except (ValueError, json.JSONDecodeError) as e:

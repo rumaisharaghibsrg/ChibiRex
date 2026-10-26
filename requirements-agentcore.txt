@@ -1,0 +1,7 @@
+# Paket untuk agent Rexa di Amazon Bedrock AgentCore Runtime (Python 3.13, Linux ARM64; dikemas oleh
+# deploy\deploy_agent.ps1 dengan uv). Hanya yang diimpor agent/ (dan engine/config.py). Versi disamakan dengan
+# requirements.txt, tempat worker di laptop diuji.
+strands-agents==1.61.1
+bedrock-agentcore==1.25.0
+httpx==0.28.1
+python-dotenv==1.2.4

@@ -10,7 +10,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Send,
-  Laptop
+  Laptop,
+  Cloud
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { rupiah } from '../lib/format';
@@ -41,7 +42,7 @@ const NAMA_TOOL = {
 const INTERVAL_PANTAU_MS = 1500;
 const INTERVAL_WORKER_MS = 15000;
 const TANPA_LANGKAH = [];
-// MENUNGGU: mode antrian (API di Lambda), tugas belum diambil worker agent di laptop.
+// MENUNGGU: mode antrian (API di Lambda), tugas belum diambil agent di Bedrock AgentCore atau worker di laptop.
 const STATUS_AKTIF = ['MENUNGGU', 'BERJALAN'];
 
 // Keterangan cara agent dijalankan, dari GET /agent-runs/worker.
@@ -49,6 +50,14 @@ function KeteranganWorker({ worker }) {
   if (!worker || worker.mode === 'lokal') return null;
   if (worker.mode === 'mati') {
     return <span className="text-amber-700">Agent belum tersedia di versi online.</span>;
+  }
+  if (worker.agentcore) {
+    return (
+      <span className="inline-flex items-center gap-1 text-emerald-700">
+        <Cloud className="w-3.5 h-3.5" />
+        Agent berjalan di Amazon Bedrock AgentCore (laptop tidak perlu menyala)
+      </span>
+    );
   }
   return (
     <span className={`inline-flex items-center gap-1 ${worker.aktif ? 'text-emerald-700' : 'text-amber-700'}`}>
@@ -220,7 +229,7 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
           {berjalan || memulai ? (
             <>
               <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
-              <span>{menunggu ? 'Menunggu worker' : 'Agent berjalan'}{berjalan ? ` (${detik} dtk)` : '...'}</span>
+              <span>{menunggu ? (worker?.agentcore ? 'Menyiapkan agent' : 'Menunggu worker') : 'Agent berjalan'}{berjalan ? ` (${detik} dtk)` : '...'}</span>
             </>
           ) : (
             <>
@@ -312,7 +321,9 @@ export default function AgentRunPanel({ store, onSelesai, onBukaPo }) {
         {berjalan && (
           <div className="flex items-center gap-2 text-xs text-slate-500 pl-[68px]">
             <span className="animate-pulse w-2 h-2 rounded-full bg-[#4e8a6e]" />
-            {menunggu ? 'Menunggu worker agent di laptop mengambil tugas...' : 'Agent sedang berpikir...'}
+            {menunggu
+              ? (worker?.agentcore ? 'Menyiapkan agent di Bedrock AgentCore...' : 'Menunggu worker agent di laptop mengambil tugas...')
+              : 'Agent sedang berpikir...'}
           </div>
         )}
 

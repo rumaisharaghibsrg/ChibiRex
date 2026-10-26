@@ -153,7 +153,7 @@ function App() {
         setStepCount(steps.length);
         setCurrentStep(steps.length > 0 ? steps[steps.length - 1] : null);
         const status = run.status || (run.berhasil ? 'SELESAI' : 'GAGAL'); // jejak lama belum punya kolom status
-        // MENUNGGU = mode antrian, tugas belum diambil worker agent di laptop.
+        // MENUNGGU = mode antrian, tugas belum diambil agent di Bedrock AgentCore (atau worker di laptop).
         setAgentStatus(status === 'MENUNGGU' ? 'MEMULAI' : status);
         if (status === 'SELESAI') setSummary(run.jawaban || 'Tinjauan toko selesai. Draf PO siap ditinjau manajer.');
         if (status === 'GAGAL') setErrorMessage(run.pesan || 'Agent gagal dijalankan.');
@@ -256,7 +256,7 @@ function App() {
         tandaiPanelDibuka();
 
         try {
-            // 3. Antrikan agent di API (mode antrian: worker di laptop mengambilnya), lalu pantau langkahnya.
+            // 3. Antrikan agent di API (mode antrian: AgentCore atau worker di laptop mengambilnya), lalu pantau langkahnya.
             const data = await api.mulaiAgent(activeStoreId);
             terapkanRun(data);
             startPolling(data.run_id);

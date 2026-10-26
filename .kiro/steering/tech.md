@@ -35,7 +35,7 @@
 - AWS Lambda (container image, `ap-southeast-2`) for the Tools API
 - AWS Amplify for dashboard hosting (the only official link; the old Vercel deployment is no longer used)
 - Amazon EFS for persistent SQLite state across Lambda cold starts
-- LLM for the demo and final (since 25 Oct 2026): Claude Sonnet 4.6 on Amazon Bedrock (`au.anthropic.claude-sonnet-4-6`, `ap-southeast-2`), authenticated with a Bedrock API key (`AWS_BEARER_TOKEN_BEDROCK` in `.env`). The Strands agent itself still runs on the presenter's laptop through the queue worker (`python -m agent.worker`, auto-started at login). Ollama `qwen3:14b` remains a local fallback (`CHIBIREX_LLM_PROVIDER=ollama`). Available to the team account: Sonnet 4.6 and Opus 4.6; Sonnet 4.5 needs the Anthropic use-case form; 5.5 models are not available. Nova models still have a token quota of 0.
+- LLM for the demo and final (since 25 Oct 2026): Claude Sonnet 4.6 on Amazon Bedrock (`au.anthropic.claude-sonnet-4-6`, `ap-southeast-2`), authenticated with a Bedrock API key (`AWS_BEARER_TOKEN_BEDROCK` in `.env`). The Strands agent runs on Amazon Bedrock AgentCore Runtime (`agent/agentcore.py`, deployed with `deploy\deploy_agent.ps1`, IAM role instead of the API key); the queue worker on the laptop (`python -m agent.worker`) is the fallback. Ollama `qwen3:14b` remains a local fallback (`CHIBIREX_LLM_PROVIDER=ollama`). Available to the team account: Sonnet 4.6 and Opus 4.6; Sonnet 4.5 needs the Anthropic use-case form; 5.5 models are not available. Nova models still have a token quota of 0.
 
 ## Environment Variables
 
@@ -53,6 +53,7 @@ All variables are prefixed `CHIBIREX_`. Key ones:
 | `CHIBIREX_WORKER_API_URL` | API URL for the queue worker (Lambda URL in production) |
 | `CHIBIREX_WORKER_TOKEN` | Shared secret for worker authentication (`X-Worker-Token` header) |
 | `CHIBIREX_AGENT_MODE` | `lokal`, `antrian`, or `mati` |
+| `CHIBIREX_AGENTCORE` | `1` on the Lambda API once the agent runs on Bedrock AgentCore (dashboard stops asking for the laptop) |
 | `CHIBIREX_CORS_ORIGINS` | Comma-separated allowed origins |
 | `CHIBIREX_SAP_URL` | Override SAP OData endpoint (default: in-process mock) |
 | `CHIBIREX_STATE_DB` | Path override for state.sqlite |
@@ -70,7 +71,9 @@ uvicorn api.main:app --reload
 python -m agent.run --store 74
 python -m agent.run --store 74 --tugas "Custom instruction"
 
-# Start the queue worker (for Lambda + local LLM mode)
+# Deploy the store agent to Bedrock AgentCore Runtime (then redeploy the dashboard)
+.\deploy\deploy_agent.ps1
+# Start the queue worker on the laptop (fallback when AgentCore is not deployed)
 python -m agent.worker
 # ...or install it to start hidden at Windows login (log: logs\worker.log; -Status / -Hapus)
 .\deploy\worker_otomatis.ps1

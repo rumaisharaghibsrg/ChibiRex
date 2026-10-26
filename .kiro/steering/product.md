@@ -34,7 +34,7 @@ Key domain terms used throughout the codebase (Indonesian):
 
 - Dashboard: AWS Amplify (`main.d30b19xkk8lknt.amplifyapp.com`)
 - Tools API: AWS Lambda (container image, Function URL, `ap-southeast-2`)
-- Agent LLM: Claude Sonnet 4.6 on Amazon Bedrock; the Strands agent runs on the presenter's laptop via the queue-polling worker (Ollama `qwen3:14b` as local fallback)
+- Agent LLM: Claude Sonnet 4.6 on Amazon Bedrock. The Strands agent runs on Amazon Bedrock AgentCore Runtime (`rexa_agent_toko`, woken by the Copilot Lambda, deployed with `deploy\deploy_agent.ps1`); the queue-polling worker on the presenter's laptop is the fallback (Ollama `qwen3:14b` as local LLM fallback)
 - Analytics DB: DuckDB deployed with Lambda image
 - Transactional state: SQLite on Amazon EFS (shared across Lambda instances)
 - SAP: OData V2 mock (production SAP optional via `CHIBIREX_SAP_URL`)

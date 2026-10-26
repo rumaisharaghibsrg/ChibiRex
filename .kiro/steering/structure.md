@@ -4,18 +4,18 @@
 
 ```
 ChibiRex/
-├── agent/          # Strands AI agent: LLM wrappers, tool definitions, worker, run entry point
+├── agent/          # Strands AI agent: LLM wrappers, tool definitions, laptop worker, AgentCore entrypoint, run entry point
 ├── api/            # FastAPI backend: routes, schemas, guardrails, SAP integration, settings
 ├── dashboard/      # React + Vite frontend
 ├── virtual_hq/     # Virtual HQ: Phaser 4 + React 2D office; NPCs read the same API as the dashboard (src/lib/api.js)
 ├── engine/         # Offline analytics pipeline (runs separately, produces chibirex.duckdb)
 ├── sap_mock/       # SAP OData V2 mock; mounted inside the API at /sap
-├── copilot/        # Lambda rexa-copilot (outside VPC), read-only API tools: chatbot (inti.py, Haiku 4.5) and network agent (jaringan.py, Sonnet 4.6)
+├── copilot/        # Lambda rexa-copilot (outside VPC), read-only API tools: chatbot (inti.py, Haiku 4.5), network agent (jaringan.py, Sonnet 4.6), and agentcore.py (POST /agent wakes the store agent on AgentCore)
 ├── data/
 │   ├── raw/        # Source CSVs from Kaggle (Bibitor, Instacart, backorders, online retail)
 │   └── processed/  # Generated artifacts: chibirex.duckdb, state.sqlite, sap_mock.sqlite
 ├── models/         # Saved ML model artifacts (LightGBM stockout risk model)
-├── deploy/         # PowerShell scripts: deploy_lambda.ps1, deploy_dashboard.ps1, worker_otomatis.ps1 (worker at Windows login)
+├── deploy/         # PowerShell scripts: deploy_lambda.ps1, deploy_copilot.ps1, deploy_agent.ps1 (AgentCore), deploy_dashboard.ps1, worker_otomatis.ps1 (worker at Windows login)
 ├── docs/           # Architecture diagrams (arsitektur.md), API contract, PDF proposals
 ├── tests/          # pytest test suite
 ├── .env            # Environment variables (CHIBIREX_* prefixed; not committed)
@@ -36,7 +36,8 @@ The Strands-based AI agent that drives inventory decisions.
 | `prompt.py` | `SYSTEM_PROMPT` (5-step procedure + rules) and `TUGAS_DEFAULT` task template |
 | `tools.py` | `AlatAgent` class — creates 6 Strands `@tool` functions bound to one HTTP client + run_id; strips API responses to LLM-relevant fields only (for 8K context budget) |
 | `run.py` | `jalankan()` entry point — instantiates Agent, runs it, saves trace to API; CLI: `python -m agent.run --store 74` |
-| `worker.py` | Queue-polling worker for Lambda mode — polls `/agent-runs/antrian/ambil`, runs the agent on the laptop with the LLM set in `.env` (Bedrock Claude Sonnet 4.6, or Ollama), streams steps back to API; CLI: `python -m agent.worker` |
+| `worker.py` | Queue-polling worker for Lambda mode (fallback since AgentCore) — polls `/agent-runs/antrian/ambil`, runs the agent on the laptop with the LLM set in `.env` (Bedrock Claude Sonnet 4.6, or Ollama), streams steps back to API; `kerjakan_satu()` is shared with AgentCore; CLI: `python -m agent.worker` |
+| `agentcore.py` | Entrypoint on Amazon Bedrock AgentCore Runtime (`BedrockAgentCoreApp`): answers the invocation at once, then takes one task from the API queue in the background (`kerjakan_satu`, worker name `bedrock-agentcore`) while `/ping` reports HealthyBusy; packaged as Python 3.13 ARM64 code from S3 (`requirements-agentcore.txt`); local test: `python -m agent.agentcore` |
 | `cek_llm.py` | Connectivity check for Ollama |
 | `cek_bedrock.py` | Connectivity check + model selection for Bedrock |
 | `reset_demo.py` | Resets demo state data |

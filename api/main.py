@@ -283,9 +283,14 @@ def _kedaluwarsa_agent(con, s: Settings, sekarang) -> None:
     """Mode antrian: tugas yang tidak diambil worker atau macet di tengah jalan ditutup sebagai GAGAL."""
     batas_tunggu = (sekarang - timedelta(seconds=s.worker_batas_menunggu_dtk)).isoformat(timespec="seconds")
     batas_jalan = (sekarang - timedelta(seconds=s.worker_batas_berjalan_dtk)).isoformat(timespec="seconds")
+    if s.agentcore:
+        saran = ("Agent di Bedrock AgentCore tidak mengambil tugas dalam {} detik. Coba lagi; kalau terulang, cek log "
+                 "runtime rexa_agent_toko di CloudWatch atau jalankan `python -m agent.worker` di laptop sebagai cadangan.")
+    else:
+        saran = ("Tidak ada worker agent yang mengambil tugas dalam {} detik. Jalankan `python -m agent.worker` di "
+                 "laptop (atau cek worker otomatisnya), lalu coba lagi.")
     con.execute("""update agent_runs set status = 'GAGAL', pesan = ? where status = 'MENUNGGU' and waktu < ?""",
-                (f"Tidak ada worker agent yang mengambil tugas dalam {s.worker_batas_menunggu_dtk} detik. "
-                 "Jalankan `python -m agent.worker` di laptop (atau cek worker otomatisnya), lalu coba lagi.", batas_tunggu))
+                (saran.format(s.worker_batas_menunggu_dtk), batas_tunggu))
     con.execute("""update agent_runs set status = 'GAGAL', pesan = ? where status = 'BERJALAN' and mulai_pada < ?""",
                 ("Worker agent berhenti sebelum agent selesai.", batas_jalan))
 
@@ -870,14 +875,16 @@ def _routes(app: FastAPI) -> None:
 
     @app.get("/agent-runs/worker", response_model=StatusWorker, tags=[DASHBOARD])
     def status_worker(request: Request):
-        """Mode agent API ini, dan (mode antrian) apakah worker di laptop sedang aktif mengambil antrian."""
+        """Mode agent API ini, apakah agent sudah di Bedrock AgentCore, dan (mode antrian) apakah worker di laptop
+        sedang aktif mengambil antrian."""
         s = _settings(request)
         with state.baca(s.state_db) as con:
             row = con.execute("select terakhir_terlihat, nama from worker_status where id = 1").fetchone()
         terakhir = row["terakhir_terlihat"] if row else None
         batas = (s.clock() - timedelta(seconds=s.worker_aktif_dtk)).isoformat(timespec="seconds")
         return {"mode": "lokal" if s.agent_runner else s.agent_mode, "aktif": bool(terakhir and terakhir >= batas),
-                "terakhir_terlihat": terakhir, "nama": row["nama"] if row else None}
+                "terakhir_terlihat": terakhir, "nama": row["nama"] if row else None,
+                "agentcore": s.agentcore and s.agent_mode == "antrian"}
 
     @app.get("/agent-runs/aktif", response_model=AgentRunStatus | None, tags=[DASHBOARD])
     def agent_run_aktif(request: Request):

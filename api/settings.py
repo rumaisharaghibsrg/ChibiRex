@@ -69,14 +69,18 @@ class Settings:
     agent_runner: Callable[..., dict] | None = None
     # Cara tombol "Jalankan agent" menjalankan agent:
     # - "lokal": agent Strands + Ollama di thread proses API ini (API di laptop, `uvicorn`).
-    # - "antrian": tugas masuk antrian di state; worker di laptop (`python -m agent.worker`) mengambilnya,
-    #   menjalankan agent dengan Ollama, dan melaporkan setiap langkah ke API. Untuk API di Lambda + LLM di laptop.
+    # - "antrian": tugas masuk antrian di state; agent di Bedrock AgentCore (agent/agentcore.py) atau worker di
+    #   laptop (`python -m agent.worker`) mengambilnya dan melaporkan setiap langkah ke API. Untuk API di Lambda.
     # - "mati": tombol menjawab 503. Default di Lambda, karena thread latar dibekukan setelah respons terkirim.
     agent_mode: str = field(default_factory=lambda: os.environ.get(
         "CHIBIREX_AGENT_MODE", "mati" if di_lambda() else "lokal"))
+    # Mode antrian: agent sudah di-deploy ke Bedrock AgentCore (diisi deploy\deploy_agent.ps1), jadi dashboard tidak
+    # meminta laptop dinyalakan. Worker di laptop tetap boleh berjalan sebagai cadangan.
+    agentcore: bool = field(default_factory=lambda: os.environ.get("CHIBIREX_AGENTCORE") == "1")
     # Token rahasia worker (header X-Worker-Token). Kosong = endpoint worker tidak dikunci (API di laptop dan test).
     worker_token: str | None = field(default_factory=lambda: os.environ.get("CHIBIREX_WORKER_TOKEN") or None)
-    worker_batas_menunggu_dtk: int = 30  # tugas yang tidak diambil worker selama ini dianggap gagal
+    # Tugas yang tidak diambil selama ini dianggap gagal. 60 dtk memberi ruang untuk cold start sesi AgentCore.
+    worker_batas_menunggu_dtk: int = 60
     worker_batas_berjalan_dtk: int = 300  # tugas yang berjalan lebih lama dari ini dianggap macet
     worker_aktif_dtk: int = 15  # worker dianggap aktif kalau terakhir mengambil antrian dalam rentang ini
 

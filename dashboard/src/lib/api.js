@@ -52,6 +52,16 @@ function query(params = {}) {
 
 const keputusan = (oleh, catatan) => ({ method: 'POST', body: { oleh, catatan } });
 
+// Tugas agent yang baru masuk antrian dibangunkan di Bedrock AgentCore lewat Lambda Copilot (POST /agent). Tidak
+// ditunggu: kalau gagal (Copilot belum diatur atau AgentCore belum di-deploy), tugas tetap menunggu worker di laptop.
+function bangunkanAgent(run) {
+  if (COPILOT_URL && run?.status === 'MENUNGGU') {
+    request('/agent', { method: 'POST', body: { run_id: run.run_id }, base: COPILOT_URL })
+      .catch((e) => console.warn('[Rexa] Agent di Bedrock AgentCore belum bisa dibangunkan:', e.message));
+  }
+  return run;
+}
+
 export const api = {
   // Jam simulasi: waktu maju dari 31 Des 2016 (data terakhir Bibitor)
   simulasi: () => request('/simulasi'),
@@ -106,7 +116,8 @@ export const api = {
   analisisJaringan: (bahasa = 'id') => request('/jaringan', { method: 'POST', body: { bahasa }, base: COPILOT_URL }),
 
   // Agent
-  mulaiAgent: (store, tugas) => request('/agent-runs/mulai', { method: 'POST', body: { store, tugas } }),
+  mulaiAgent: (store, tugas) => request('/agent-runs/mulai', { method: 'POST', body: { store, tugas } })
+    .then(bangunkanAgent),
   statusAgent: (runId) => request(`/agent-runs/${runId}`),
   agentAktif: () => request('/agent-runs/aktif'),
   statusWorker: () => request('/agent-runs/worker'),

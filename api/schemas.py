@@ -248,9 +248,10 @@ class AgentRunTugas(BaseModel):
 
 class StatusWorker(BaseModel):
     mode: str = Field(description="lokal, antrian, atau mati (lihat api/settings.py)")
-    aktif: bool = Field(description="Mode antrian: worker di laptop baru saja mengambil antrian")
+    aktif: bool = Field(description="Mode antrian: worker baru saja mengambil antrian")
     terakhir_terlihat: str | None
-    nama: str | None
+    nama: str | None = Field(description="Pengambil tugas terakhir: nama laptop, atau bedrock-agentcore")
+    agentcore: bool = Field(False, description="Mode antrian: agent sudah di Bedrock AgentCore, laptop tidak wajib")
 
 
 class AgentRunStatus(BaseModel):

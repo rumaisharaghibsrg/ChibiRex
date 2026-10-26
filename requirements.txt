@@ -22,6 +22,8 @@ strands-agents==1.61.1
 ollama==0.6.3  # klien Python untuk LLM lokal (penyedia default agent)
 boto3==1.43.114
 awscrt==0.36.0  # botocore[crt]: wajib untuk kredensial dari `aws login`
+bedrock-agentcore==1.25.0  # agent di Bedrock AgentCore Runtime (agent/agentcore.py, requirements-agentcore.txt)
+uv==0.13.5  # deploy\deploy_agent.ps1: mengemas dependensi agent untuk Linux ARM64 dari Windows
 
 # Dashboard (Tahap 7)
 streamlit==1.66.0

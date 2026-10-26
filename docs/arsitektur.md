@@ -12,8 +12,9 @@ flowchart LR
         dash["Rexa Dashboard<br/>React · Amplify / S3 + CloudFront"]
         api["Tools API · FastAPI<br/>AWS Lambda"]
         guard{{"Guardrails in code<br/>3σ outlier · daily spend cap<br/>circuit breaker · idempotency<br/>Draft by default"}}
+        copilot["Rexa Copilot · AWS Lambda<br/>outside the VPC, wakes the agent"]
         agent["Rexa Agent · Strands Agents<br/>Bedrock AgentCore Runtime"]
-        llm["Amazon Bedrock<br/>Nova / Claude"]
+        llm["Amazon Bedrock<br/>Claude Sonnet 4.6"]
         state[("Transactional state<br/>POs · holds · audit log<br/>managed DB")]
         analytics[("Analytics store<br/>Vs · ROP · risk score<br/>substitution rules")]
     end
@@ -27,9 +28,10 @@ flowchart LR
 
     manager -- "run agent · 1-Click Approval" --> dash
     dash -- "REST" --> api
-    api -- "start run" --> agent
+    dash -- "wake agent" --> copilot
+    copilot -- "InvokeAgentRuntime" --> agent
     agent -- "reasoning" --> llm
-    agent -- "6 tools over HTTP" --> api
+    agent -- "take queued task · 6 tools over HTTP" --> api
     api --- guard
     api --> state
     api --> analytics
@@ -44,12 +46,13 @@ sequenceDiagram
     actor Manager as Store manager
     participant Dash as Dashboard
     participant API as Tools API + guardrails
-    participant Agent as Rexa Agent (Strands + LLM)
+    participant Agent as Rexa Agent (Strands on AgentCore + Claude)
     participant SAP as SAP S/4HANA (mock)
 
     Manager->>Dash: Run agent for store 74
-    Dash->>API: POST /agent-runs/mulai
-    API->>Agent: start run
+    Dash->>API: POST /agent-runs/mulai (task queued)
+    Dash->>Agent: wake via Copilot Lambda (InvokeAgentRuntime)
+    Agent->>API: take task from the queue
     Agent->>API: PLAN · list_prioritas
     Agent->>API: REASON · check_substitution
     Agent->>API: ACT · hold_reorder / draft_purchase_order
@@ -65,11 +68,11 @@ sequenceDiagram
 
 ## Posisi sekarang vs target final
 
-| Komponen | Sekarang (25 Okt 2026) | Target final |
+| Komponen | Sekarang (26 Okt 2026) | Target final |
 |---|---|---|
 | Dashboard | **AWS Amplify** (`main.d30b19xkk8lknt.amplifyapp.com`); Vercel dan lokal tetap ada | AWS Amplify |
 | Tools API | AWS Lambda (container image, Function URL, Sydney) di VPC; deploy dari repo (`deploy\deploy_lambda.ps1`) | Lambda (+ API Gateway bila perlu) |
-| Agent | Strands di laptop lewat worker yang mengambil tugas dari antrian API; LLM **Claude Sonnet 4.6 di Amazon Bedrock** (Ollama `qwen3:14b` sebagai cadangan lokal) | Bedrock AgentCore Runtime + Amazon Bedrock |
+| Agent | Strands yang sama untuk **Bedrock AgentCore Runtime** (`agent/agentcore.py`, kode Python 3.13 ARM64 dari S3, dipicu Lambda Copilot; `deploy\deploy_agent.ps1`) dan worker di laptop sebagai cadangan; keduanya mengambil tugas dari antrian API. LLM **Claude Sonnet 4.6 di Amazon Bedrock** (Ollama `qwen3:14b` sebagai cadangan lokal). Online masih worker laptop sampai skrip AgentCore dijalankan | Bedrock AgentCore Runtime + Amazon Bedrock |
 | Chatbot Copilot dan Agent Jaringan | Lambda `rexa-copilot` di luar VPC, Bedrock Converse + tool baca yang membaca API lewat Function URL: chatbot per toko dengan Claude Haiku 4.5, Agent Jaringan (semua toko, menetapkan toko prioritas dan transfer stok) dengan Claude Sonnet 4.6 | Tetap |
 | State transaksi | SQLite di **Amazon EFS** (dipakai bersama semua instance, tidak hilang saat cold start) | Database terkelola (RDS/DynamoDB) |
 | Data analitik | DuckDB ikut di-deploy bersama API | Tetap DuckDB (hanya dibaca), disimpan di S3 |

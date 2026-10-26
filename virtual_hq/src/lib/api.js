@@ -69,6 +69,16 @@ function query(params = {}) {
 
 const keputusan = (catatan) => ({ method: 'POST', body: { oleh: OLEH, catatan } });
 
+// Tugas agent yang baru masuk antrian dibangunkan di Bedrock AgentCore lewat Lambda Copilot (POST /agent), sama
+// seperti dashboard. Tidak ditunggu: kalau gagal, tugas tetap menunggu worker di laptop.
+function bangunkanAgent(run) {
+    if (COPILOT_URL && run?.status === 'MENUNGGU') {
+        request('/agent', { method: 'POST', body: { run_id: run.run_id }, base: COPILOT_URL, timeoutMs: 60000 })
+            .catch((e) => console.warn('[VirtualHQ] Agent di Bedrock AgentCore belum bisa dibangunkan:', e.message));
+    }
+    return run;
+}
+
 export const api = {
     // Jam simulasi (sama dengan kontrol tanggal di dashboard)
     simulasi: () => request('/simulasi'),
@@ -93,8 +103,8 @@ export const api = {
     setujuiPo: (poId, catatan) => request(`/purchase-orders/${poId}/approve`, keputusan(catatan)),
     tolakPo: (poId, catatan) => request(`/purchase-orders/${poId}/reject`, keputusan(catatan)),
 
-    // Agent Rexa (worker di laptop, mode antrian)
-    mulaiAgent: (store) => request('/agent-runs/mulai', { method: 'POST', body: { store } }),
+    // Agent Rexa (mode antrian: Bedrock AgentCore, cadangannya worker di laptop)
+    mulaiAgent: (store) => request('/agent-runs/mulai', { method: 'POST', body: { store } }).then(bangunkanAgent),
     statusAgent: (runId) => request(`/agent-runs/${runId}`),
     agentAktif: () => request('/agent-runs/aktif'),
     riwayatAgent: (limit = 30) => request(`/agent-runs${query({ limit })}`),

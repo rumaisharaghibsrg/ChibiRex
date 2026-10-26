@@ -1,9 +1,12 @@
 """Worker agent di laptop: `python -m agent.worker` (berhenti dengan Ctrl+C).
 
-Dipakai saat API berjalan di AWS Lambda (mode antrian) tetapi LLM berjalan di laptop lewat Ollama. Tombol
-"Jalankan Agent" di dashboard menaruh tugas ke antrian API; worker ini mengambilnya, menjalankan agent Strands,
-dan melaporkan setiap pemanggilan tool ke API, sehingga dashboard menampilkan langkah agent selagi bekerja.
-Semua aksi agent tetap lewat API di Lambda, jadi guardrail dan tiruan SAP tetap berjalan di AWS.
+Dipakai saat API berjalan di AWS Lambda (mode antrian). Tombol "Jalankan Agent" di dashboard menaruh tugas ke
+antrian API; worker mengambilnya, menjalankan agent Strands, dan melaporkan setiap pemanggilan tool ke API, sehingga
+dashboard menampilkan langkah agent selagi bekerja. Semua aksi agent tetap lewat API di Lambda, jadi guardrail dan
+tiruan SAP tetap berjalan di AWS.
+
+Sejak agent di-deploy ke Bedrock AgentCore Runtime (agent/agentcore.py), worker di laptop hanya cadangan: keduanya
+memakai `kerjakan_satu`, dan tugas diambil oleh yang lebih dulu meminta.
 
 Atur di .env: CHIBIREX_WORKER_API_URL (URL Lambda) dan CHIBIREX_WORKER_TOKEN (sama dengan di Lambda).
 """
@@ -45,6 +48,20 @@ def ambil_tugas(client: httpx.Client, nama: str) -> dict | None:
     return r.json()
 
 
+def kerjakan_satu(client: httpx.Client, nama: str) -> bool:
+    """Ambil satu tugas dari antrian dan jalankan agent-nya. False kalau antrian kosong."""
+    tugas = ambil_tugas(client, nama)
+    if tugas is None:
+        return False
+    print(f"\nTugas {tugas['run_id']} (toko {tugas['store']}): {tugas['tugas']}")
+    try:
+        jalankan(tugas["tugas"], store=tugas["store"], client=client, verbose=True, run_id=tugas["run_id"],
+                 langkah=LangkahTerlapor(client, tugas["run_id"]))
+    except httpx.HTTPError as e:  # API kambuh saat menyimpan jejak; API menandai tugasnya GAGAL sendiri
+        print(f"Jejak agent gagal disimpan ke API: {e}")
+    return True
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Worker agent: ambil tugas dari antrian API dan jalankan dengan LLM lokal.")
     p.add_argument("--jeda", type=float, default=2.0, help="Detik antara pengecekan antrian (default 2)")
@@ -57,20 +74,14 @@ def main() -> None:
               "Menunggu tugas dari tombol 'Jalankan Agent' di dashboard... (Ctrl+C untuk berhenti)")
         while True:
             try:
-                tugas = ambil_tugas(client, nama)
+                ada_tugas = kerjakan_satu(client, nama)
             except httpx.HTTPError as e:
                 print(f"API tidak bisa dihubungi ({e}); mencoba lagi dalam 5 detik.")
                 time.sleep(5)
                 continue
-            if tugas is None:
+            if not ada_tugas:
                 time.sleep(args.jeda)
                 continue
-            print(f"\nTugas {tugas['run_id']} (toko {tugas['store']}): {tugas['tugas']}")
-            try:
-                jalankan(tugas["tugas"], store=tugas["store"], client=client, verbose=True, run_id=tugas["run_id"],
-                         langkah=LangkahTerlapor(client, tugas["run_id"]))
-            except httpx.HTTPError as e:  # API kambuh saat menyimpan jejak; API menandai tugasnya GAGAL sendiri
-                print(f"Jejak agent gagal disimpan ke API: {e}")
             if args.sekali:
                 break
             print("\nMenunggu tugas berikutnya...")

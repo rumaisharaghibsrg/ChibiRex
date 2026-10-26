@@ -1,5 +1,5 @@
-"""Uji mode antrian: tombol dashboard -> tugas MENUNGGU -> worker di laptop mengambil, melapor langkah, menyimpan
-jejak akhir. Ini jalur demo saat API di Lambda tetapi LLM (Ollama) di laptop."""
+"""Uji mode antrian: tombol dashboard -> tugas MENUNGGU -> worker (Bedrock AgentCore atau laptop) mengambil, melapor
+langkah, menyimpan jejak akhir. Ini jalur API di Lambda."""
 
 from datetime import timedelta
 
@@ -18,7 +18,8 @@ def test_alur_antrian_dari_tombol_sampai_selesai(analytics_db, tmp_path):
     jam = [SEKARANG]
     with _client(analytics_db, tmp_path, jam) as client:
         assert client.get("/agent-runs/worker").json() == {"mode": "antrian", "aktif": False,
-                                                           "terakhir_terlihat": None, "nama": None}
+                                                           "terakhir_terlihat": None, "nama": None,
+                                                           "agentcore": False}
         run = client.post("/agent-runs/mulai", json={"store": 1}).json()
         assert run["status"] == "MENUNGGU" and run["langkah"] == []
         # Klik kedua (misalnya dari tab lain) menunjuk run yang sedang berjalan, supaya dashboard bisa memantaunya.
@@ -57,13 +58,34 @@ def test_tugas_tanpa_worker_ditutup_gagal(analytics_db, tmp_path):
     jam = [SEKARANG]
     with _client(analytics_db, tmp_path, jam) as client:
         run = client.post("/agent-runs/mulai", json={"store": 1}).json()
-        jam[0] = SEKARANG + timedelta(seconds=31)
+        jam[0] = SEKARANG + timedelta(seconds=59)
+        assert client.get(f"/agent-runs/{run['run_id']}").json()["status"] == "MENUNGGU"  # cold start AgentCore
+        jam[0] = SEKARANG + timedelta(seconds=61)
         gagal = client.get(f"/agent-runs/{run['run_id']}").json()
         assert gagal["status"] == "GAGAL" and "agent.worker" in gagal["pesan"]
         # Riwayat juga membawa penyebabnya, supaya panel yang baru dibuka tidak hanya menulis "agent gagal".
         riwayat = client.get("/agent-runs").json()[0]
         assert riwayat["status"] == "GAGAL" and "agent.worker" in riwayat["pesan"]
         assert client.post("/agent-runs/mulai", json={"store": 1}).json()["status"] == "MENUNGGU"  # bisa dicoba lagi
+
+
+def test_agentcore_sebagai_pengambil_tugas(analytics_db, tmp_path):
+    jam = [SEKARANG]
+    with buat_client(analytics_db, tmp_path, agent_mode="antrian", worker_token="rahasia-uji", agentcore=True,
+                     clock=lambda: jam[0]) as client:
+        assert client.get("/agent-runs/worker").json()["agentcore"] is True
+        run = client.post("/agent-runs/mulai", json={"store": 1}).json()
+        client.post("/agent-runs/antrian/ambil", params={"nama": "bedrock-agentcore"}, headers=TOKEN)
+        status = client.get("/agent-runs/worker").json()
+        assert (status["aktif"], status["nama"]) == (True, "bedrock-agentcore")
+        assert client.get(f"/agent-runs/{run['run_id']}").json()["status"] == "BERJALAN"
+
+        # Kalau AgentCore tidak mengambil tugas, pesannya menunjuk AgentCore, bukan meminta laptop dinyalakan.
+        jam[0] = SEKARANG + timedelta(seconds=400)
+        kedua = client.post("/agent-runs/mulai", json={"store": 1}).json()
+        jam[0] = SEKARANG + timedelta(seconds=461)
+        gagal = client.get(f"/agent-runs/{kedua['run_id']}").json()
+        assert gagal["status"] == "GAGAL" and "AgentCore" in gagal["pesan"]
 
 
 def test_reset_demo_mengosongkan_data_dan_sap(analytics_db, tmp_path):

@@ -88,6 +88,8 @@ Status di kolom aksi:
 Juri meminta loop agent terlihat jelas: **plan → reason → act → review**, dengan persetujuan manusia.
 
 1. `POST /agent-runs/mulai` dengan body `{"store": 74}`. Responsnya `202` dan berisi `run_id` dengan `status: "BERJALAN"` (mode lokal) atau `"MENUNGGU"` (mode antrian, sampai worker mengambilnya). Kalau agent masih berjalan, responsnya `409 AGENT_SEDANG_BERJALAN` dengan `detail.run_id` milik run yang sedang berjalan; panel langsung memantau run itu.
+   Kalau statusnya `MENUNGGU` dan `VITE_COPILOT_URL` diisi, `api.mulaiAgent` (dashboard dan Virtual HQ) langsung mengirim `POST {VITE_COPILOT_URL}/agent` body `{"run_id": "..."}` tanpa menunggu hasilnya: Lambda Copilot membangunkan agent di Bedrock AgentCore (`copilot/agentcore.py` → `agent/agentcore.py`), yang mengambil tugas dari antrian seperti worker laptop. Responsnya `202 {"status": "diterima"}`, `503 AGENTCORE_BELUM_ADA` (belum di-deploy; tugas menunggu worker laptop), atau `502 AGENTCORE_GAGAL`. Tugas yang tidak diambil dalam 60 detik ditutup GAGAL dengan penyebabnya.
+   `GET /agent-runs/worker` → `{mode, aktif, terakhir_terlihat, nama, agentcore}`: `agentcore: true` berarti agent sudah di Bedrock AgentCore (tampilkan "Agent berjalan di Amazon Bedrock AgentCore", jangan minta laptop dinyalakan); `nama` adalah pengambil tugas terakhir (`bedrock-agentcore` atau nama laptop).
    Saat panel dibuka atau halaman di-refresh, `GET /agent-runs/aktif` mengembalikan run yang sedang MENUNGGU/BERJALAN (atau `null`). Daftar `GET /agent-runs` membawa `status` dan `pesan` (penyebab kalau GAGAL).
 2. Panggil `GET /agent-runs/{run_id}` setiap 1-2 detik. `langkah[]` bertambah setiap kali agent memanggil tool. Setiap langkah berisi `tool`, `input` (termasuk `alasan` dari agent), `output`, dan `detik`.
 3. Saat `status` menjadi `SELESAI`, tampilkan `jawaban` (ringkasan agent), lalu muat ulang ringkasan, tabel, dan daftar PO. Kalau `GAGAL`, tampilkan `pesan`.
@@ -147,7 +149,7 @@ Belum ada endpoint khusus. Skenario ini cukup berupa urutan panggilan API yang s
 ## Aturan untuk perubahan berikutnya
 
 - Jangan menambah data tiruan atau KPI tanpa sumber. Angka yang belum ada di API dicatat sebagai kebutuhan endpoint baru.
-- Klaim arsitektur yang benar: Strands Agents (di laptop lewat worker) + Claude Sonnet 4.6 di Amazon Bedrock, FastAPI di Lambda, dan tiruan SAP S/4HANA (OData `API_PURCHASEORDER_PROCESS_SRV`). Bukan SageMaker dan bukan SAP BTP.
+- Klaim arsitektur yang benar: Strands Agents (di Amazon Bedrock AgentCore Runtime setelah `deploy\deploy_agent.ps1`; sebelumnya di laptop lewat worker) + Claude Sonnet 4.6 di Amazon Bedrock, FastAPI di Lambda, dan tiruan SAP S/4HANA (OData `API_PURCHASEORDER_PROCESS_SRV`). Bukan SageMaker dan bukan SAP BTP.
 - Chatbot Copilot dan Agent Jaringan hanya membaca: jangan menambahkan tool yang mengubah data (PO, hold, persetujuan) ke `copilot/inti.py` atau `copilot/jaringan.py`.
 - Realokasi tidak punya aksi sendiri di backend: dana dipakai saat PO tujuan disetujui, jadi tombolnya membuka draf PO tujuan.
 
