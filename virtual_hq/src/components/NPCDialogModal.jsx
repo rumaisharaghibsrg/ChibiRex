@@ -14,6 +14,7 @@ import React, { useEffect, useCallback } from 'react';
 import { EventBus } from '../game/EventBus';
 import { PERSONA } from '../lib/npc';
 import { pakaiKontrolSentuh } from '../utils/perangkat';
+import { rupiahRingkas, angka } from '../lib/format';
 import './NPCDialogModal.css';
 
 /**
@@ -171,6 +172,55 @@ export function NPCDialogModal({
                                     </span>
                                 </div>
                             ))}
+                        </div>
+                    )}
+
+                    {/* Validasi Audit SKU Kritis Maya (TUGAS C: Rekonsiliasi Auditor & Fast-Moving Risk) */}
+                    {npcId === 'maya' && laporan?.sku_kritis && laporan.sku_kritis.length > 0 && !(isLoading && !activeText) && (
+                        <div className="maya-kritis-section">
+                            <div className="maya-kritis-title">
+                                <span>📋 VALIDASI AUDIT: {laporan.sku_kritis.length} SKU BUTUH REORDER PO</span>
+                                <span className="maya-badge-urgent">URGENT</span>
+                            </div>
+                            <div className="maya-kritis-table-wrapper">
+                                <table className="maya-kritis-table">
+                                    <thead>
+                                        <tr>
+                                            <th>SKU / Kategori</th>
+                                            <th>Sisa / ROP</th>
+                                            <th>Risiko</th>
+                                            <th>Saran PO</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {laporan.sku_kritis.map((item) => (
+                                            <tr key={item.inventory_id}>
+                                                <td>
+                                                    <div className="maya-sku-name" title={item.deskripsi || item.inventory_id}>
+                                                        {item.deskripsi || item.inventory_id}
+                                                    </div>
+                                                    <div className="maya-sku-cat">
+                                                        {item.jenis || item.kategori} · Conf: {Math.round((item.data_confidence ?? 1) * 100)}%
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div className="maya-sku-stok">
+                                                        <span className="maya-stok-val">{angka(item.stok_akhir)} unit</span>
+                                                        <span className="maya-rop-val">ROP: {angka(item.reorder_point)}</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span className="maya-risk-pill">{item.skor_risiko}/100</span>
+                                                </td>
+                                                <td>
+                                                    <div className="maya-po-qty">+{angka(item.saran_qty_po)} unit</div>
+                                                    <div className="maya-po-val">{rupiahRingkas(item.nilai_saran_po_idr)}</div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     )}
                 </div>

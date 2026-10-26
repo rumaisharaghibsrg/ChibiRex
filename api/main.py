@@ -806,6 +806,35 @@ def _routes(app: FastAPI) -> None:
             daftar = list(con.execute("select * from stok_fisik where store = ? order by dicatat_pada desc", (store,)))
         return [_ringkas_stok_fisik(_ambil_sku(cur, c["inventory_id"]), c, s) for c in daftar]
 
+    @app.get("/stores/{store}/maya/status", tags=[GUARDRAIL])
+    def status_maya(store: int, request: Request, cur=Depends(_duck)):
+        """Status audit Maya: menggabungkan audit fisik (stok-fisik) dan SKU berisiko kehabisan stok (level TINGGI)."""
+        s = _settings(request)
+        simulasi.terapkan(cur, s, store=store)
+
+        with state.baca(s.state_db) as con:
+            daftar_fisik = list(con.execute("select * from stok_fisik where store = ? order by dicatat_pada desc", (store,)))
+        stok_fisik = [_ringkas_stok_fisik(_ambil_sku(cur, c["inventory_id"]), c, s) for c in daftar_fisik]
+        perlu_audit_fisik = [c for c in stok_fisik if c["perlu_audit"]]
+
+        dasar = (SKU_SQL + " where s.store = ? and s.perlu_reorder and s.beli_jan_sep >= ?"
+                 " and s.data_confidence >= ? and s.nilai_saran_po_idr > 0")
+        params = [store, config.TREN_BASIS_MIN, s.data_confidence_min, s.tren_naik_min]
+        rel = cur.execute(f"{dasar} and s.tren_beli >= ? order by s.tren_beli * s.permintaan_harian desc limit 10", params)
+        cols = [d[0] for d in rel.description]
+        semua_naik = [_dengan_arah(dict(zip(cols, row)), s) for row in rel.fetchall()]
+        sku_kritis = [x for x in semua_naik if x.get("level_risiko") == "TINGGI"]
+        sku_kritis.sort(key=lambda x: x.get("skor_risiko", 0), reverse=True)
+
+        return {
+            "store": store,
+            "stok_fisik": stok_fisik,
+            "perlu_audit_fisik_count": len(perlu_audit_fisik),
+            "sku_kritis": sku_kritis,
+            "sku_kritis_count": len(sku_kritis),
+            "data_confidence_min": s.data_confidence_min,
+        }
+
     @app.delete("/sku/{inventory_id}/stok-fisik", status_code=204, tags=[GUARDRAIL])
     def selesai_audit_stok(request: Request, inventory_id: str = InventoryIdPath,
                            oleh: str = Query(min_length=1, max_length=100)):

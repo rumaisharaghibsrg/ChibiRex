@@ -319,3 +319,120 @@
     background: linear-gradient(135deg, #0369a1, #075985);
     box-shadow: 0 4px 14px rgba(2, 132, 199, 0.5);
 }
+
+
+/* ── Maya Critical SKU Audit Table (Directive v6.0) ── */
+.maya-kritis-section {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(249, 115, 22, 0.35);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.maya-kritis-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fb923c;
+    letter-spacing: 0.5px;
+}
+
+.maya-badge-urgent {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid #ef4444;
+    color: #f87171;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.maya-kritis-table-wrapper {
+    max-height: 190px;
+    overflow-y: auto;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.maya-kritis-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.maya-kritis-table th {
+    background: rgba(30, 41, 59, 0.8);
+    color: #94a3b8;
+    text-align: left;
+    padding: 6px 8px;
+    font-size: 10px;
+    text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.maya-kritis-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    vertical-align: middle;
+}
+
+.maya-kritis-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.maya-sku-name {
+    color: #f8fafc;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+}
+
+.maya-sku-cat {
+    color: #64748b;
+    font-size: 9px;
+}
+
+.maya-sku-stok {
+    display: flex;
+    flex-direction: column;
+}
+
+.maya-stok-val {
+    color: #f87171;
+    font-weight: 700;
+}
+
+.maya-rop-val {
+    color: #64748b;
+    font-size: 9px;
+}
+
+.maya-risk-pill {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 10px;
+    display: inline-block;
+}
+
+.maya-po-qty {
+    color: #38bdf8;
+    font-weight: 700;
+}
+
+.maya-po-val {
+    color: #94a3b8;
+    font-size: 9px;
+}

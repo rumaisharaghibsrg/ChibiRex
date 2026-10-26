@@ -79,11 +79,19 @@ export function CrisisCommandModal({ isOpen, onClose }) {
     const handleExecuteResolution = async () => {
         const aksi = crisisData.action || {};
         setGalat(null);
+        console.log('[CrisisCommandModal] Executing resolution for crisis:', {
+            crisisId: crisisData.crisisId,
+            action: aksi,
+            storeId,
+            modeJaringan,
+        });
+
         if (aksi.jenis === 'reset-breaker') {
             setIsResolving(true);
             try {
                 await api.resetBreaker('Reset dari Crisis Hub Doni (Virtual HQ)');
             } catch (e) {
+                console.error('[CrisisCommandModal] Reset breaker failed:', e);
                 setGalat(e.message);
                 setIsResolving(false);
                 return;
@@ -95,16 +103,55 @@ export function CrisisCommandModal({ isOpen, onClose }) {
             periksa(); // tampilkan kondisi setelah reset; panel tetap terbuka sampai pemain menutupnya
             return;
         }
-        // Agent dan laporan staf membuka panel lain: panel Doni ditutup dulu.
+
+        if (aksi.jenis === 'agent') {
+            setIsResolving(true);
+            try {
+                const targetStore = String(aksi.store_id || crisisData.store_id || storeId);
+                const skuIds = aksi.sku_ids || crisisData.sku_ids || [];
+                const crisisType = crisisData.crisisId || aksi.crisis_type || 'CRISIS_STOCKOUT_FAST_MOVING';
+                const tugas = aksi.tugas || `Prioritaskan analisis stok kritis untuk Toko ${targetStore}`;
+
+                const agentPayload = {
+                    store: targetStore,
+                    jaringan: Boolean(modeJaringan),
+                    crisis_type: crisisType,
+                    sku_ids: skuIds,
+                    tugas,
+                };
+
+                console.log('[CrisisCommandModal] Dispatching jalankan-agent payload independently:', agentPayload);
+                EventBus.emit('jalankan-agent', agentPayload);
+                window.dispatchEvent(new CustomEvent('jalankan-agent', { detail: agentPayload }));
+
+                window.resolveStoreCrisis?.();
+                setIsResolving(false);
+                setResolvedSuccess(true);
+
+                // Beri waktu user melihat konfirmasi sebelum modal ditutup
+                setTimeout(() => {
+                    handleClose();
+                }, 400);
+            } catch (e) {
+                console.error('[CrisisCommandModal] Failed to dispatch agent task:', e);
+                setGalat(`Gagal menugaskan agent: ${e.message}`);
+                setIsResolving(false);
+            }
+            return;
+        }
+
+        if (aksi.jenis === 'npc') {
+            window.resolveStoreCrisis?.();
+            handleClose();
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('open-npc-dialog-modal', { detail: { npcId: aksi.npcId } }));
+            }, 250);
+            return;
+        }
+
+        // Fallback untuk aksi lain
         window.resolveStoreCrisis?.();
         handleClose();
-        setTimeout(() => {
-            if (aksi.jenis === 'agent') {
-                EventBus.emit('jalankan-agent', modeJaringan ? { jaringan: true } : { store: String(storeId) });
-            } else if (aksi.jenis === 'npc') {
-                window.dispatchEvent(new CustomEvent('open-npc-dialog-modal', { detail: { npcId: aksi.npcId } }));
-            }
-        }, 250);
     };
 
     // Pemicu Interkom ke NPC Sumber Masalah
@@ -254,10 +301,10 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                                 {isResolving ? (
                                     <>
                                         <span className="status-dot pulse-amber" />
-                                        <span>MENGIRIM KE API...</span>
+                                        <span>{crisisData.action?.jenis === 'reset-breaker' ? 'MERESET BREAKER...' : 'MENUGASKAN AGENT...'}</span>
                                     </>
                                 ) : resolvedSuccess ? (
-                                    <span>✔️ CIRCUIT BREAKER DIRESET</span>
+                                    <span>{crisisData.action?.jenis === 'reset-breaker' ? '✔️ CIRCUIT BREAKER DIRESET' : '✔️ AGENT REXA DITUGASKAN'}</span>
                                 ) : (
                                     <span>{crisisData.action?.label || '⚡ Tindak lanjuti'}</span>
                                 )}

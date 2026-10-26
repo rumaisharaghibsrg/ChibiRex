@@ -231,7 +231,7 @@ function App() {
 
     // ── Jalankan agent (pertama kali, "Jalankan Ulang", atau "Tugaskan Agent" dari Crisis Hub) ─────────
     // Di mode Semua Toko (atau payload {jaringan: true}) yang dijalankan Agent Jaringan.
-    const handleTriggerAgent = useCallback(async ({ store, jaringan } = {}) => {
+    const handleTriggerAgent = useCallback(async ({ store, jaringan, tugas } = {}) => {
         if (jaringan || (modeJaringan && !store)) {
             jalankanJaringan();
             return;
@@ -257,7 +257,7 @@ function App() {
 
         try {
             // 3. Antrikan agent di API (mode antrian: AgentCore atau worker di laptop mengambilnya), lalu pantau langkahnya.
-            const data = await api.mulaiAgent(activeStoreId);
+            const data = await api.mulaiAgent(activeStoreId, tugas);
             terapkanRun(data);
             startPolling(data.run_id);
         } catch (err) {
@@ -634,6 +634,11 @@ function App() {
         // E di dekat Rexa (Phaser) membuka log kalau sudah ada; 'jalankan-agent' (Jalankan Ulang, Crisis Hub) selalu menjalankan.
         EventBus.on('trigger-agent-analysis', handleRexa);
         EventBus.on('jalankan-agent', handleTriggerAgent);
+        const onCustomJalankanAgent = (e) => {
+            if (e?.detail) handleTriggerAgent(e.detail);
+            else handleTriggerAgent();
+        };
+        window.addEventListener('jalankan-agent', onCustomJalankanAgent);
         EventBus.on('open-approval-modal', handleOpenApprovalModal);
         window.addEventListener('open-approval-modal', handleOpenApprovalModal);
 
@@ -752,6 +757,7 @@ function App() {
             EventBus.removeListener('manager-screen-pos', onManagerScreenPos);
             EventBus.removeListener('trigger-agent-analysis', handleRexa);
             EventBus.removeListener('jalankan-agent', handleTriggerAgent);
+            window.removeEventListener('jalankan-agent', onCustomJalankanAgent);
             EventBus.removeListener('open-approval-modal', handleOpenApprovalModal);
             window.removeEventListener('open-approval-modal', handleOpenApprovalModal);
 

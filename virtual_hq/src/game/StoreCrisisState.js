@@ -72,13 +72,21 @@ export async function deteksiKrisis(store) {
             description: `Komponen terlemah: ${terlemah.nama.toLowerCase()} ${angka(terlemah.nilai)}. ` +
                 `${angka(r.jumlah_status.REORDER ?? 0)} SKU perlu reorder dan ${angka(r.sku_risiko_tinggi)} berisiko tinggi stok habis.`,
             metrics: { label: 'Health Score', currentValue: `${r.health_score} / 100`, thresholdValue: `Minimum ${AMBANG_HEALTH} (batas zona merah)`, badgeColor: '#dc2626' },
-            action: { jenis: 'agent', label: '🤖 Tugaskan Agent Rexa meninjau toko ini' },
+            store_id: s,
+            action: {
+                jenis: 'agent',
+                label: '🤖 Tugaskan Agent Rexa meninjau toko ini',
+                store_id: s,
+                crisis_type: 'CRISIS_STORE_HEALTH_CRASH',
+                tugas: `Audit menyeluruh Toko ${s}: Health Score rendah (${r.health_score}/100)`,
+            },
         });
     }
 
     const kritis = p.naik.filter((x) => x.level_risiko === 'TINGGI').sort((a, b) => (b.skor_risiko ?? 0) - (a.skor_risiko ?? 0));
     if (kritis.length) {
         const x = kritis[0];
+        const skuIds = kritis.map((item) => item.inventory_id);
         krisis.push({
             crisisId: 'CRISIS_STOCKOUT_FAST_MOVING',
             sourceNPC: 'maya',
@@ -90,7 +98,17 @@ export async function deteksiKrisis(store) {
                 `skor risiko ${x.skor_risiko}. Saran PO ${angka(x.saran_qty_po)} unit (${rupiah(x.nilai_saran_po_idr)}); ` +
                 'agent menyusun drafnya, manajer yang menyetujui.',
             metrics: { label: 'Stok tersisa', currentValue: `${angka(x.stok_akhir)} unit`, thresholdValue: `Reorder point ${angka(x.reorder_point)} unit`, badgeColor: '#f97316' },
-            action: { jenis: 'agent', label: '🤖 Tugaskan Agent Rexa menyusun draf PO' },
+            store_id: s,
+            sku_ids: skuIds,
+            sku_list: kritis,
+            action: {
+                jenis: 'agent',
+                label: '🤖 Tugaskan Agent Rexa menyusun draf PO',
+                store_id: s,
+                sku_ids: skuIds,
+                crisis_type: 'CRISIS_STOCKOUT_FAST_MOVING',
+                tugas: `Susun draf PO untuk ${kritis.length} SKU berisiko kehabisan stok di Toko ${s} (stok kritis terdeteksi oleh Maya)`,
+            },
         });
     }
 

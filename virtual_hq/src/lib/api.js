@@ -94,6 +94,7 @@ export const api = {
     prioritas: (store, params) => request(`/stores/${store}/prioritas${query(params)}`),
     realokasi: (store) => request(`/stores/${store}/reallocation`),
     stokFisik: (store) => request(`/stores/${store}/stok-fisik`),
+    mayaStatus: (store) => request(`/stores/${store}/maya/status`),
 
     // Guardrail dan PO
     statusGuardrail: (store) => request(`/guardrails/status${query({ store })}`),
@@ -104,7 +105,7 @@ export const api = {
     tolakPo: (poId, catatan) => request(`/purchase-orders/${poId}/reject`, keputusan(catatan)),
 
     // Agent Rexa (mode antrian: Bedrock AgentCore, cadangannya worker di laptop)
-    mulaiAgent: (store) => request('/agent-runs/mulai', { method: 'POST', body: { store } }).then(bangunkanAgent),
+    mulaiAgent: (store, tugas) => request('/agent-runs/mulai', { method: 'POST', body: { store, ...(tugas ? { tugas } : {}) } }).then(bangunkanAgent),
     statusAgent: (runId) => request(`/agent-runs/${runId}`),
     agentAktif: () => request('/agent-runs/aktif'),
     riwayatAgent: (limit = 30) => request(`/agent-runs${query({ limit })}`),
