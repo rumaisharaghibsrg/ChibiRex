@@ -18,6 +18,12 @@ masing-masing mewakili satu bagian dashboard. Semua angka dibaca dari API Rexa y
 | Tanggal di header | Jam simulasi bersama dashboard: +1/+7, -1/-7, kembali ke 31 Des 2016 | `GET /simulasi`, `POST /simulasi/maju`, `/mundur`, `/kembali` |
 | Rexa Chat (tombol C) | Rexa Copilot (Claude di Lambda); tanpa Copilot, NPC yang dituju membacakan data API | `POST {VITE_COPILOT_URL}/tanya` |
 
+**Log Aktivitas** (pojok kiri atas, `src/components/LogAktivitasPanel.jsx`, pencatat `src/lib/logAktivitas.js`): semua
+pesan berurutan, misalnya "DONI (URGENT): Maya (Toko 74): 7 SKU ...", "DONI: Sedang menyelesaikan ...", "REXA: Mengerjakan
+tugas dari Doni ...", setiap langkah Rexa ("Menyusun draf PO Bacardi Gold Rum"), "REXA: Analisis selesai ...", hasil
+penyelesaian dengan nomor PO SAP, keputusan manajer di Meja Approval, dan tanggal/toko yang berganti. 60 pesan terakhir
+disimpan di localStorage browser; panel bisa dikecilkan (di HP kecil sejak awal) dan dikosongkan.
+
 Kalau API tidak terjangkau, game tetap bisa dimainkan, tetapi setiap panel menuliskan galatnya. Tidak ada angka atau
 hasil pengganti.
 

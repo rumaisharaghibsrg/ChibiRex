@@ -32,6 +32,8 @@ import { useTimeSimulation } from './context/TimeSimulationContext';
 import { api, beritahuDataBerubah, COPILOT_URL, DATA_BERUBAH, urlDashboard, urlDashboardJaringan } from './lib/api';
 import { laporanNpc, laporanNpcJaringan } from './lib/npc';
 import { bacaLaporanJaringan, simpanLaporanJaringan } from './lib/laporanJaringan';
+import { catatLog, ringkasJawaban, teksLangkahAgent } from './lib/logAktivitas';
+import { LogAktivitasPanel } from './components/LogAktivitasPanel';
 import { pantauKrisis } from './game/StoreCrisisState';
 
 // Doni memeriksa ulang data toko secara berkala, selain saat dibuka dan setiap data berubah.
@@ -166,6 +168,20 @@ function App() {
         return status;
     }, []);
 
+    // Log Aktivitas: langkah baru dan perubahan status run yang sedang dipantau (satu kali per langkah).
+    const logRunRef = useRef({ runId: null, langkah: 0, status: null });
+    const catatKemajuanRun = useCallback((run) => {
+        const lalu = logRunRef.current.runId === run.run_id ? logRunRef.current : { langkah: 0, status: null };
+        const langkah = run.langkah || [];
+        langkah.slice(lalu.langkah).forEach((l) => catatLog('rexa', teksLangkahAgent(l)));
+        if (run.status !== lalu.status) {
+            if (run.status === 'MENUNGGU') catatLog('rexa', 'Menunggu AgentCore mengambil tugas...');
+            if (run.status === 'SELESAI') catatLog('rexa', `Analisis selesai: ${ringkasJawaban(run.jawaban)}`, 'sukses');
+            if (run.status === 'GAGAL') catatLog('rexa', `Gagal: ${run.pesan || 'agent gagal dijalankan'}`, 'gagal');
+        }
+        logRunRef.current = { runId: run.run_id, langkah: langkah.length, status: run.status };
+    }, []);
+
     // ── Mulai Polling Status Agen Setiap 2000ms ───────────────────────────────
     const startPolling = useCallback((activeRunId) => {
         clearAllTimers();
@@ -173,7 +189,9 @@ function App() {
 
         pollingTimerRef.current = setInterval(async () => {
             try {
-                const status = terapkanRun(await api.statusAgent(activeRunId));
+                const run = await api.statusAgent(activeRunId);
+                catatKemajuanRun(run);
+                const status = terapkanRun(run);
                 gagalBeruntun = 0;
                 if (status === 'SELESAI' || status === 'GAGAL') {
                     clearAllTimers();
@@ -187,10 +205,11 @@ function App() {
                 clearAllTimers();
                 setAgentStatus('GAGAL');
                 setErrorMessage(`Status agent tidak bisa dibaca: ${err.message}`);
+                catatLog('rexa', `Status agent tidak bisa dibaca: ${err.message}`, 'gagal');
                 selesaiRun();
             }
         }, 2000);
-    }, [clearAllTimers, terapkanRun, selesaiRun]);
+    }, [clearAllTimers, terapkanRun, selesaiRun, catatKemajuanRun]);
 
     // ── Mode Semua Toko: Agent Jaringan (Lambda Copilot, POST /jaringan) ─────────────────────────────
     // Alurnya sama dengan agent toko: pemain bebas bergerak selama analisis, laporan terakhir tersimpan (localStorage,
@@ -223,12 +242,15 @@ function App() {
         jaringanBerjalanRef.current = true;
         setJaringanBerjalan(true);
         setGalatJaringan(null);
+        catatLog('rexa', 'Agent Jaringan sedang menganalisis semua toko...');
         try {
             const hasil = { ...(await api.analisisJaringan('id')), dibuat_pada: new Date().toISOString() };
             setLaporanJaringan(hasil);
             simpanLaporanJaringan(hasil);
+            catatLog('rexa', `Analisis jaringan selesai: ${ringkasJawaban(hasil.ringkasan)}`, 'sukses');
         } catch (err) {
             setGalatJaringan(err.message);
+            catatLog('rexa', `Agent Jaringan gagal: ${err.message}`, 'gagal');
         } finally {
             jaringanBerjalanRef.current = false;
             setJaringanBerjalan(false);
@@ -260,25 +282,30 @@ function App() {
         setErrorMessage('');
         setBubbleTerbuka(true);
         tandaiPanelDibuka();
+        catatLog('rexa', tugas ? `Mengerjakan tugas dari Doni untuk Toko ${activeStoreId}...`
+            : `Sedang menjalankan analisis Toko ${activeStoreId}...`);
 
         try {
             // 3. Antrikan agent di API (mode antrian: AgentCore atau worker di laptop mengambilnya), lalu pantau langkahnya.
             const data = await api.mulaiAgent(activeStoreId, tugas);
+            catatKemajuanRun(data);
             terapkanRun(data);
             startPolling(data.run_id);
         } catch (err) {
             // Agent lain sedang berjalan (misalnya dari dashboard): ikuti run itu, jangan mulai yang baru.
             if (err.kode === 'AGENT_SEDANG_BERJALAN' && err.detail?.run_id) {
+                catatLog('rexa', 'Agent lain sedang berjalan; Rexa mengikuti run itu.');
                 setAgentStatus('BERJALAN');
                 startPolling(err.detail.run_id);
                 return;
             }
             console.warn('[VirtualHQ] Agent Rexa tidak bisa dimulai:', err);
+            catatLog('rexa', `Tidak bisa dimulai: ${err.message}`, 'gagal');
             setAgentStatus('GAGAL');
             setErrorMessage(err.message);
             selesaiRun();
         }
-    }, [clearAllTimers, startPolling, terapkanRun, selesaiRun, currentStore, tandaiPanelDibuka, modeJaringan, jalankanJaringan]);
+    }, [clearAllTimers, startPolling, terapkanRun, selesaiRun, currentStore, tandaiPanelDibuka, modeJaringan, jalankanJaringan, catatKemajuanRun]);
 
     // Status agent sesuai mode: agent toko, atau Agent Jaringan di mode Semua Toko.
     const sedangJalan = modeJaringan ? jaringanBerjalan : agentRunning;
@@ -828,6 +855,22 @@ function App() {
             document.removeEventListener('visibilitychange', pantau);
         };
     }, [kunciDoni, isoDate]);
+
+    // Log Aktivitas: pesan sistem saat toko/mode atau tanggal simulasi berganti (bukan saat pertama dibuka). Tanggal
+    // awal dari TimeSimulationContext diganti tanggal API beberapa detik setelah dibuka; itu bukan perubahan.
+    const sistemAwalRef = useRef({ kunci: kunciDoni, tanggal: null, dibuka: Date.now() });
+    useEffect(() => {
+        if (sistemAwalRef.current.kunci === kunciDoni) return;
+        sistemAwalRef.current.kunci = kunciDoni;
+        catatLog('sistem', kunciDoni === 'jaringan' ? 'Beralih ke mode Semua Toko.' : `Beralih ke Toko ${kunciDoni}.`);
+    }, [kunciDoni]);
+    useEffect(() => {
+        if (!isoDate) return;
+        const lama = sistemAwalRef.current.tanggal;
+        sistemAwalRef.current.tanggal = isoDate;
+        const masihMemuat = Date.now() - sistemAwalRef.current.dibuka < 10_000;
+        if (lama && lama !== isoDate && !masihMemuat) catatLog('sistem', `Tanggal simulasi sekarang ${formattedDate}.`);
+    }, [isoDate, formattedDate]);
 
     // Timer agent (polling dan hitung mundur pencairan pemain) hanya dibersihkan saat App dilepas. Kalau ikut cleanup
     // efek listener di atas, timer terhapus setiap handler berganti identitas (misalnya data toko dimuat ulang saat
@@ -1478,6 +1521,9 @@ function App() {
                     </button>
                 )}
             </main>
+
+            {/* ── Log Aktivitas: semua pesan Doni, Rexa, manajer, dan sistem (pojok kiri atas; di HP dikecilkan) ── */}
+            <LogAktivitasPanel kecilAwal={shouldShowMobileControls} />
 
             {/* ── Kontrol Dual-Thumb Touch Mobile (Virtual Joystick, Rexa Call, & Smart Action) ── */}
             {shouldShowMobileControls && (

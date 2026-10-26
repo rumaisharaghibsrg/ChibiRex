@@ -15,6 +15,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { SentenceWithDot } from './NPCDialogModal';
 import { api, beritahuDataBerubah } from '../lib/api';
+import { catatLog } from '../lib/logAktivitas';
 import { pakaiKontrolSentuh } from '../utils/perangkat';
 
 function formatRupiah(num) {
@@ -94,6 +95,7 @@ export function ApprovalModal({ isOpen, store, onClose }) {
                 colors: ['#34d399', '#38bdf8', '#fbbf24', '#a78bfa'],
             });
             setToastMessage({ poId, sapNumber: approvedPO.sap_po_number, deskripsi: approvedPO.deskripsi });
+            catatLog('manajer', `PO ${approvedPO.deskripsi} disetujui dan terkirim ke SAP (${approvedPO.sap_po_number}).`, 'sukses');
             beritahuDataBerubah();
             hapusDariDaftar(poId, 2000);
         } catch (err) {
@@ -109,7 +111,8 @@ export function ApprovalModal({ isOpen, store, onClose }) {
         setRejectingId(poId);
         setErrorMessage(null);
         try {
-            await api.tolakPo(poId, 'Ditolak dari Meja Manajer Virtual HQ');
+            const ditolak = await api.tolakPo(poId, 'Ditolak dari Meja Manajer Virtual HQ');
+            catatLog('manajer', `PO ${ditolak?.deskripsi || poId} ditolak.`);
             beritahuDataBerubah();
             hapusDariDaftar(poId, 1200);
         } catch (err) {

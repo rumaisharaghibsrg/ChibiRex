@@ -21,6 +21,7 @@ import { useStore } from '../context/StoreContext';
 import { useTimeSimulation } from '../context/TimeSimulationContext';
 import { api, beritahuDataBerubah } from '../lib/api';
 import { angka, rupiahRingkas } from '../lib/format';
+import { catatLog } from '../lib/logAktivitas';
 import './CrisisCommandModal.css';
 
 const PESAN_SELESAI = {
@@ -153,6 +154,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
             }
             setIsResolving(false);
             setPesanSelesai(PESAN_SELESAI['reset-breaker']);
+            catatLog('doni', 'Circuit breaker direset atas keputusan manajer; PO baru kembali diproses guardrail.', 'sukses');
             beritahuDataBerubah(); // Doni memeriksa ulang; panel menampilkan kondisi setelah reset
             return;
         }

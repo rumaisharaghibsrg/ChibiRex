@@ -24,6 +24,7 @@
 
 import { EventBus } from './EventBus';
 import { api, beritahuDataBerubah } from '../lib/api';
+import { catatLog } from '../lib/logAktivitas';
 import { angka, rupiah, rupiahRingkas } from '../lib/format';
 import { formatIndonesianDate } from '../utils/TimeEngine';
 
@@ -170,10 +171,12 @@ export async function deteksiKrisis(store) {
         const menunggu = daftar.filter((item) => item.statusPo === 'anggaran');
         const jumlahDraf = daftar.filter((item) => item.adaDraf).length;
         const x = dipesan[0] || menunggu[0] || daftar[0];
+        const terpakai = g.total_po_hari_ini_idr || 0;
         const catatanAnggaran = menunggu.length
-            ? `Anggaran PO harian Toko ${s} terpakai ${rupiahRingkas(g.total_po_hari_ini_idr || 0)} dari ` +
-              `${rupiahRingkas(g.batas_po_harian_idr)}. ${menunggu.length} SKU (${menunggu.map((m) => m.deskripsi).join(', ')}) ` +
-              'dipesan saat anggaran hari simulasi berikutnya terbuka; majukan tanggal simulasi lalu tekan Selesaikan.'
+            ? `Anggaran PO harian Toko ${s} ${rupiahRingkas(g.batas_po_harian_idr)}` +
+              (terpakai ? ` (sudah terpakai ${rupiahRingkas(terpakai)})` : '') + ' tidak cukup untuk semua SKU kritis. ' +
+              `${menunggu.length} SKU (${menunggu.map((m) => m.deskripsi).join(', ')}) dipesan saat anggaran hari ` +
+              'simulasi berikutnya terbuka; majukan tanggal simulasi lalu tekan Selesaikan.'
             : null;
         const aksi = g.circuit_breaker_terbuka && (dipesan.length || jumlahDraf) ? keBreaker
             : dipesan.length || jumlahDraf ? {
@@ -343,15 +346,31 @@ function terbitkan(state, { bunyi = false } = {}) {
 // Krisis yang sudah diumumkan dengan klaxon (`${kunci}|${perTanggal}|${crisisId}`): pemantauan tiap menit dan
 // pergantian krisis utama (misalnya setelah krisis Maya ditugaskan) tidak membunyikan alarm yang sama lagi.
 const diumumkan = new Set();
+const krisisSebelumnya = new Map(); // kunci toko -> Map crisisId -> krisis (untuk pesan "sudah pulih" di Log Aktivitas)
+const sumber = (k) => k.sourceName.split(' (')[0];
 
 /** Terapkan hasil pemeriksaan ke status global (header, sprite Doni, panel), hanya untuk toko yang sedang diawasi. */
 function terapkan(kunci, hasil) {
     if (kunci !== kunciAktif()) return window.StoreCrisisState;
     const status = statusRingkas(hasil);
     const utama = hasil.krisis[0];
-    const alarm = hasil.krisis.filter((k) => k.status === 'BARU').map((k) => kunciDitangani(kunci, hasil.perTanggal, k.crisisId));
-    const bunyi = alarm.some((a) => !diumumkan.has(a));
-    alarm.forEach((a) => diumumkan.add(a));
+    const alarmBaru = hasil.krisis.filter((k) => k.status === 'BARU'
+        && !diumumkan.has(kunciDitangani(kunci, hasil.perTanggal, k.crisisId)));
+    const bunyi = alarmBaru.length > 0;
+    alarmBaru.forEach((k) => {
+        diumumkan.add(kunciDitangani(kunci, hasil.perTanggal, k.crisisId));
+        catatLog('doni', `${sumber(k)} (${kunci === 'jaringan' ? 'semua toko' : `Toko ${kunci}`}): ${k.headline}`, 'urgent', { unik: true });
+    });
+    hasil.krisis.filter((k) => k.catatanAnggaran).forEach((k) => catatLog('doni', k.catatanAnggaran, 'info', { unik: true }));
+    // Krisis yang tadi ada dan sekarang hilang dari data: pulih (misalnya PO-nya sudah dalam pengiriman).
+    const lama = krisisSebelumnya.get(kunci);
+    const sekarang = new Map(hasil.krisis.map((k) => [k.crisisId, k]));
+    if (lama) {
+        lama.forEach((k, id) => {
+            if (!sekarang.has(id)) catatLog('doni', `Krisis ${sumber(k)} sudah pulih: ${k.title.toLowerCase()} tidak lagi terdeteksi di data.`, 'sukses');
+        });
+    }
+    krisisSebelumnya.set(kunci, sekarang);
     return terbitkan(utama
         ? { ...utama, isCrisis: status === 'KRISIS', statusDoni: status, kunci }
         : { ...defaultCrisisState, statusDoni: 'NORMAL', kunci }, { bunyi });
@@ -456,12 +475,19 @@ export async function selesaikanKrisis(krisis) {
         berjalan: true, tahap: aksi.agent ? 'ANTRE' : 'SAP', mulai: pukulSekarang(), disetujui: [], ditahan: [], gagal: [],
         pesan: aksi.agent ? 'Menunggu giliran Rexa (Rexa mengerjakan satu tugas sekaligus)...' : 'Mengirim PO ke SAP...',
     });
+    catatLog('doni', `Sedang menyelesaikan krisis ${sumber(krisis)} (Toko ${s}): ${krisis.headline}`);
     try {
         let langkah = [];
         if (aksi.agent) {
-            const run = await jalankanAgentDanTunggu(s, aksi.tugas, () => catat({
-                tahap: 'AGENT', pesan: 'Rexa sedang mengerjakan krisis ini; langkahnya tampil di bubble Rexa.',
-            }));
+            let mulaiBekerja = false;
+            const tunggu = setTimeout(() => {
+                if (!mulaiBekerja) catatLog('doni', `Krisis ${sumber(krisis)} menunggu giliran Rexa (Rexa masih mengerjakan tugas lain).`);
+            }, 4000);
+            const run = await jalankanAgentDanTunggu(s, aksi.tugas, () => {
+                mulaiBekerja = true;
+                catat({ tahap: 'AGENT', pesan: 'Rexa sedang mengerjakan krisis ini; langkahnya tampil di bubble Rexa.' });
+            });
+            clearTimeout(tunggu);
             if (run.status !== 'SELESAI') throw new Error(run.pesan || 'Agent Rexa gagal menyelesaikan tugasnya.');
             langkah = run.langkah || [];
         }
@@ -475,8 +501,10 @@ export async function selesaikanKrisis(krisis) {
             catat({ tahap: 'SAP', pesan: 'Mengirim PO yang lolos guardrail ke SAP...' });
             const sasaran = new Set([...poRun.map((p) => p.po_id)]);
             const skuKrisis = new Set(krisis.sku_ids || []);
-            const draf = await api.daftarPo({ store: s, status: 'DRAFT' });
-            for (const po of draf.filter((p) => sasaran.has(p.po_id) || skuKrisis.has(p.inventory_id))) {
+            const draf = (await api.daftarPo({ store: s, status: 'DRAFT' }))
+                .filter((p) => sasaran.has(p.po_id) || skuKrisis.has(p.inventory_id));
+            if (draf.length) catatLog('doni', `Mengirim ${draf.length} PO yang lolos guardrail ke SAP...`);
+            for (const po of draf) {
                 try {
                     const r = await api.setujuiPo(po.po_id, `Selesaikan krisis lewat Doni: ${krisis.title}`);
                     disetujui.push({ deskripsi: r.deskripsi || po.deskripsi, sap: r.sap_po_number });
@@ -499,8 +527,12 @@ export async function selesaikanKrisis(krisis) {
         const belum = !disetujui.length && !holdRun.length && (ditahan.length || gagal.length);
         catat({ berjalan: false, tahap: belum ? 'GAGAL' : 'SELESAI', pesan, disetujui, ditahan, gagal, selesai: pukulSekarang() });
         if (disetujui.length || holdRun.length) terakhirSelesai.set(kunci, { judul: krisis.title, pesan, pukul: pukulSekarang(), disetujui });
+        const nomorSap = disetujui.length ? ` PO SAP: ${disetujui.map((d) => `${d.deskripsi} (${d.sap})`).join(', ')}.` : '';
+        catatLog('doni', `${belum ? 'Belum selesai' : `Krisis ${sumber(krisis)} diselesaikan`}: ${pesan}${nomorSap}`,
+            belum ? 'gagal' : 'sukses');
     } catch (e) {
         catat({ berjalan: false, tahap: 'GAGAL', pesan: e.message });
+        catatLog('doni', `Belum selesai: ${e.message}`, 'gagal');
     } finally {
         beritahuDataBerubah(); // Doni dan panel lain memeriksa ulang: krisis yang sudah pulih hilang dari daftar
     }
