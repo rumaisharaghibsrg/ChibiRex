@@ -384,6 +384,7 @@
 
 .crisis-sku-table td.ada { color: #34d399; }
 .crisis-sku-table td.belum { color: #f87171; }
+.crisis-sku-table td.tunggu { color: #fbbf24; }
 
 /* Kemajuan dan hasil tombol Selesaikan */
 .crisis-penyelesaian {

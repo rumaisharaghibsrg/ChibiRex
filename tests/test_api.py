@@ -95,6 +95,13 @@ def test_batas_po_harian(analytics_db, tmp_path):
         assert kode(r) == {"BATAS_HARIAN"}
         assert client.get("/guardrails/status", params={"store": 1}).json()["total_po_hari_ini_idr"] == 70 * 10 * KURS
 
+        # Batas harian mengikuti hari simulasi (bukan tanggal kalender): hari berikutnya anggarannya terbuka lagi,
+        # dan kembali ke hari itu menghitung PO hari itu lagi.
+        client.post("/simulasi/maju", json={"hari": 1, "oleh": "uji"})
+        assert client.get("/guardrails/status", params={"store": 1}).json()["total_po_hari_ini_idr"] == 0
+        client.post("/simulasi/mundur", json={"hari": 1, "oleh": "uji"})
+        assert client.get("/guardrails/status", params={"store": 1}).json()["total_po_hari_ini_idr"] == 70 * 10 * KURS
+
 
 def test_circuit_breaker(client):
     for i in range(3):

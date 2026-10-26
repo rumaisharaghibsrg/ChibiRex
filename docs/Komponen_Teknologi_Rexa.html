@@ -170,7 +170,8 @@ untuk membangun data dan deploy; worker di laptop hanya cadangan kalau AgentCore
   <thead><tr><th style="width:24%">Guardrail</th><th>Cara kerja</th></tr></thead>
   <tr><td>Filter 3σ</td><td class="biasa">Qty PO di atas target stok + 3σ permintaan dianggap lonjakan tidak wajar (misalnya
     pesanan borongan) → ditahan.</td></tr>
-  <tr><td>Batas PO harian</td><td class="biasa">Total nilai PO per toko per hari maksimal Rp100 juta.</td></tr>
+  <tr><td>Batas PO harian</td><td class="biasa">Total nilai PO per toko per hari simulasi maksimal Rp100 juta (memajukan
+    tanggal simulasi membuka anggaran hari berikutnya).</td></tr>
   <tr><td>Circuit breaker</td><td class="biasa">Kalau 3 PO ditahan guardrail dalam 60 menit, semua PO baru ditahan sampai
     manajer mereset.</td></tr>
   <tr><td>Idempotency key</td><td class="biasa">Request yang diulang dengan kunci yang sama tidak membuat PO atau hold ganda.</td></tr>

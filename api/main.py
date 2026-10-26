@@ -524,7 +524,8 @@ def _routes(app: FastAPI) -> None:
                 return _po(con, draf[0])
 
             _dengan_stok_fisik(sku, _stok_fisik(con, [body.inventory_id]).get(body.inventory_id))
-            langgar = guardrails.cek_po(con, s, sku, qty, nilai, sekarang)
+            hari = simulasi.hari_ini(con, s, sekarang)
+            langgar = guardrails.cek_po(con, s, sku, qty, nilai, sekarang, hari)
             status = "DITAHAN_GUARDRAIL" if langgar else "DRAFT"
             po_id = f"PO-{uuid4().hex[:10].upper()}"
             con.execute(
@@ -533,7 +534,7 @@ def _routes(app: FastAPI) -> None:
                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (po_id, sku["inventory_id"], sku["store"], sku["deskripsi"], sku["vendor_number"], sku["vendor_name"],
                  qty, sku["harga_beli_usd"], nilai, status, json.dumps(langgar, ensure_ascii=False), body.alasan,
-                 body.dibuat_oleh, sekarang.isoformat(timespec="seconds"), simulasi.hari_ini(con, s, sekarang)))
+                 body.dibuat_oleh, sekarang.isoformat(timespec="seconds"), hari))
             _simpan_idempotency(con, idempotency_key, "draft_purchase_order", request_hash, po_id, sekarang)
             state.audit(con, sekarang, body.dibuat_oleh, "draft_purchase_order", po_id,
                         {"inventory_id": sku["inventory_id"], "qty": qty, "nilai_idr": nilai, "status": status,
@@ -732,7 +733,8 @@ def _routes(app: FastAPI) -> None:
         s = _settings(request)
         with state.baca(s.state_db) as con:
             breaker = guardrails.status_circuit_breaker(con)
-            total = guardrails.total_po_hari_ini(con, store, s.clock()) if store is not None else None
+            total = (guardrails.total_po_hari_ini(con, store, simulasi.hari_ini(con, s, s.clock()))
+                     if store is not None else None)
         return {"circuit_breaker_terbuka": bool(breaker["terbuka"]), "alasan": breaker["alasan"],
                 "berubah_pada": breaker["berubah_pada"], "batas_po_harian_idr": s.batas_po_harian_idr,
                 "total_po_hari_ini_idr": total, "data_confidence_min": s.data_confidence_min,

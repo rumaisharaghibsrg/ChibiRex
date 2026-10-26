@@ -26,11 +26,13 @@ def confidence_hitung_fisik(stok_sistem: int, stok_fisik: int) -> float:
     return round(max(0.0, 1 - abs(stok_fisik - stok_sistem) / max(stok_sistem, 1)), 3)
 
 
-def total_po_hari_ini(con: sqlite3.Connection, store: int, sekarang: datetime) -> float:
+def total_po_hari_ini(con: sqlite3.Connection, store: int, hari: int) -> float:
+    """Total PO aktif toko pada hari simulasi ini. Batas harian mengikuti jam simulasi, sama seperti stok dan kedatangan
+    PO: memajukan tanggal simulasi membuka anggaran hari berikutnya (bukan menunggu tanggal kalender berganti)."""
     return con.execute(
         """select coalesce(sum(nilai_idr), 0) from purchase_orders
-           where store = ? and status in ('DRAFT', 'APPROVED') and substr(dibuat_pada, 1, 10) = ?""",
-        (store, sekarang.date().isoformat()),
+           where store = ? and status in ('DRAFT', 'APPROVED') and hari_dibuat = ?""",
+        (store, hari),
     ).fetchone()[0]
 
 
@@ -39,7 +41,8 @@ def status_circuit_breaker(con: sqlite3.Connection) -> sqlite3.Row:
 
 
 def cek_po(con: sqlite3.Connection, s: Settings, sku: dict, qty: int, nilai: float,
-           sekarang: datetime) -> list[dict]:
+           sekarang: datetime, hari: int) -> list[dict]:
+    """Pelanggaran guardrail draf PO. `hari`: hari simulasi saat ini (untuk batas nominal harian)."""
     hasil = []
     breaker = status_circuit_breaker(con)
     if breaker["terbuka"]:
@@ -58,12 +61,12 @@ def cek_po(con: sqlite3.Connection, s: Settings, sku: dict, qty: int, nilai: flo
             "OUTLIER_3SIGMA",
             f"Qty {qty} melebihi batas wajar {batas} unit (target stok + {s.outlier_sigma:g}σ permintaan "
             "selama lead time + review). Kemungkinan lonjakan borongan/promo, perlu review manusia."))
-    total = total_po_hari_ini(con, sku["store"], sekarang)
+    total = total_po_hari_ini(con, sku["store"], hari)
     if total + nilai > s.batas_po_harian_idr:
         hasil.append(pelanggaran(
             "BATAS_HARIAN",
             f"Total PO toko {sku['store']} hari ini akan menjadi {rupiah(total + nilai)}, "
-            f"melebihi batas {rupiah(s.batas_po_harian_idr)}."))
+            f"melebihi batas {rupiah(s.batas_po_harian_idr)}. Anggaran terbuka lagi di hari simulasi berikutnya."))
     return hasil
 
 

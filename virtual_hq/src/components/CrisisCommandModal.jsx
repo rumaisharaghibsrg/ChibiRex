@@ -36,6 +36,13 @@ function keteranganPenanganan(k) {
     return '';
 }
 
+// Status PO per SKU kritis (dari pemeriksaan Doni): sudah ada draf, akan dipesan sekarang, atau menunggu anggaran.
+const STATUS_PO = {
+    draf: { teks: '✓ draf, siap ke SAP', kelas: 'ada' },
+    pesan: { teks: 'dipesan saat Selesaikan', kelas: 'belum' },
+    anggaran: { teks: 'anggaran hari berikutnya', kelas: 'tunggu' },
+};
+
 const IKON_TAHAP = { ANTRE: '⏳', AGENT: '🤖', SAP: '📤', SELESAI: '✅', GAGAL: '⚠️' };
 
 // Kemajuan dan hasil tombol Selesaikan: tahap, ringkasan, nomor PO SAP, PO yang ditahan guardrail.
@@ -173,6 +180,11 @@ export function CrisisCommandModal({ isOpen, onClose }) {
             return;
         }
 
+        if (aksi.jenis === 'pilih') {
+            setPilihanId(aksi.target); // misalnya breaker terbuka: reset dulu di temuan Rian
+            return;
+        }
+
         if (aksi.jenis === 'npc') {
             tandaiDitangani(crisisData, 'manajer');
             handleClose();
@@ -206,10 +218,9 @@ export function CrisisCommandModal({ isOpen, onClose }) {
     const ditanganiIni = crisisData.status === 'DITANGANI';
     const proses = crisisData.penyelesaian;
     const sedangDiselesaikan = Boolean(proses?.berjalan);
-    // Setelah penyelesaian sebagian (misalnya ada PO yang ditahan guardrail), tombolnya menyelesaikan sisanya.
-    const labelAksi = crisisData.action?.jenis === 'selesaikan' && proses && !proses.berjalan && crisisData.sku_list?.length
-        ? `🛠️ Selesaikan sisa ${crisisData.sku_list.length} SKU: Rexa memesan, PO langsung ke SAP`
-        : crisisData.action?.label || '⚡ Tindak lanjuti';
+    // Label dari pemeriksaan Doni terbaru: setelah penyelesaian sebagian, isinya sudah tinggal SKU yang tersisa.
+    const labelAksi = crisisData.action?.label || '⚡ Tindak lanjuti';
+    const aksiTunggu = crisisData.action?.jenis === 'tunggu'; // anggaran hari ini habis: tidak ada yang bisa dipesan
     const terakhir = penyelesaianTerakhir(kunci);
 
     return (
@@ -306,8 +317,11 @@ export function CrisisCommandModal({ isOpen, onClose }) {
 
                             {proses ? (
                                 <KotakPenyelesaian p={proses} />
-                            ) : ditanganiIni && (
+                            ) : ditanganiIni && !crisisData.catatanAnggaran && (
                                 <div className="crisis-ditangani">⏳ SEDANG DITANGANI · {keteranganPenanganan(crisisData)}</div>
+                            )}
+                            {crisisData.catatanAnggaran && (
+                                <div className="crisis-ditangani">💰 {crisisData.catatanAnggaran}</div>
                             )}
 
                             {/* Metric Grid */}
@@ -336,7 +350,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                                 <div className="crisis-sku-wrapper">
                                     <table className="crisis-sku-table">
                                         <thead>
-                                            <tr><th>SKU</th><th>Stok / ROP</th><th>Saran PO</th><th>Draf PO</th></tr>
+                                            <tr><th>SKU</th><th>Stok / ROP</th><th>Saran PO</th><th>Status PO</th></tr>
                                         </thead>
                                         <tbody>
                                             {crisisData.sku_list.map((x) => (
@@ -344,7 +358,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                                                     <td title={x.inventory_id}>{x.deskripsi || x.inventory_id}</td>
                                                     <td>{angka(x.stok_akhir)} / {angka(x.reorder_point)}</td>
                                                     <td>{angka(x.saran_qty_po)} · {rupiahRingkas(x.nilai_saran_po_idr)}</td>
-                                                    <td className={x.adaDraf ? 'ada' : 'belum'}>{x.adaDraf ? '✓ menunggu' : 'belum'}</td>
+                                                    <td className={STATUS_PO[x.statusPo]?.kelas || 'belum'}>{STATUS_PO[x.statusPo]?.teks || 'belum'}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -377,7 +391,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                         <>
                             <button
                                 onClick={handleExecuteResolution}
-                                disabled={isResolving || sedangDiselesaikan || Boolean(pesanSelesai)}
+                                disabled={isResolving || sedangDiselesaikan || aksiTunggu || Boolean(pesanSelesai)}
                                 className="crisis-btn-resolve"
                             >
                                 {isResolving || sedangDiselesaikan ? (
@@ -393,7 +407,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                                     <span>{labelAksi}</span>
                                 )}
                             </button>
-                            {crisisData.action?.setujui && !sedangDiselesaikan && (
+                            {crisisData.action?.jenis === 'selesaikan' && crisisData.action.setujui && !sedangDiselesaikan && (
                                 <p className="crisis-persetujuan">
                                     Klik ini adalah persetujuan Anda: PO untuk SKU kritis yang lolos guardrail langsung dikirim ke
                                     SAP. Batas nominal harian, filter 3σ, dan circuit breaker tetap berlaku.

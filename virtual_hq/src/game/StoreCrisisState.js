@@ -109,6 +109,8 @@ export async function deteksiKrisis(store) {
         api.agentAktif().catch(() => null),
     ]);
     const krisis = [];
+    // Selama breaker terbuka, setiap PO baru pasti ditahan: krisis yang butuh PO diarahkan ke reset breaker dulu.
+    const keBreaker = { jenis: 'pilih', target: 'CRISIS_CIRCUIT_BREAKER_TRIPPED', label: '⚡ Reset circuit breaker dulu (temuan Rian)' };
 
     if (g.circuit_breaker_terbuka) {
         krisis.push({
@@ -138,7 +140,7 @@ export async function deteksiKrisis(store) {
                 `${angka(r.jumlah_status.REORDER ?? 0)} SKU perlu reorder dan ${angka(r.sku_risiko_tinggi)} berisiko tinggi stok habis.`,
             metrics: { label: 'Health Score', currentValue: `${r.health_score} / 100`, thresholdValue: `Minimum ${AMBANG_HEALTH} (batas zona merah)`, badgeColor: '#dc2626' },
             store_id: s,
-            action: {
+            action: g.circuit_breaker_terbuka ? keBreaker : {
                 jenis: 'selesaikan',
                 agent: true,
                 setujui: true,
@@ -151,12 +153,44 @@ export async function deteksiKrisis(store) {
     }
 
     if (kritis.length) {
-        // SKU yang sudah punya draf PO tinggal menunggu persetujuan manajer; agent hanya perlu menangani sisanya.
+        // Status tiap SKU kritis: sudah punya draf (tinggal dikirim ke SAP), muat di sisa anggaran PO harian (dipesan
+        // sekarang, dari risiko tertinggi), atau menunggu anggaran hari simulasi berikutnya. SKU yang tidak muat tidak
+        // dipesan, karena PO-nya pasti ditahan batas harian dan tiga PO ditahan membuka circuit breaker.
         const adaDraf = new Set(draf.map((po) => po.inventory_id));
-        const daftar = kritis.map((x) => ({ ...x, adaDraf: adaDraf.has(x.inventory_id) }));
-        const tanpaDraf = daftar.filter((x) => !x.adaDraf);
-        const jumlahDraf = daftar.length - tanpaDraf.length;
-        const x = tanpaDraf[0] || daftar[0];
+        let sisaAnggaran = Math.max(0, g.batas_po_harian_idr - (g.total_po_hari_ini_idr || 0));
+        const daftar = kritis.map((item) => {
+            if (adaDraf.has(item.inventory_id)) return { ...item, adaDraf: true, statusPo: 'draf' };
+            if (item.nilai_saran_po_idr <= sisaAnggaran) {
+                sisaAnggaran -= item.nilai_saran_po_idr;
+                return { ...item, adaDraf: false, statusPo: 'pesan' };
+            }
+            return { ...item, adaDraf: false, statusPo: 'anggaran' };
+        });
+        const dipesan = daftar.filter((item) => item.statusPo === 'pesan');
+        const menunggu = daftar.filter((item) => item.statusPo === 'anggaran');
+        const jumlahDraf = daftar.filter((item) => item.adaDraf).length;
+        const x = dipesan[0] || menunggu[0] || daftar[0];
+        const catatanAnggaran = menunggu.length
+            ? `Anggaran PO harian Toko ${s} terpakai ${rupiahRingkas(g.total_po_hari_ini_idr || 0)} dari ` +
+              `${rupiahRingkas(g.batas_po_harian_idr)}. ${menunggu.length} SKU (${menunggu.map((m) => m.deskripsi).join(', ')}) ` +
+              'dipesan saat anggaran hari simulasi berikutnya terbuka; majukan tanggal simulasi lalu tekan Selesaikan.'
+            : null;
+        const aksi = g.circuit_breaker_terbuka && (dipesan.length || jumlahDraf) ? keBreaker
+            : dipesan.length || jumlahDraf ? {
+                // Selesaikan = Rexa memesan SKU yang muat, lalu semua PO SKU kritis yang lolos guardrail dikirim ke SAP.
+                jenis: 'selesaikan',
+                agent: dipesan.length > 0,
+                setujui: true,
+                label: dipesan.length
+                    ? `🛠️ Selesaikan krisis stok: Rexa memesan ${dipesan.length} SKU, PO langsung ke SAP`
+                    : `🛠️ Selesaikan: kirim ${jumlahDraf} PO ke SAP`,
+                store_id: s,
+                tugas: `Krisis stok dari Doni (Toko ${s}): ${dipesan.length} SKU yang penjualannya naik berisiko tinggi ` +
+                    'kehabisan stok dan belum punya draf PO: ' +
+                    dipesan.map((item) => `${item.inventory_id} (${item.deskripsi})`).join(', ') +
+                    `. Panggil list_prioritas untuk toko ${s} dengan limit_naik=10, lalu panggil draft_purchase_order ` +
+                    'untuk setiap SKU di daftar ini saja. Lewati daftar turun dan SKU lain.',
+            } : { jenis: 'tunggu', label: '⏭️ Anggaran PO hari ini habis: lanjut di hari simulasi berikutnya' };
         krisis.push({
             crisisId: 'CRISIS_STOCKOUT_FAST_MOVING',
             sourceNPC: 'maya',
@@ -164,7 +198,9 @@ export async function deteksiKrisis(store) {
             sourceLocation: 'Meja Hot-Desk & Ruang Arsip',
             title: `STOK KRITIS: ${(x.deskripsi || x.inventory_id).toUpperCase()}`,
             headline: `${daftar.length} SKU yang penjualannya naik berisiko tinggi kehabisan stok` +
-                (jumlahDraf ? `; ${jumlahDraf} sudah punya draf PO menunggu persetujuan` : ''),
+                (jumlahDraf ? `; ${jumlahDraf} sudah punya draf PO` : '') +
+                (menunggu.length ? `; ${menunggu.length} menunggu anggaran hari berikutnya` : ''),
+            catatanAnggaran,
             description: `${x.deskripsi}: stok ${angka(x.stok_akhir)} unit di bawah reorder point ${angka(x.reorder_point)}, ` +
                 `skor risiko ${x.skor_risiko}. Saran PO ${angka(x.saran_qty_po)} unit (${rupiah(x.nilai_saran_po_idr)}); ` +
                 'agent menyusun drafnya, manajer yang menyetujui.',
@@ -173,23 +209,9 @@ export async function deteksiKrisis(store) {
             sku_ids: daftar.map((item) => item.inventory_id),
             sku_list: daftar,
             jumlahDraf,
-            menungguApproval: tanpaDraf.length === 0, // semua sudah ada drafnya: tinggal keputusan manajer
-            // Selesaikan = Rexa memesan SKU yang belum punya draf, lalu semua PO SKU kritis yang lolos guardrail dikirim
-            // ke SAP. Kalau semuanya sudah punya draf, Rexa tidak perlu dijalankan.
-            action: {
-                jenis: 'selesaikan',
-                agent: tanpaDraf.length > 0,
-                setujui: true,
-                label: tanpaDraf.length
-                    ? `🛠️ Selesaikan krisis stok (${daftar.length} SKU): Rexa memesan, PO langsung ke SAP`
-                    : `🛠️ Selesaikan: kirim ${jumlahDraf} PO ke SAP`,
-                store_id: s,
-                tugas: `Krisis stok dari Doni (Toko ${s}): ${tanpaDraf.length} SKU yang penjualannya naik berisiko tinggi ` +
-                    'kehabisan stok dan belum punya draf PO: ' +
-                    tanpaDraf.map((item) => `${item.inventory_id} (${item.deskripsi})`).join(', ') +
-                    `. Panggil list_prioritas untuk toko ${s} dengan limit_naik=10, lalu panggil draft_purchase_order ` +
-                    'untuk setiap SKU di daftar ini saja. Lewati daftar turun dan SKU lain.',
-            },
+            // Tidak ada yang bisa dipesan hari ini (semua sudah punya draf atau menunggu anggaran): tidak membunyikan alarm.
+            menungguApproval: dipesan.length === 0,
+            action: aksi,
         });
     }
 
@@ -473,7 +495,9 @@ export async function selesaikanKrisis(krisis) {
         // komplementer. Ringkasan Rexa di bubble menjelaskan alasannya.
         const pesan = bagian.length ? `${bagian.join('; ')}.`
             : 'Rexa sudah memeriksa; tidak ada tindakan baru yang perlu diambil (alasannya di ringkasan bubble Rexa).';
-        catat({ berjalan: false, tahap: gagal.length && !disetujui.length ? 'GAGAL' : 'SELESAI', pesan, disetujui, ditahan, gagal, selesai: pukulSekarang() });
+        // Hanya PO ditahan/gagal tanpa satu pun yang terkirim: krisisnya belum selesai, jangan ditulis selesai.
+        const belum = !disetujui.length && !holdRun.length && (ditahan.length || gagal.length);
+        catat({ berjalan: false, tahap: belum ? 'GAGAL' : 'SELESAI', pesan, disetujui, ditahan, gagal, selesai: pukulSekarang() });
         if (disetujui.length || holdRun.length) terakhirSelesai.set(kunci, { judul: krisis.title, pesan, pukul: pukulSekarang(), disetujui });
     } catch (e) {
         catat({ berjalan: false, tahap: 'GAGAL', pesan: e.message });
