@@ -208,7 +208,7 @@ print(f'   zip {tujuan.stat().st_size / 1e6:.1f} MB')
     $copilotUrl = (aws lambda get-function-url-config --function-name $FungsiCopilot @aws --query FunctionUrl --output text).Trim().TrimEnd("/")
     Cek "membaca URL Copilot"
     $aktif = Invoke-RestMethod "$apiUrl/agent-runs/aktif" -TimeoutSec 30
-    if ($aktif) {
+    if ($aktif -and $aktif.status) {  # JSON null terbaca sebagai teks "null" di PowerShell 5.1
         Write-Host "   Ada agent yang sedang $($aktif.status); uji dilewati supaya tidak mengganggu run itu."
     } else {
         for ($coba = 1; ; $coba++) {

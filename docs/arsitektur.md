@@ -72,7 +72,7 @@ sequenceDiagram
 |---|---|---|
 | Dashboard | **AWS Amplify** (`main.d30b19xkk8lknt.amplifyapp.com`); Vercel dan lokal tetap ada | AWS Amplify |
 | Tools API | AWS Lambda (container image, Function URL, Sydney) di VPC; deploy dari repo (`deploy\deploy_lambda.ps1`) | Lambda (+ API Gateway bila perlu) |
-| Agent | Strands yang sama untuk **Bedrock AgentCore Runtime** (`agent/agentcore.py`, kode Python 3.13 ARM64 dari S3, dipicu Lambda Copilot; `deploy\deploy_agent.ps1`) dan worker di laptop sebagai cadangan; keduanya mengambil tugas dari antrian API. LLM **Claude Sonnet 4.6 di Amazon Bedrock** (Ollama `qwen3:14b` sebagai cadangan lokal). Online masih worker laptop sampai skrip AgentCore dijalankan | Bedrock AgentCore Runtime + Amazon Bedrock |
+| Agent | Strands yang sama untuk **Bedrock AgentCore Runtime** (`agent/agentcore.py`, kode Python 3.13 ARM64 dari S3, dipicu Lambda Copilot; `deploy\deploy_agent.ps1`) dan worker di laptop sebagai cadangan; keduanya mengambil tugas dari antrian API. LLM **Claude Sonnet 4.6 di Amazon Bedrock** (Ollama `qwen3:14b` sebagai cadangan lokal). Online di AgentCore sejak 26 Okt 2026 | Tercapai |
 | Chatbot Copilot dan Agent Jaringan | Lambda `rexa-copilot` di luar VPC, Bedrock Converse + tool baca yang membaca API lewat Function URL: chatbot per toko dengan Claude Haiku 4.5, Agent Jaringan (semua toko, menetapkan toko prioritas dan transfer stok) dengan Claude Sonnet 4.6 | Tetap |
 | State transaksi | SQLite di **Amazon EFS** (dipakai bersama semua instance, tidak hilang saat cold start) | Database terkelola (RDS/DynamoDB) |
 | Data analitik | DuckDB ikut di-deploy bersama API | Tetap DuckDB (hanya dibaca), disimpan di S3 |
