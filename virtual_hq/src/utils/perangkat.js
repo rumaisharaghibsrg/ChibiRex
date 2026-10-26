@@ -11,7 +11,7 @@ export function pakaiKontrolSentuh() {
     return Boolean(sentuh) || window.innerWidth <= 768;
 }
 
-/** Label interaksi di peta: "[Tekan E: Duduk]" atau "[C: Chat]" di keyboard, "[Duduk]" / "[Chat]" di kontrol sentuh. */
+/** Label interaksi di peta: "[Tekan E: Duduk]" atau "[E: Analisis Toko]" di keyboard, "[Duduk]" / "[Analisis Toko]" di kontrol sentuh. */
 export function labelInteraksi(teks) {
     return pakaiKontrolSentuh() ? teks.replace(/\[(?:Tekan )?[EC](?::| untuk) /g, '[') : teks;
 }

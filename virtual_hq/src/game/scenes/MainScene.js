@@ -674,7 +674,7 @@ export class MainScene extends Phaser.Scene {
         this._rexaPrompt = this.add.text(
             this.rexaSprite.x,
             this.rexaSprite.y + 36,
-            labelInteraksi('⚡ [E: Analisis Toko]  💬 [C: Chat]'),
+            labelInteraksi('⚡ [E: Analisis Toko]'),
             {
                 fontSize: '11px',
                 fontFamily: 'monospace',
