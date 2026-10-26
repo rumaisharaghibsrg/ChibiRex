@@ -1,0 +1,306 @@
+<!doctype html>
+<!--
+  Sumber docs/Komponen_Teknologi_Rexa.pdf. Ubah file ini, lalu cetak ke PDF (A4) dari Edge/Chrome; footer dan nomor
+  halaman ditambahkan saat mencetak (Ctrl+P > Lainnya > Header dan footer, atau Page.printToPDF dengan footerTemplate).
+-->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Komponen Teknologi Rexa</title>
+<style>
+  @page { size: A4; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", "Noto Sans", Arial, sans-serif; font-size: 10pt; color: #111; margin: 0; line-height: 1.38; }
+  h1 { font-size: 20pt; margin: 0 0 2px; }
+  .sub { font-size: 10pt; margin: 0 0 14px; }
+  h2 { font-size: 14pt; margin: 18px 0 6px; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 12px 0 5px; break-after: avoid; }
+  p { margin: 0 0 8px; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 6px; font-size: 9.5pt; }
+  th, td { border: 1px solid #222; padding: 4px 7px; text-align: left; vertical-align: top; }
+  th { font-weight: 700; border-bottom-width: 2px; }
+  tr { break-inside: avoid; }
+  td:first-child { font-weight: 700; }
+  td.biasa { font-weight: 400; }
+  code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 9pt; }
+  .kolom-komponen { width: 17%; }
+  .kolom-tempat { width: 21%; }
+  .catatan { font-size: 9pt; margin-top: 4px; }
+  .diagram { display: block; width: 88%; margin: 2px auto; }
+  .alur { margin: 4px 0 8px; break-inside: avoid; }
+  .halaman-baru { break-before: page; }
+  .alur div { border: 1px solid #222; padding: 4px 8px; font-size: 9pt; }
+  .alur .panah { border: 0; text-align: center; padding: 0; line-height: 1; font-size: 10pt; }
+  .perintah td:first-child { font-family: Consolas, "Cascadia Mono", monospace; font-weight: 400; font-size: 9pt; width: 40%; }
+</style>
+</head>
+<body>
+
+<h1>Komponen Teknologi Rexa</h1>
+<p class="sub">Smart Inventory &amp; Cash Flow Copilot · Tim ChibiRex · Agentic AI Hackathon 2026 · kondisi per 26 Oktober 2026</p>
+
+<p><b>Ringkasnya:</b> agent AI hanya <b>memilih dan menjelaskan</b> tindakan; <b>angka dihitung oleh data</b> (DuckDB dan
+model LightGBM), <b>aturan dijaga oleh kode</b> (guardrail di API), dan <b>keputusan akhir tetap di tangan manusia</b>
+(1-Click Approval sebelum PO masuk SAP). <b>Semua bagian online berjalan di AWS, termasuk agent</b>: laptop tidak perlu
+menyala saat demo.</p>
+
+<h2>Diagram arsitektur</h2>
+<svg class="diagram" viewBox="0 0 760 450" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Noto Sans, Arial, sans-serif">
+  <defs>
+    <marker id="p" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse">
+      <path d="M0,0 L8,4 L0,8 z" fill="#111"/>
+    </marker>
+  </defs>
+  <g fill="none" stroke="#111" stroke-width="1.2">
+    <!-- wadah -->
+    <rect x="168" y="48" width="590" height="397" stroke-dasharray="6 4"/>
+    <rect x="0" y="168" width="150" height="195" stroke-dasharray="6 4"/>
+    <!-- kotak -->
+    <rect x="360" y="4" width="225" height="32" stroke-width="1.6"/>
+    <rect x="185" y="78" width="555" height="44"/>
+    <rect x="185" y="168" width="245" height="66"/>
+    <rect x="495" y="168" width="245" height="66"/>
+    <rect x="185" y="290" width="115" height="62"/>
+    <rect x="315" y="290" width="115" height="62"/>
+    <rect x="495" y="290" width="245" height="62" stroke-width="1.8"/>
+    <rect x="495" y="388" width="245" height="46"/>
+    <rect x="10" y="196" width="130" height="56" stroke-dasharray="4 3"/>
+    <rect x="10" y="290" width="130" height="62"/>
+    <!-- panah -->
+    <line x1="472" y1="36" x2="472" y2="77" marker-end="url(#p)"/>
+    <line x1="307" y1="122" x2="307" y2="167" marker-end="url(#p)"/>
+    <line x1="617" y1="122" x2="617" y2="167" marker-end="url(#p)"/>
+    <line x1="495" y1="186" x2="431" y2="186" marker-end="url(#p)"/>
+    <line x1="242" y1="235" x2="242" y2="289" marker-start="url(#p)" marker-end="url(#p)"/>
+    <line x1="372" y1="290" x2="372" y2="235" marker-end="url(#p)"/>
+    <line x1="617" y1="234" x2="617" y2="289" marker-end="url(#p)"/>
+    <path d="M495,330 L462,330 L462,218 L431,218" marker-end="url(#p)"/>
+    <line x1="617" y1="352" x2="617" y2="387" marker-start="url(#p)" marker-end="url(#p)"/>
+    <path d="M740,201 L750,201 L750,411 L741,411" marker-end="url(#p)"/>
+    <line x1="140" y1="224" x2="184" y2="224" stroke-dasharray="4 3" marker-end="url(#p)"/>
+    <path d="M140,330 L156,330 L156,374 L372,374 L372,353" marker-end="url(#p)"/>
+  </g>
+  <g fill="#111" font-size="10" text-anchor="middle">
+    <text x="472.5" y="25" font-size="12" font-weight="700">Manajer toko (browser / HP)</text>
+    <text x="462" y="96" font-size="12" font-weight="700">AWS Amplify</text>
+    <text x="462" y="112">Dashboard React + Virtual HQ (Phaser, di /hq/)</text>
+    <text x="307.5" y="187" font-size="11.5" font-weight="700">AWS Lambda · API</text>
+    <text x="307.5" y="203">FastAPI + guardrail di kode</text>
+    <text x="307.5" y="218">+ tiruan SAP S/4HANA (OData) · di VPC</text>
+    <text x="617.5" y="187" font-size="11.5" font-weight="700">AWS Lambda · Rexa Copilot</text>
+    <text x="617.5" y="203">chatbot + Agent Jaringan (semua toko)</text>
+    <text x="617.5" y="218">bangunkan agent · di luar VPC</text>
+    <text x="242.5" y="309" font-size="11.5" font-weight="700">Amazon EFS</text>
+    <text x="242.5" y="325">SQLite: PO, hold,</text>
+    <text x="242.5" y="340">jejak agent, antrian</text>
+    <text x="372.5" y="309" font-size="11.5" font-weight="700">Amazon ECR</text>
+    <text x="372.5" y="325">image API +</text>
+    <text x="372.5" y="340">chibirex.duckdb</text>
+    <text x="617.5" y="309" font-size="11.5" font-weight="700">Amazon Bedrock AgentCore Runtime</text>
+    <text x="617.5" y="325">Agent Rexa (Strands Agents)</text>
+    <text x="617.5" y="340">satu sesi per klik, tanpa server</text>
+    <text x="617.5" y="406" font-size="11.5" font-weight="700">Amazon Bedrock</text>
+    <text x="617.5" y="422">Claude Sonnet 4.6 · Claude Haiku 4.5</text>
+    <text x="75" y="214" font-size="11" font-weight="700">Worker cadangan</text>
+    <text x="75" y="229" font-size="9">python -m agent.worker</text>
+    <text x="75" y="243" font-size="9">kalau AgentCore bermasalah</text>
+    <text x="75" y="309" font-size="11" font-weight="700">Pipeline engine/</text>
+    <text x="75" y="325" font-size="9.5">Kaggle → pandas → DuckDB</text>
+    <text x="75" y="340" font-size="9.5">+ LightGBM (sekali jalan)</text>
+  </g>
+  <g fill="#111" font-size="9">
+    <text x="178" y="64" font-size="10">AWS (Sydney, ap-southeast-2)</text>
+    <text x="10" y="184" font-size="10">LAPTOP (opsional)</text>
+    <text x="480" y="61">klik Jalankan Agent &amp; approve</text>
+    <text x="313" y="149">REST (HTTPS)</text>
+    <text x="623" y="149">chat · bangunkan agent</text>
+    <text x="462" y="181" text-anchor="middle">baca (GET)</text>
+    <text x="248" y="266">baca/tulis</text>
+    <text x="378" y="266">image</text>
+    <text x="623" y="266">InvokeAgentRuntime</text>
+    <text x="623" y="374">berpikir</text>
+    <text x="457" y="274" text-anchor="middle" transform="rotate(-90 457 274)">ambil tugas · 6 tools</text>
+    <text x="190" y="388">deploy_lambda.ps1 (Docker)</text>
+  </g>
+</svg>
+<p class="catatan">Dashboard, Virtual HQ, API, guardrail, penyimpanan, tiruan SAP, dan agent berjalan di AWS. Laptop hanya dipakai
+untuk membangun data dan deploy; worker di laptop hanya cadangan kalau AgentCore bermasalah.</p>
+
+<h2>1. Data dan analitik ("bahan" dan "hitungan")</h2>
+<table>
+  <thead><tr><th class="kolom-komponen">Komponen</th><th>Untuk apa</th><th class="kolom-tempat">Berjalan di</th></tr></thead>
+  <tr><td>Kaggle</td><td class="biasa">Sumber dataset. <b>Bibitor</b>: stok, penjualan, dan pembelian 80 toko minuman.
+    <b>Instacart</b>: isi keranjang belanja, untuk cek substitusi/peran komplementer. <b>Product Backorders</b>: melatih
+    model risiko stok habis. <b>Online Retail II</b>: pola pesanan borongan untuk menguji guardrail.</td>
+    <td class="biasa">Diunduh sekali di laptop</td></tr>
+  <tr><td>Python + pandas</td><td class="biasa">Bahasa utama proyek dan alat olah data.</td><td class="biasa">Laptop</td></tr>
+  <tr><td>DuckDB</td><td class="biasa">Database analitik dalam <b>satu file</b> (<code>chibirex.duckdb</code>, ±300 MB). Menghitung
+    kecepatan jual (Vs), reorder point, safety stock, aturan substitusi, Health Score, dan menyimpan skor risiko. Cepat
+    untuk data besar dan tidak perlu server database.</td><td class="biasa">Dibuat di laptop; ikut di image Lambda (hanya dibaca)</td></tr>
+  <tr><td>LightGBM</td><td class="biasa">Model machine learning yang memperkirakan SKU berisiko kehabisan stok; sumber
+    <b>Confidence Score</b> 0–100 (TINGGI ≥ 90, SEDANG ≥ 70). Di data uji, ±2,9× lebih tepat daripada aturan sederhana.</td>
+    <td class="biasa">Dilatih di laptop</td></tr>
+  <tr><td>Pipeline engine/</td><td class="biasa">Rangkaian langkah <code>python -m engine.pipeline</code> yang mengubah data
+    mentah Kaggle menjadi <code>chibirex.duckdb</code>.</td><td class="biasa">Laptop</td></tr>
+</table>
+
+<h2>2. API dan guardrail ("aturan main")</h2>
+<table>
+  <thead><tr><th class="kolom-komponen">Komponen</th><th>Untuk apa</th><th class="kolom-tempat">Berjalan di</th></tr></thead>
+  <tr><td>FastAPI</td><td class="biasa">Membuat <b>REST API</b>: satu-satunya pintu untuk semua aksi. Berisi 6 tools agent dan
+    endpoint dashboard (Health Score, statistik 80 toko, antrian agent, rekap agent per hari, approval PO).</td>
+    <td class="biasa">AWS Lambda (online) atau laptop</td></tr>
+  <tr><td>Pydantic</td><td class="biasa">Memeriksa setiap data yang masuk; field yang tidak dikenal ditolak (agent tidak bisa
+    menyelipkan <code>"status": "APPROVED"</code>).</td><td class="biasa">Di dalam API</td></tr>
+  <tr><td>Guardrail di kode</td><td class="biasa">Pengaman yang tidak bisa dilewati agent atau prompt (rincian di tabel
+    berikut).</td><td class="biasa">Di dalam API</td></tr>
+  <tr><td>Jam simulasi</td><td class="biasa">Memajukan atau memundurkan waktu dari 31 Des 2016 (maks. 90 hari): stok berkurang
+    sesuai permintaan harian dari data, PO yang disetujui tiba setelah lead time vendor, sehingga agent bisa diuji
+    bereaksi ke kondisi baru.</td><td class="biasa">Di dalam API</td></tr>
+  <tr><td>SQLite</td><td class="biasa">Database kecil untuk data <b>transaksi</b>: draf PO, hold, hitung fisik, idempotency key,
+    circuit breaker, audit log, jejak langkah agent, antrian tugas agent.</td><td class="biasa">File di Amazon EFS (online) atau laptop</td></tr>
+  <tr><td>Tiruan SAP</td><td class="biasa">Meniru API Purchase Order SAP S/4HANA (OData V2
+    <code>API_PURCHASEORDER_PROCESS_SRV</code>, token CSRF, nomor PO 45xxxxxxxx). PO yang disetujui manajer dikirim ke sini.</td>
+    <td class="biasa">Di dalam API</td></tr>
+  <tr><td>uvicorn</td><td class="biasa">Server untuk menjalankan API di laptop (pengembangan).</td><td class="biasa">Laptop</td></tr>
+</table>
+
+<h3>Guardrail di kode</h3>
+<table>
+  <thead><tr><th style="width:24%">Guardrail</th><th>Cara kerja</th></tr></thead>
+  <tr><td>Filter 3σ</td><td class="biasa">Qty PO di atas target stok + 3σ permintaan dianggap lonjakan tidak wajar (misalnya
+    pesanan borongan) → ditahan.</td></tr>
+  <tr><td>Batas PO harian</td><td class="biasa">Total nilai PO per toko per hari maksimal Rp100 juta.</td></tr>
+  <tr><td>Circuit breaker</td><td class="biasa">Kalau 3 PO ditahan guardrail dalam 60 menit, semua PO baru ditahan sampai
+    manajer mereset.</td></tr>
+  <tr><td>Idempotency key</td><td class="biasa">Request yang diulang dengan kunci yang sama tidak membuat PO atau hold ganda.</td></tr>
+  <tr><td>Draf secara default</td><td class="biasa">Agent hanya menyusun draf; PO baru masuk SAP setelah manajer menekan
+    1-Click Approval. Satu draf per SKU.</td></tr>
+  <tr><td>Data Confidence</td><td class="biasa">Kalau data stok tidak bisa dipercaya (di bawah 0,8, misalnya ada selisih
+    hitung fisik), PO ditahan sampai stok diaudit.</td></tr>
+  <tr><td>Syarat Hold Reorder</td><td class="biasa">Reorder hanya boleh ditahan kalau penjualan turun dan jenis produknya
+    tidak komplementer; 10% tetap dibeli sebagai stok uji (exploration budget).</td></tr>
+</table>
+
+<h2>3. Agent ("otaknya")</h2>
+<table>
+  <thead><tr><th class="kolom-komponen">Komponen</th><th>Untuk apa</th><th class="kolom-tempat">Berjalan di</th></tr></thead>
+  <tr><td>Strands Agents</td><td class="biasa">SDK open-source dari AWS untuk membuat agent: mengatur putaran LLM berpikir →
+    memanggil tool → membaca hasil → berpikir lagi sampai tugas selesai.</td><td class="biasa">Bedrock AgentCore Runtime</td></tr>
+  <tr><td>Amazon Bedrock AgentCore Runtime</td><td class="biasa">Layanan AWS untuk menjalankan agent tanpa mengurus server.
+    Setiap klik "Jalankan Agent" membuka satu sesi yang mengambil tugas dari antrian API, menjalankan agent, lalu ditutup
+    2 menit setelah selesai. Kodenya sama dengan agent di laptop (Python 3.13, ARM64, diunggah sebagai zip ke S3).</td>
+    <td class="biasa">AWS (runtime <code>rexa_agent_toko</code>)</td></tr>
+  <tr><td>Claude Sonnet 4.6</td><td class="biasa">LLM (model bahasa) agent: memilih tindakan dan menulis ringkasan; tidak
+    menghitung angka (semua angka dari API). Satu run ±20 detik, ±27 detik dari klik sampai selesai.</td>
+    <td class="biasa">Amazon Bedrock (Sydney)</td></tr>
+  <tr><td>Rexa Copilot</td><td class="biasa"><b>Chatbot</b> per toko (Claude Haiku 4.5, 9 tool baca) dan <b>Agent Jaringan</b>
+    untuk halaman Semua Toko (Claude Sonnet 4.6: menetapkan 3–5 toko prioritas dan transfer stok antar toko). Keduanya
+    hanya membaca data. Copilot juga yang membangunkan agent toko di AgentCore.</td>
+    <td class="biasa">AWS Lambda (di luar VPC)</td></tr>
+  <tr><td>Worker + Ollama (cadangan)</td><td class="biasa">Worker di laptop (<code>python -m agent.worker</code>) mengambil
+    tugas dari antrian yang sama kalau AgentCore bermasalah. Ollama + Qwen3 14B adalah LLM lokal kalau Bedrock tidak bisa
+    dipakai. Tidak dipakai saat kondisi normal.</td><td class="biasa">Laptop (opsional)</td></tr>
+  <tr><td>httpx</td><td class="biasa">Pustaka yang dipakai agent untuk memanggil API lewat internet.</td>
+    <td class="biasa">Di dalam agent</td></tr>
+</table>
+
+<h3>6 tools yang boleh dipakai agent (semuanya lewat API, jadi tetap dijaga guardrail)</h3>
+<table>
+  <thead><tr><th style="width:24%">Tool</th><th>Fungsi</th></tr></thead>
+  <tr><td>list_prioritas</td><td class="biasa">Daftar SKU yang perlu tindakan di satu toko: naik (kandidat draf PO) dan turun
+    (kandidat hold).</td></tr>
+  <tr><td>get_sku_metrics</td><td class="biasa">Detail satu SKU: stok, Vs, reorder point, saran PO, skor risiko, Data Confidence.</td></tr>
+  <tr><td>check_substitution</td><td class="biasa">Cek apakah jenis produk punya peran komplementer (dari data keranjang Instacart).</td></tr>
+  <tr><td>hold_reorder</td><td class="biasa">Tahan reorder SKU yang penjualannya turun dan tidak komplementer; menghitung modal
+    yang diselamatkan.</td></tr>
+  <tr><td>suggest_reallocation</td><td class="biasa">Saran pengalihan modal dari reorder yang ditahan ke SKU yang penjualannya naik.</td></tr>
+  <tr><td>draft_purchase_order</td><td class="biasa">Susun draf PO; hasilnya DRAFT (menunggu manajer) atau DITAHAN_GUARDRAIL.</td></tr>
+</table>
+
+<h2>4. Dashboard dan Virtual HQ ("yang dilihat manajer")</h2>
+<table>
+  <thead><tr><th style="width:24%">Komponen</th><th>Untuk apa</th></tr></thead>
+  <tr><td>React + Vite + Tailwind</td><td class="biasa">Dashboard: panel agent (Plan → Reason → Act → Review), kartu PO menunggu
+    persetujuan, tombol 1-Click Approval, Health Score, realokasi modal, halaman <b>Semua Toko</b> (statistik 80 toko dan
+    transfer stok), <b>Rekap Agent</b> per hari simulasi (unduh CSV/PDF), kontrol tanggal simulasi, dan chatbot.</td></tr>
+  <tr><td>Virtual HQ (Phaser 4 + React 19)</td><td class="biasa">Kantor 2D yang membaca API yang sama: staf membacakan laporan
+    toko, Smart TV menampilkan statistik jaringan, Rexa menjalankan agent, dan mode Semua Toko untuk seluruh jaringan.
+    Bisa dimainkan di HP (joystick dan tombol TAP). Dibuka dari tombol <b>Mode Virtual HQ</b> di dashboard.</td></tr>
+  <tr><td>Kiro</td><td class="biasa">AI coding editor dari AWS, dipakai tim untuk melanjutkan dashboard (memberi poin tambahan
+    penilaian).</td></tr>
+</table>
+
+<h2 class="halaman-baru">5. AWS ("tempat semuanya online")</h2>
+<table>
+  <thead><tr><th style="width:24%">Layanan</th><th>Untuk apa</th></tr></thead>
+  <tr><td>AWS Lambda (API)</td><td class="biasa">Menjalankan API tanpa mengurus server; hanya aktif saat ada request sehingga
+    murah. Function URL adalah alamat publiknya. Memori 1024 MB, container image Python 3.12, di dalam VPC.</td></tr>
+  <tr><td>AWS Lambda (Copilot)</td><td class="biasa">Lambda kedua di <b>luar VPC</b>: Lambda API di VPC tidak punya akses
+    internet keluar, jadi tidak bisa memanggil Bedrock atau AgentCore. Zip Python 3.12, ARM64.</td></tr>
+  <tr><td>Amazon Bedrock</td><td class="biasa">Model Claude: Sonnet 4.6 untuk agent toko dan Agent Jaringan, Haiku 4.5 untuk
+    chatbot (lebih hemat). Diakses lewat IAM role, tanpa API key.</td></tr>
+  <tr><td>Amazon Bedrock AgentCore Runtime</td><td class="biasa">Tempat agent toko berjalan (lihat bagian 3). Ditagih per detik
+    selama sesi hidup, jadi tidak ada biaya saat tidak dipakai.</td></tr>
+  <tr><td>Amazon S3</td><td class="biasa">Menyimpan zip kode agent untuk AgentCore (±30 MB per deploy).</td></tr>
+  <tr><td>IAM</td><td class="biasa">Izin per bagian: role AgentCore hanya boleh memanggil model Bedrock, membaca kodenya di S3,
+    dan menulis log; Copilot hanya boleh membangunkan runtime agent itu.</td></tr>
+  <tr><td>Mangum</td><td class="biasa">Adapter (penerjemah) supaya aplikasi FastAPI bisa berjalan di Lambda.</td></tr>
+  <tr><td>Docker + Amazon ECR</td><td class="biasa">Docker membungkus API dan data DuckDB menjadi satu image; ECR menyimpan image
+    itu di AWS.</td></tr>
+  <tr><td>Amazon EFS</td><td class="biasa">"Hard disk bersama" untuk file SQLite. Tanpa EFS, data PO bisa hilang saat Lambda
+    restart atau terbelah antar-salinan Lambda.</td></tr>
+  <tr><td>VPC + Security Group</td><td class="biasa">Jaringan privat dan "satpam": Lambda API boleh mengakses EFS, sedangkan EFS
+    tertutup untuk pihak lain.</td></tr>
+  <tr><td>AWS Amplify</td><td class="biasa">Hosting dashboard dan Virtual HQ (<code>/hq/</code>):
+    https://main.d30b19xkk8lknt.amplifyapp.com</td></tr>
+  <tr><td>CloudWatch Logs</td><td class="biasa">Catatan aktivitas Lambda dan AgentCore untuk mencari error dan mengukur kecepatan.</td></tr>
+  <tr><td>AWS CLI + skrip PowerShell</td><td class="biasa">Alat deploy: <code>deploy_lambda.ps1</code> (API),
+    <code>deploy_copilot.ps1</code> (Copilot), <code>deploy_agent.ps1</code> (agent ke AgentCore), dan
+    <code>deploy_dashboard.ps1</code> (dashboard + Virtual HQ).</td></tr>
+</table>
+
+<h2>6. Alur satu klik (yang ditunjukkan saat demo)</h2>
+<div class="alur">
+  <div>1. Manajer klik "Jalankan Agent" di dashboard atau di Virtual HQ (Amplify)</div>
+  <div class="panah">↓</div>
+  <div>2. API di Lambda mencatat tugas ke antrian: status MENUNGGU (SQLite di EFS)</div>
+  <div class="panah">↓</div>
+  <div>3. Dashboard meminta Lambda Copilot membangunkan agent di Bedrock AgentCore (InvokeAgentRuntime)</div>
+  <div class="panah">↓</div>
+  <div>4. Agent di AgentCore mengambil tugas: status BERJALAN; Claude Sonnet 4.6 mulai berpikir</div>
+  <div class="panah">↓</div>
+  <div>5. Agent memanggil tools di API: Plan → Reason → Act (prioritas, cek substitusi, hold, draf PO)</div>
+  <div class="panah">↓</div>
+  <div>6. Guardrail di API memeriksa setiap aksi; yang melanggar ditahan (DITAHAN_GUARDRAIL)</div>
+  <div class="panah">↓</div>
+  <div>7. Setiap langkah tampil langsung di dashboard; ringkasan agent = Review (±27 detik dari klik)</div>
+  <div class="panah">↓</div>
+  <div>8. Manajer klik "1-Click Approval" → API mengirim PO ke tiruan SAP → nomor PO 45xxxxxxxx</div>
+</div>
+<p>Langkah 4–7 adalah loop agentic yang diminta juri (plan, reason, act/tool, review). Langkah 8 adalah
+human-in-the-loop: tanpa persetujuan manajer, tidak ada PO yang masuk SAP.</p>
+
+<h2>7. Dari laptop ke AWS</h2>
+<p>Rencana awal memakai Amazon Bedrock. Pada 22 Oktober, kuota token Bedrock untuk model Amazon Nova di akun tim bernilai 0,
+jadi LLM sementara berjalan di laptop (Ollama) lewat worker yang mengambil tugas dari antrian API. Pada 25 Oktober Claude di
+Bedrock bisa dipakai, dan LLM pindah ke <b>Claude Sonnet 4.6</b>. Pada 26 Oktober agent sendiri dipindah ke <b>Amazon Bedrock
+AgentCore Runtime</b>, sehingga laptop tidak perlu menyala saat demo.</p>
+<p>Kode agent sama di ketiga tahap; yang berubah hanya tempat menjalankannya, jadi dashboard dan API tidak perlu diubah.
+Agent dibangunkan lewat Lambda Copilot karena Lambda API di VPC tidak punya akses internet keluar dan browser tidak punya
+kredensial AWS. Worker di laptop tetap bisa dinyalakan sebagai cadangan.</p>
+
+<h2>8. Perintah penting</h2>
+<table class="perintah">
+  <thead><tr><th>Perintah</th><th>Fungsi</th></tr></thead>
+  <tr><td>python -m engine.pipeline</td><td class="biasa">Membangun ulang data (Kaggle → DuckDB) di laptop</td></tr>
+  <tr><td>python -m agent.reset_demo</td><td class="biasa">Mengosongkan data demo online (PO, hold, jejak agent; tanggal kembali ke 31 Des 2016)</td></tr>
+  <tr><td>python -m agent.worker</td><td class="biasa">Worker cadangan di laptop (hanya kalau AgentCore bermasalah)</td></tr>
+  <tr><td>deploy\deploy_lambda.ps1</td><td class="biasa">Deploy ulang API ke Lambda (butuh Docker Desktop)</td></tr>
+  <tr><td>deploy\deploy_copilot.ps1</td><td class="biasa">Deploy ulang Rexa Copilot ke Lambda</td></tr>
+  <tr><td>deploy\deploy_agent.ps1</td><td class="biasa">Deploy ulang agent ke Bedrock AgentCore</td></tr>
+  <tr><td>deploy\deploy_dashboard.ps1</td><td class="biasa">Deploy ulang dashboard dan Virtual HQ ke Amplify</td></tr>
+</table>
+
+</body>
+</html>
