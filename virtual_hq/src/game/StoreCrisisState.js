@@ -11,14 +11,19 @@
  *    Maya (/stores/{store}/maya/status), supaya angka Doni dan Maya tidak pernah berbeda sumber.
  *  - Citra: lebih dari 40% nilai stok tertahan di SKU overstock/deadstock (komponen stabilitas kas < 60).
  *
- * Setiap krisis berstatus BARU (alarm: tombol Doni Hub merah, Doni mendatangi pemain, klaxon) atau DITANGANI (pending
- * resolution: agent sudah ditugaskan atau manajer sudah meninjaunya untuk tanggal data ini, atau semua SKU kritis sudah
- * punya draf PO yang tinggal disetujui). Hasil pemeriksaan disimpan per toko (hasilTerakhir) dan menjadi satu sumber
- * untuk tombol header, sprite Doni, dan panel Crisis Hub; setiap perubahan diumumkan lewat event 'doni-status'.
+ * Tugas Doni adalah menyelesaikan krisis, bukan hanya melaporkannya. Tombol "Selesaikan" (satu klik manajer, yang
+ * sekaligus menjadi persetujuannya) menjalankan selesaikanKrisis(): Rexa menyusun PO untuk semua SKU kritis (atau
+ * meninjau toko / menahan reorder SKU yang turun), lalu PO yang lolos guardrail langsung dikirim ke SAP sehingga
+ * barangnya dalam pengiriman dan krisisnya hilang dari data. Guardrail tetap berlaku: PO yang ditahan tidak disetujui.
+ *
+ * Setiap krisis berstatus BARU (alarm: tombol Doni Hub merah, Doni mendatangi pemain, klaxon) atau DITANGANI (sedang
+ * diselesaikan atau sudah ditangani untuk tanggal data ini, agent sedang bekerja untuk toko itu, atau semua SKU kritis
+ * sudah punya draf PO). Hasil pemeriksaan disimpan per toko (hasilTerakhir) dan menjadi satu sumber untuk tombol
+ * header, sprite Doni, dan panel Crisis Hub; setiap perubahan diumumkan lewat event 'doni-status'.
  */
 
 import { EventBus } from './EventBus';
-import { api } from '../lib/api';
+import { api, beritahuDataBerubah } from '../lib/api';
 import { angka, rupiah, rupiahRingkas } from '../lib/format';
 import { formatIndonesianDate } from '../utils/TimeEngine';
 
@@ -42,23 +47,35 @@ const sedangMemeriksa = new Map(); // kunci -> Promise pemeriksaan yang sedang b
 // window.CURRENT_STORE karena itu diisi efek StoreProvider, yang berjalan setelah efek App.
 let kunciDiawasi = null;
 
+// Penyelesaian krisis lewat tombol Selesaikan (kunci sama dengan ditangani) -> {berjalan, tahap, pesan, disetujui,
+// ditahan, gagal, mulai, selesai}. tahap: AGENT (Rexa bekerja), SAP (PO dikirim), SELESAI, atau GAGAL.
+const penyelesaian = new Map();
+const terakhirSelesai = new Map(); // kunci toko -> {judul, pesan, pukul}: ditampilkan setelah krisisnya hilang
+
 const kunciDitangani = (kunci, perTanggal, crisisId) => `${kunci}|${perTanggal}|${crisisId}`;
 const kunciAktif = () => kunciDiawasi
     ?? (window.CURRENT_MODE === 'jaringan' ? 'jaringan' : window.CURRENT_STORE?.id || 74);
+const pukulSekarang = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+const jeda = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Hasil pemeriksaan terakhir untuk toko ini (atau 'jaringan'), atau null kalau belum pernah diperiksa. */
 export const hasilTerakhir = (kunci) => hasilPerToko.get(kunci) || null;
 
+/** Penyelesaian terakhir yang berhasil di toko ini (untuk panel setelah krisisnya hilang), atau null. */
+export const penyelesaianTerakhir = (kunci) => terakhirSelesai.get(kunci) || null;
+
 /**
- * Status krisis per tanggal data: BARU, kecuali sudah ditugaskan/ditinjau dari panel Doni, agent sedang bekerja untuk
+ * Status krisis per tanggal data: BARU, kecuali sedang/sudah diselesaikan dari panel Doni, agent sedang bekerja untuk
  * toko ini (dari mana pun dijalankan), atau semua SKU-nya tinggal menunggu persetujuan manajer.
  */
 function beriStatus(kunci, hasil) {
     for (const k of hasil.krisis) {
-        const catatan = ditangani.get(kunciDitangani(kunci, hasil.perTanggal, k.crisisId));
+        const kunciK = kunciDitangani(kunci, hasil.perTanggal, k.crisisId);
+        const catatan = ditangani.get(kunciK);
         k.penanganan = catatan || null;
-        k.agentBekerja = Boolean(hasil.agentBekerja) && k.action?.jenis === 'agent';
-        k.status = catatan || k.agentBekerja || k.menungguApproval ? 'DITANGANI' : 'BARU';
+        k.penyelesaian = penyelesaian.get(kunciK) || null;
+        k.agentBekerja = Boolean(hasil.agentBekerja) && Boolean(k.action?.agent);
+        k.status = catatan || k.penyelesaian?.berjalan || k.agentBekerja || k.menungguApproval ? 'DITANGANI' : 'BARU';
     }
     // Yang butuh tindakan tampil lebih dulu; urutan keparahan dipertahankan di dalam kelompoknya.
     hasil.krisis.sort((a, b) => (a.status === 'BARU' ? 0 : 1) - (b.status === 'BARU' ? 0 : 1));
@@ -104,7 +121,7 @@ export async function deteksiKrisis(store) {
             description: `${g.alasan || 'Guardrail mencatat pelanggaran beruntun.'} PO baru baru bisa dibuat lagi setelah ` +
                 'manajer mereset circuit breaker.',
             metrics: { label: 'Status circuit breaker', currentValue: 'TERBUKA', thresholdValue: 'Tertutup (normal)', badgeColor: '#ef4444' },
-            action: { jenis: 'reset-breaker', label: '⚡ Reset circuit breaker (keputusan manajer)' },
+            action: { jenis: 'reset-breaker', label: '🛠️ Selesaikan: reset circuit breaker (keputusan manajer)' },
         });
     }
 
@@ -122,10 +139,11 @@ export async function deteksiKrisis(store) {
             metrics: { label: 'Health Score', currentValue: `${r.health_score} / 100`, thresholdValue: `Minimum ${AMBANG_HEALTH} (batas zona merah)`, badgeColor: '#dc2626' },
             store_id: s,
             action: {
-                jenis: 'agent',
-                label: '🤖 Tugaskan Agent Rexa meninjau toko ini',
+                jenis: 'selesaikan',
+                agent: true,
+                setujui: true,
+                label: '🛠️ Selesaikan: Rexa menangani toko ini, PO langsung ke SAP',
                 store_id: s,
-                crisis_type: 'CRISIS_STORE_HEALTH_CRASH',
                 tugas: `Krisis dari Doni: Health Score Toko ${s} ${r.health_score}/100, di bawah batas zona merah ` +
                     `${AMBANG_HEALTH}. Tinjau toko ${s} sesuai prosedur dan tangani penyebab terbesarnya.`,
             },
@@ -156,17 +174,22 @@ export async function deteksiKrisis(store) {
             sku_list: daftar,
             jumlahDraf,
             menungguApproval: tanpaDraf.length === 0, // semua sudah ada drafnya: tinggal keputusan manajer
-            action: tanpaDraf.length ? {
-                jenis: 'agent',
-                label: `🤖 Tugaskan Agent Rexa menyusun draf PO (${tanpaDraf.length} SKU)`,
+            // Selesaikan = Rexa memesan SKU yang belum punya draf, lalu semua PO SKU kritis yang lolos guardrail dikirim
+            // ke SAP. Kalau semuanya sudah punya draf, Rexa tidak perlu dijalankan.
+            action: {
+                jenis: 'selesaikan',
+                agent: tanpaDraf.length > 0,
+                setujui: true,
+                label: tanpaDraf.length
+                    ? `🛠️ Selesaikan krisis stok (${daftar.length} SKU): Rexa memesan, PO langsung ke SAP`
+                    : `🛠️ Selesaikan: kirim ${jumlahDraf} PO ke SAP`,
                 store_id: s,
-                sku_ids: tanpaDraf.map((item) => item.inventory_id),
-                crisis_type: 'CRISIS_STOCKOUT_FAST_MOVING',
                 tugas: `Krisis stok dari Doni (Toko ${s}): ${tanpaDraf.length} SKU yang penjualannya naik berisiko tinggi ` +
-                    `kehabisan stok dan belum punya draf PO: ` +
+                    'kehabisan stok dan belum punya draf PO: ' +
                     tanpaDraf.map((item) => `${item.inventory_id} (${item.deskripsi})`).join(', ') +
-                    '. Periksa SKU-SKU ini dan susun draf PO untuk yang memenuhi syarat, sesuai prosedur dan guardrail.',
-            } : { jenis: 'approval', label: `📝 Buka Meja Approval (${jumlahDraf} draf PO)` },
+                    `. Panggil list_prioritas untuk toko ${s} dengan limit_naik=10, lalu panggil draft_purchase_order ` +
+                    'untuk setiap SKU di daftar ini saja. Lewati daftar turun dan SKU lain.',
+            },
         });
     }
 
@@ -183,7 +206,18 @@ export async function deteksiKrisis(store) {
             description: `${angka(r.jumlah_status.OVERSTOCK ?? 0)} SKU overstock dan ${angka(r.jumlah_status.DEADSTOCK ?? 0)} ` +
                 `deadstock menahan ${rupiahRingkas(r.modal_tertahan_idr)} dari nilai stok ${rupiahRingkas(r.nilai_stok_idr)}.`,
             metrics: { label: 'Modal tertahan', currentValue: `${persenTertahan}% nilai stok`, thresholdValue: `Maks. ${100 - AMBANG_STABILITAS_KAS}% nilai stok`, badgeColor: '#eab308' },
-            action: { jenis: 'npc', npcId: 'citra', label: '💼 Lihat laporan modal dan realokasi Citra' },
+            // Selesaikan = hentikan modal yang terus masuk ke stok yang tidak laku: Rexa menahan reorder SKU yang
+            // penjualannya turun (dan tidak komplementer), lalu menyarankan pengalihan modalnya.
+            action: {
+                jenis: 'selesaikan',
+                agent: true,
+                setujui: false,
+                label: '🛠️ Selesaikan: Rexa menahan reorder SKU yang turun dan mengalihkan modal',
+                store_id: s,
+                tugas: `Krisis modal dari Doni (Toko ${s}): ${persenTertahan}% nilai stok tertahan di SKU overstock dan ` +
+                    `deadstock. Panggil list_prioritas untuk toko ${s}, tahan reorder SKU di daftar turun yang memenuhi ` +
+                    'syarat (check_substitution dulu), lalu panggil suggest_reallocation. Jangan menyusun draf PO.',
+            },
         });
     }
 
@@ -339,6 +373,96 @@ export function tandaiDitangani(krisis, oleh) {
     ditangani.set(kunciDitangani(kunci, hasil.perTanggal, krisis.crisisId), { oleh, pukul });
     beriStatus(kunci, hasil);
     terapkan(kunci, hasil);
+}
+
+/**
+ * Minta App menjalankan Agent Rexa (bubble Rexa menampilkan langkahnya), lalu tunggu run untuk toko ini selesai.
+ * Mengembalikan run akhirnya (GET /agent-runs/{id}).
+ */
+async function jalankanAgentDanTunggu(store, tugas) {
+    EventBus.emit('jalankan-agent', { store: String(store), tugas });
+    const mulai = Date.now();
+    let runId = null;
+    while (Date.now() - mulai < 300_000) {
+        await jeda(2500);
+        const aktif = await api.agentAktif().catch(() => null);
+        if (aktif && Number(aktif.store) === Number(store)) {
+            runId = aktif.run_id;
+        } else if (runId) {
+            return api.statusAgent(runId);
+        } else if (Date.now() - mulai > 90_000) {
+            throw new Error('Agent Rexa tidak mulai bekerja dalam 90 detik (cek worker/AgentCore).');
+        }
+    }
+    throw new Error('Agent Rexa belum selesai setelah 5 menit.');
+}
+
+/**
+ * Tombol Selesaikan di panel Doni (klik manajer = persetujuannya). Rexa menyusun PO untuk SKU kritis (atau meninjau
+ * toko / menahan reorder), lalu PO yang lolos guardrail dikirim ke SAP. Kemajuannya tampil di panel lewat
+ * krisis.penyelesaian; setelah selesai, Doni memeriksa ulang data sehingga krisis yang sudah pulih hilang.
+ */
+export async function selesaikanKrisis(krisis) {
+    const kunci = krisis.store;
+    const s = krisis.action?.store_id ?? krisis.store;
+    const aksi = krisis.action || {};
+    const kunciK = kunciDitangani(kunci, krisis.perTanggal, krisis.crisisId);
+    if (penyelesaian.get(kunciK)?.berjalan) return;
+    const catat = (data) => {
+        penyelesaian.set(kunciK, { ...(penyelesaian.get(kunciK) || {}), ...data });
+        const hasil = hasilPerToko.get(kunci);
+        if (hasil) {
+            beriStatus(kunci, hasil);
+            terapkan(kunci, hasil);
+        }
+    };
+
+    ditangani.set(kunciK, { oleh: 'doni', pukul: pukulSekarang() });
+    catat({
+        berjalan: true, tahap: aksi.agent ? 'AGENT' : 'SAP', mulai: pukulSekarang(), disetujui: [], ditahan: [], gagal: [],
+        pesan: aksi.agent ? 'Rexa sedang mengerjakan krisis ini; langkahnya tampil di bubble Rexa.' : 'Mengirim PO ke SAP...',
+    });
+    try {
+        let langkah = [];
+        if (aksi.agent) {
+            const run = await jalankanAgentDanTunggu(s, aksi.tugas);
+            if (run.status !== 'SELESAI') throw new Error(run.pesan || 'Agent Rexa gagal menyelesaikan tugasnya.');
+            langkah = run.langkah || [];
+        }
+        const poRun = langkah.filter((l) => l.tool === 'draft_purchase_order' && l.output?.po_id).map((l) => l.output);
+        const holdRun = langkah.filter((l) => l.tool === 'hold_reorder' && l.output?.hold_id).map((l) => l.output);
+        const ditahan = poRun.filter((p) => p.status !== 'DRAFT')
+            .map((p) => `${p.deskripsi} (${(p.pelanggaran || []).join(', ') || p.status})`);
+        const disetujui = [];
+        const gagal = [];
+        if (aksi.setujui) {
+            catat({ tahap: 'SAP', pesan: 'Mengirim PO yang lolos guardrail ke SAP...' });
+            const sasaran = new Set([...poRun.map((p) => p.po_id)]);
+            const skuKrisis = new Set(krisis.sku_ids || []);
+            const draf = await api.daftarPo({ store: s, status: 'DRAFT' });
+            for (const po of draf.filter((p) => sasaran.has(p.po_id) || skuKrisis.has(p.inventory_id))) {
+                try {
+                    const r = await api.setujuiPo(po.po_id, `Selesaikan krisis lewat Doni: ${krisis.title}`);
+                    disetujui.push({ deskripsi: r.deskripsi || po.deskripsi, sap: r.sap_po_number });
+                } catch (e) {
+                    gagal.push(`${po.deskripsi}: ${e.message}`);
+                }
+            }
+        }
+        const modal = holdRun.reduce((t, h) => t + (h.modal_diselamatkan_idr || 0), 0);
+        const bagian = [];
+        if (disetujui.length) bagian.push(`${disetujui.length} PO terkirim ke SAP, barangnya dalam pengiriman`);
+        if (holdRun.length) bagian.push(`reorder ${holdRun.length} SKU yang turun ditahan, modal diselamatkan ${rupiahRingkas(modal)}`);
+        if (ditahan.length) bagian.push(`${ditahan.length} PO ditahan guardrail`);
+        if (gagal.length) bagian.push(`${gagal.length} PO gagal dikirim`);
+        const pesan = bagian.length ? `${bagian.join('; ')}.` : 'Rexa tidak menemukan tindakan yang bisa diambil untuk krisis ini.';
+        catat({ berjalan: false, tahap: disetujui.length || holdRun.length ? 'SELESAI' : 'GAGAL', pesan, disetujui, ditahan, gagal, selesai: pukulSekarang() });
+        if (disetujui.length || holdRun.length) terakhirSelesai.set(kunci, { judul: krisis.title, pesan, pukul: pukulSekarang(), disetujui });
+    } catch (e) {
+        catat({ berjalan: false, tahap: 'GAGAL', pesan: e.message });
+    } finally {
+        beritahuDataBerubah(); // Doni dan panel lain memeriksa ulang: krisis yang sudah pulih hilang dari daftar
+    }
 }
 
 /** Status Doni untuk tampilan: KRISIS (alarm), DITANGANI (pending resolution), atau NORMAL. */

@@ -20,6 +20,16 @@ def test_list_prioritas_ringkas(alat):
     assert a.langkah[0]["tool"] == "list_prioritas"
 
 
+def test_list_prioritas_bisa_lebih_panjang_untuk_krisis_doni(alat):
+    # Krisis dari Doni menyebut sampai 10 SKU; default tetap 2 supaya run biasa tidak berubah.
+    a, t = alat
+    t["list_prioritas"](store=1, limit_naik=50)
+    assert a.langkah[0]["input"] == {"store": 1, "limit_naik": 10}
+    assert a.prioritas["naik"] == {sku_id(10)}
+    t["list_prioritas"](store=1)
+    assert a.langkah[1]["input"] == {"store": 1}
+
+
 def test_alur_hold_realokasi_dan_po(alat):
     _, t = alat
     t["list_prioritas"](store=1)

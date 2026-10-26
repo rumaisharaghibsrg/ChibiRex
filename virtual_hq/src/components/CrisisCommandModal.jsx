@@ -6,15 +6,17 @@
  * ikut diperbarui setiap Doni memeriksa ulang (event 'doni-status'). Panel melayang, bukan modal: pemain tetap bisa
  * bergerak, dan panel tertutup saat pemain pergi, menekan ✕, atau Esc.
  *
- * Semua temuan lintas divisi (Rian, Pak Budi, Maya, Citra) tampil di satu panel dan bisa dipilih. Tombol resolusi
- * menjalankan aksi asli: reset circuit breaker oleh manajer, menugaskan Agent Rexa dengan daftar SKU kritis, membuka
- * Meja Approval untuk draf PO yang sudah disusun, atau membuka laporan staf. Krisis yang sudah ditugaskan berstatus
- * DITANGANI (pending resolution) sampai datanya pulih.
+ * Semua temuan lintas divisi (Rian, Pak Budi, Maya, Citra) tampil di satu panel dan bisa dipilih. Tugas Doni adalah
+ * menyelesaikan krisis: tombol Selesaikan (klik manajer = persetujuannya) membuat Rexa memesan semua SKU kritis lalu
+ * mengirim PO yang lolos guardrail ke SAP, menahan reorder SKU yang turun, atau mereset circuit breaker. Kemajuannya
+ * tampil di panel sampai krisisnya hilang dari data.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { EventBus } from '../game/EventBus';
-import { defaultCrisisState, hasilTerakhir, pantauKrisis, tandaiDitangani } from '../game/StoreCrisisState';
+import {
+    defaultCrisisState, hasilTerakhir, pantauKrisis, penyelesaianTerakhir, selesaikanKrisis, tandaiDitangani,
+} from '../game/StoreCrisisState';
 import { useStore } from '../context/StoreContext';
 import { useTimeSimulation } from '../context/TimeSimulationContext';
 import { api, beritahuDataBerubah } from '../lib/api';
@@ -28,13 +30,33 @@ const PESAN_SELESAI = {
 
 function keteranganPenanganan(k) {
     if (k.agentBekerja) return 'Agent Rexa sedang bekerja untuk toko ini; langkahnya tampil di bubble Rexa.';
-    if (k.penanganan?.oleh === 'agent') {
-        return `Agent Rexa ditugaskan pukul ${k.penanganan.pukul}` +
-            (k.jumlahDraf ? `; ${k.jumlahDraf} draf PO sudah disusun dan menunggu persetujuan Anda.` : '; Doni memantau hasilnya.');
-    }
+    if (k.penanganan?.oleh === 'agent') return `Agent Rexa ditugaskan pukul ${k.penanganan.pukul}; Doni memantau hasilnya.`;
     if (k.penanganan?.oleh === 'manajer') return `Sudah ditinjau manajer pukul ${k.penanganan.pukul}.`;
-    if (k.menungguApproval) return `Semua SKU kritis sudah punya draf PO (${k.jumlahDraf}); tinggal persetujuan Anda di Meja Approval.`;
+    if (k.menungguApproval) return `Semua SKU kritis sudah punya draf PO (${k.jumlahDraf}); tekan Selesaikan untuk mengirimnya ke SAP.`;
     return '';
+}
+
+const IKON_TAHAP = { AGENT: '🤖', SAP: '📤', SELESAI: '✅', GAGAL: '⚠️' };
+
+// Kemajuan dan hasil tombol Selesaikan: tahap, ringkasan, nomor PO SAP, PO yang ditahan guardrail.
+function KotakPenyelesaian({ p }) {
+    return (
+        <div className={`crisis-penyelesaian tahap-${p.tahap.toLowerCase()}`}>
+            <div>
+                {IKON_TAHAP[p.tahap]} {p.berjalan ? 'SEDANG DISELESAIKAN' : p.tahap === 'GAGAL' ? 'BELUM SELESAI' : 'DISELESAIKAN'}
+                {p.selesai ? ` pukul ${p.selesai}` : ` (mulai ${p.mulai})`}: {p.pesan}
+            </div>
+            {p.disetujui?.length > 0 && (
+                <div className="crisis-penyelesaian-rinci">
+                    PO SAP: {p.disetujui.map((d) => `${d.deskripsi} (${d.sap})`).join(', ')}
+                </div>
+            )}
+            {p.ditahan?.length > 0 && (
+                <div className="crisis-penyelesaian-rinci">Ditahan guardrail: {p.ditahan.join(', ')}</div>
+            )}
+            {p.gagal?.length > 0 && <div className="crisis-penyelesaian-rinci">Gagal: {p.gagal.join('; ')}</div>}
+        </div>
+    );
 }
 
 export function CrisisCommandModal({ isOpen, onClose }) {
@@ -46,7 +68,8 @@ export function CrisisCommandModal({ isOpen, onClose }) {
     const kunci = modeJaringan ? 'jaringan' : storeId;
     const labelData = modeJaringan ? 'semua toko' : `Toko ${storeId}`;
     const [daftarKrisis, setDaftarKrisis] = useState([]);
-    const [pilihan, setPilihan] = useState(0);
+    // Krisis yang dilihat, menurut crisisId (bukan urutan): urutannya berubah saat krisis ditangani.
+    const [pilihanId, setPilihanId] = useState(null);
     const [ringkas, setRingkas] = useState('');
     const [tanggalData, setTanggalData] = useState(null);
     const [memeriksa, setMemeriksa] = useState(false);
@@ -61,7 +84,6 @@ export function CrisisCommandModal({ isOpen, onClose }) {
         setDaftarKrisis([...hasil.krisis]); // salinan: statusnya diperbarui di tempat oleh pemantauan Doni
         setRingkas(hasil.ringkas);
         setTanggalData(hasil.tanggal);
-        setPilihan((i) => (i < hasil.krisis.length ? i : 0));
         return true;
     }, [kunci]);
 
@@ -79,7 +101,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
         if (!isOpen) return;
         setPesanSelesai(null);
         setGalat(null);
-        setPilihan(0);
+        setPilihanId(null);
         if (!segarkan()) periksa();
     }, [isOpen, kunci, segarkan, periksa]);
 
@@ -106,7 +128,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, handleClose]);
 
-    const crisisData = daftarKrisis[pilihan] || defaultCrisisState;
+    const crisisData = daftarKrisis.find((k) => k.crisisId === pilihanId) || daftarKrisis[0] || defaultCrisisState;
 
     // Eksekusi resolusi: aksi asli sesuai jenis krisis
     const handleExecuteResolution = async () => {
@@ -128,15 +150,18 @@ export function CrisisCommandModal({ isOpen, onClose }) {
             return;
         }
 
+        if (aksi.jenis === 'selesaikan') {
+            // Panel tetap terbuka dan tetap di krisis ini: kemajuan (Rexa bekerja, PO dikirim ke SAP, hasil) tampil di
+            // kotak penyelesaian.
+            setPilihanId(crisisData.crisisId);
+            selesaikanKrisis(crisisData);
+            return;
+        }
+
         if (aksi.jenis === 'agent') {
-            // Pending resolution: krisis ini tidak membunyikan alarm lagi selama agent bekerja dan hasilnya ditinjau.
+            // Mode Semua Toko: Agent Jaringan menetapkan toko prioritas dan transfer stok (hanya membaca).
             tandaiDitangani(crisisData, 'agent');
-            EventBus.emit('jalankan-agent', modeJaringan ? { jaringan: true } : {
-                store: String(aksi.store_id || storeId),
-                crisis_type: aksi.crisis_type || crisisData.crisisId,
-                sku_ids: aksi.sku_ids || [],
-                tugas: aksi.tugas,
-            });
+            EventBus.emit('jalankan-agent', { jaringan: true });
             setPesanSelesai(PESAN_SELESAI.agent);
             setTimeout(handleClose, 900); // beri waktu membaca konfirmasi; bubble Rexa terbuka
             return;
@@ -179,9 +204,13 @@ export function CrisisCommandModal({ isOpen, onClose }) {
     const adaKrisis = daftarKrisis.length > 0;
     const darurat = daftarKrisis.some((k) => k.status === 'BARU');
     const ditanganiIni = crisisData.status === 'DITANGANI';
-    const labelAksi = crisisData.action?.jenis === 'agent' && crisisData.penanganan?.oleh === 'agent'
-        ? '🤖 Tugaskan Agent Rexa lagi'
+    const proses = crisisData.penyelesaian;
+    const sedangDiselesaikan = Boolean(proses?.berjalan);
+    // Setelah penyelesaian sebagian (misalnya ada PO yang ditahan guardrail), tombolnya menyelesaikan sisanya.
+    const labelAksi = crisisData.action?.jenis === 'selesaikan' && proses && !proses.berjalan && crisisData.sku_list?.length
+        ? `🛠️ Selesaikan sisa ${crisisData.sku_list.length} SKU: Rexa memesan, PO langsung ke SAP`
         : crisisData.action?.label || '⚡ Tindak lanjuti';
+    const terakhir = penyelesaianTerakhir(kunci);
 
     return (
         <div className="crisis-panel-bebas">
@@ -233,10 +262,12 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                                     <>
                                         "Manager, data {labelData} per {tanggalData} menunjukkan{' '}
                                         <strong>{daftarKrisis.filter((k) => k.status === 'BARU').length} kondisi DARURAT</strong>
-                                        {daftarKrisis.length > 1 ? ' dari beberapa divisi' : ''}. Ini angka dari dashboard, bukan perkiraan."
+                                        {daftarKrisis.length > 1 ? ' dari beberapa divisi' : ''}. Tekan Selesaikan dan saya urus sampai tuntas."
                                     </>
                                 ) : adaKrisis ? (
-                                    <>"Semua temuan di {labelData} per {tanggalData} sedang ditangani, Manager. Saya pantau sampai datanya pulih."</>
+                                    <>"Semua temuan di {labelData} per {tanggalData} sedang saya selesaikan, Manager. Saya pantau sampai datanya pulih."</>
+                                ) : terakhir ? (
+                                    <>"Krisis sudah selesai, Manager. Tidak ada krisis lagi di {labelData} per {tanggalData}. {ringkas}"</>
                                 ) : (
                                     <>"Tidak ada krisis di {labelData} per {tanggalData}, Manager. {ringkas}"</>
                                 )}
@@ -247,11 +278,11 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                     {/* Daftar temuan lintas divisi: pilih untuk melihat rinciannya */}
                     {daftarKrisis.length > 1 && (
                         <div className="crisis-daftar-temuan">
-                            {daftarKrisis.map((k, i) => (
+                            {daftarKrisis.map((k) => (
                                 <button
                                     key={k.crisisId}
-                                    onClick={() => { setPilihan(i); setPesanSelesai(null); }}
-                                    className={`crisis-temuan ${i === pilihan ? 'aktif' : ''} ${k.status === 'BARU' ? 'baru' : 'ditangani'}`}
+                                    onClick={() => { setPilihanId(k.crisisId); setPesanSelesai(null); }}
+                                    className={`crisis-temuan ${k.crisisId === crisisData.crisisId ? 'aktif' : ''} ${k.status === 'BARU' ? 'baru' : 'ditangani'}`}
                                 >
                                     <span>{k.status === 'BARU' ? '🚨' : '⏳'}</span>
                                     <span>{k.sourceName.split(' (')[0]}</span>
@@ -273,7 +304,9 @@ export function CrisisCommandModal({ isOpen, onClose }) {
 
                             <h3 className="crisis-problem-headline">{crisisData.headline}</h3>
 
-                            {ditanganiIni && (
+                            {proses ? (
+                                <KotakPenyelesaian p={proses} />
+                            ) : ditanganiIni && (
                                 <div className="crisis-ditangani">⏳ SEDANG DITANGANI · {keteranganPenanganan(crisisData)}</div>
                             )}
 
@@ -324,6 +357,11 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                             )}
                         </div>
                     )}
+
+                    {/* Krisis sudah hilang dari data: tunjukkan apa yang diselesaikan terakhir kali */}
+                    {!adaKrisis && terakhir && (
+                        <KotakPenyelesaian p={{ ...terakhir, tahap: 'SELESAI', selesai: terakhir.pukul }} />
+                    )}
                 </div>
 
                 {tanggalData && tanggalData !== formattedDate && !memeriksa && (
@@ -339,13 +377,14 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                         <>
                             <button
                                 onClick={handleExecuteResolution}
-                                disabled={isResolving || Boolean(pesanSelesai)}
+                                disabled={isResolving || sedangDiselesaikan || Boolean(pesanSelesai)}
                                 className="crisis-btn-resolve"
                             >
-                                {isResolving ? (
+                                {isResolving || sedangDiselesaikan ? (
                                     <>
                                         <span className="status-dot pulse-amber" />
-                                        <span>{crisisData.action?.jenis === 'reset-breaker' ? 'MERESET BREAKER...' : 'MENUGASKAN AGENT...'}</span>
+                                        <span>{crisisData.action?.jenis === 'reset-breaker' ? 'MERESET BREAKER...'
+                                            : proses?.tahap === 'SAP' ? 'MENGIRIM PO KE SAP...' : 'REXA SEDANG MENYELESAIKAN...'}</span>
                                     </>
                                 ) : pesanSelesai ? (
                                     <span>{crisisData.action?.jenis === 'reset-breaker' ? '✔️ CIRCUIT BREAKER DIRESET' : '✔️ AGENT REXA DITUGASKAN'}</span>
@@ -353,9 +392,15 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                                     <span>{labelAksi}</span>
                                 )}
                             </button>
+                            {crisisData.action?.setujui && !sedangDiselesaikan && (
+                                <p className="crisis-persetujuan">
+                                    Klik ini adalah persetujuan Anda: PO untuk SKU kritis yang lolos guardrail langsung dikirim ke
+                                    SAP. Batas nominal harian, filter 3σ, dan circuit breaker tetap berlaku.
+                                </p>
+                            )}
 
                             <div className="crisis-btn-row">
-                                {crisisData.action?.jenis === 'agent' && crisisData.jumlahDraf > 0 && (
+                                {crisisData.jumlahDraf > 0 && !sedangDiselesaikan && (
                                     <button
                                         onClick={() => { handleClose(); EventBus.emit('open-approval-modal'); }}
                                         className="crisis-btn-secondary"

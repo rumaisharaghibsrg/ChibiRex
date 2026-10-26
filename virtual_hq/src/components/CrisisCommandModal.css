@@ -385,6 +385,44 @@
 .crisis-sku-table td.ada { color: #34d399; }
 .crisis-sku-table td.belum { color: #f87171; }
 
+/* Kemajuan dan hasil tombol Selesaikan */
+.crisis-penyelesaian {
+    margin: 0 0 10px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #fcd34d;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.crisis-penyelesaian.tahap-selesai {
+    color: #6ee7b7;
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+.crisis-penyelesaian.tahap-gagal {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.crisis-penyelesaian-rinci {
+    margin-top: 4px;
+    color: #cbd5e1;
+    font-family: monospace;
+    font-size: 10.5px;
+}
+
+.crisis-persetujuan {
+    margin: -2px 2px 0;
+    font-size: 10px;
+    line-height: 1.4;
+    color: #94a3b8;
+}
+
 /* Semua temuan sudah ditangani: tombol aksi tidak lagi berdenyut merah. */
 .crisis-modal-card.normal-mode .crisis-btn-resolve {
     background: linear-gradient(135deg, #0369a1 0%, #075985 100%);

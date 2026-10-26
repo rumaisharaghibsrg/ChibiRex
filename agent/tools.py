@@ -83,20 +83,25 @@ class AlatAgent:
         alat = self
 
         @tool
-        def list_prioritas(store: int) -> dict:
+        def list_prioritas(store: int, limit_naik: int = 2) -> dict:
             """Daftar SKU yang perlu reorder di sebuah toko, sudah dikelompokkan oleh sistem. Panggil ini pertama.
             'naik' = penjualan naik (kandidat draf PO). 'turun' = penjualan turun (kandidat Hold Reorder).
 
             Args:
                 store: Nomor toko, misalnya 74.
+                limit_naik: Jumlah SKU 'naik' (1-10, default 2). Naikkan hanya kalau tugas menyebut daftar SKU
+                    yang harus ditangani, supaya semua SKU itu masuk daftar.
             """
+            limit = max(1, min(int(limit_naik), 10))
+
             def f():
-                r = alat.client.get(f"/stores/{store}/prioritas")
+                r = alat.client.get(f"/stores/{store}/prioritas", params={"limit_naik": limit} if limit != 2 else None)
                 hasil = alat._respons(r, lambda d: {k: [_pilih(s, FIELD_PRIORITAS) for s in d[k]] for k in ("naik", "turun")})
                 if "naik" in hasil:
                     alat.prioritas = {k: {s["inventory_id"] for s in hasil[k]} for k in ("naik", "turun")}
                 return hasil
-            return alat._catat("list_prioritas", {"store": store}, f)
+            masukan = {"store": store} if limit == 2 else {"store": store, "limit_naik": limit}
+            return alat._catat("list_prioritas", masukan, f)
 
         @tool
         def get_sku_metrics(inventory_id: str) -> dict:
