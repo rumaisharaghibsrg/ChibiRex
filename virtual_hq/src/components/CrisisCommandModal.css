@@ -297,6 +297,102 @@
     margin: 0;
 }
 
+/* ── Status "sedang ditangani" (pending resolution) dan daftar temuan lintas divisi ── */
+.crisis-badge-ditangani {
+    background: #d97706;
+    color: #ffffff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.crisis-ditangani {
+    margin: 0 0 10px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.crisis-daftar-temuan {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 12px;
+}
+
+.crisis-temuan {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: monospace;
+    cursor: pointer;
+    background: rgba(30, 41, 59, 0.8);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.crisis-temuan.baru { border-color: rgba(239, 68, 68, 0.6); color: #fca5a5; }
+.crisis-temuan.ditangani { border-color: rgba(245, 158, 11, 0.5); color: #fcd34d; }
+.crisis-temuan.aktif { background: rgba(148, 163, 184, 0.22); color: #ffffff; }
+
+.crisis-sku-wrapper {
+    margin-top: 10px;
+    max-height: 170px;
+    overflow: auto; /* di HP tabel digeser ke samping, panel tidak melebar */
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px;
+}
+
+.crisis-sku-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    font-family: monospace;
+    color: #e2e8f0;
+}
+
+.crisis-sku-table th {
+    position: sticky;
+    top: 0;
+    background: #1e293b;
+    color: #94a3b8;
+    font-weight: 700;
+    text-align: left;
+    padding: 5px 7px;
+}
+
+.crisis-sku-table td {
+    padding: 4px 7px;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    white-space: nowrap;
+}
+
+.crisis-sku-table td:first-child {
+    max-width: 170px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.crisis-sku-table td.ada { color: #34d399; }
+.crisis-sku-table td.belum { color: #f87171; }
+
+/* Semua temuan sudah ditangani: tombol aksi tidak lagi berdenyut merah. */
+.crisis-modal-card.normal-mode .crisis-btn-resolve {
+    background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+    border-color: #38bdf8;
+    box-shadow: none;
+    animation: none;
+}
+
 /* ── Actions Footer ──────────────────────────────────────────────────────── */
 .crisis-actions-footer {
     padding: 16px 22px;

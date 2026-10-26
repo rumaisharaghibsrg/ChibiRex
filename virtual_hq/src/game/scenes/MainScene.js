@@ -466,7 +466,6 @@ export class MainScene extends Phaser.Scene {
         this._lastCoffeeRoutineCheck = 0;
         this._doors              = [];
         this.autoCrisisEnabled   = true;
-        this.autoCrisisTimer     = null;
         this._activeCheatToast   = null;
         this._cheatHoldingUR     = false;
         this._cheatUsedNumber    = false;
@@ -902,24 +901,7 @@ export class MainScene extends Phaser.Scene {
         EventBus.on('timeline-shift', handleTimelineShift);
         window.addEventListener('timeline-shift', handleTimelineShift);
 
-        // ── Sistem Auto-Crisis Organik 30 Menit (Looping) ─────────────────────
-        const AUTO_CRISIS_INTERVAL = 30 * 60 * 1000; // 30 Menit (1.800.000 ms)
-        this.autoCrisisTimer = this.time.addEvent({
-            delay: AUTO_CRISIS_INTERVAL,
-            loop: true,
-            callback: () => {
-                if (!this.autoCrisisEnabled) return;
-                const isCrisis = Boolean(window.StoreCrisisState?.isCrisis);
-                if (isCrisis) return;
-
-                // Doni memeriksa data toko; alarm hanya berbunyi kalau datanya memang menunjukkan krisis.
-                if (typeof window !== 'undefined' && window.triggerStoreCrisis) {
-                    window.triggerStoreCrisis()
-                        .then((krisis) => console.log(`[Auto-Crisis] ⏰ Pemeriksaan 30 menit: ${krisis ? krisis.title : 'tidak ada krisis'}`))
-                        .catch((err) => console.warn('[Auto-Crisis] Data toko tidak bisa dibaca:', err));
-                }
-            }
-        });
+        // Pemantauan krisis oleh Doni berjalan di App (pantauKrisis): saat dibuka, saat data berubah, dan tiap menit.
 
         // ── Inisialisasi Adaptive Responsive Camera & Event Listener Resize ───
         this.scale.on('resize', (gameSize) => {
@@ -3780,7 +3762,7 @@ export class MainScene extends Phaser.Scene {
 
     /**
      * Memeriksa kombinasi tombol rahasia setiap frame di update():
-     * - U + R: Toggle auto-crisis 30-menit (ON/OFF)
+     * - U + R: Toggle alarm otomatis Doni (ON/OFF)
      * - U + R + 1: Periksa krisis Maya (SKU berisiko tinggi kehabisan stok)
      * - U + R + 2: Periksa krisis Citra (modal tertahan)
      * - U + R + 3: Trigger Krisis Rian (Circuit Breaker Tripped)
@@ -3833,16 +3815,18 @@ export class MainScene extends Phaser.Scene {
     }
 
     /**
-     * Toggle status aktif fitur Auto-Crisis 30-Menit (Cheat: U + R)
+     * Toggle alarm otomatis Doni (Cheat: U + R). Saat OFF, Doni tetap memeriksa data untuk panelnya, tetapi tidak
+     * membunyikan alarm atau mengubah tombol Doni Hub (dipakai saat presentasi bagian lain).
      */
     _toggleAutoCrisisCheat() {
         this.autoCrisisEnabled = !this.autoCrisisEnabled;
+        window.DONI_ALARM_OTOMATIS = this.autoCrisisEnabled;
         const stateStr = this.autoCrisisEnabled ? 'ON' : 'OFF';
-        console.log(`%c[CHEAT CODE] ⚙️ Auto-Crisis 30-Menit: ${stateStr}`, 'color: #38bdf8; font-weight: bold; font-size: 12px;');
+        console.log(`%c[CHEAT CODE] ⚙️ Alarm otomatis Doni: ${stateStr}`, 'color: #38bdf8; font-weight: bold; font-size: 12px;');
 
         const badgeColor = this.autoCrisisEnabled ? 0x10b981 : 0xef4444;
         const icon = this.autoCrisisEnabled ? '🟢' : '🔴';
-        this._showCheatNotification(`${icon} CHEAT: Auto-Crisis 30-Menit [${stateStr}]`, badgeColor);
+        this._showCheatNotification(`${icon} CHEAT: Alarm otomatis Doni [${stateStr}]`, badgeColor);
     }
 
     /**

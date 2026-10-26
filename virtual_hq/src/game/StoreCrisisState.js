@@ -1,14 +1,20 @@
 /**
  * StoreCrisisState.js — Krisis toko untuk Crisis Command Hub Doni (Koordinator)
  *
- * Doni tidak mengarang krisis: deteksiKrisis() membaca API Rexa untuk toko yang diawasi dan hanya melaporkan kondisi
- * yang benar-benar ada, diurutkan dari yang paling parah:
+ * Doni adalah pengawas proaktif (watchdog): App memanggil pantauKrisis() saat game dibuka, saat toko/mode/tanggal
+ * berganti, setiap data berubah (agent selesai, PO diputuskan, breaker direset), dan tiap menit. Doni tidak mengarang
+ * krisis: deteksiKrisis() membaca API Rexa untuk toko yang diawasi dan hanya melaporkan kondisi yang benar-benar ada,
+ * diurutkan dari yang paling parah:
  *  - Rian: circuit breaker terbuka (semua PO baru ditahan).
  *  - Pak Budi: Health Score di bawah 65 (zona merah dashboard).
- *  - Maya: SKU yang penjualannya naik dengan risiko stok habis TINGGI.
+ *  - Maya: SKU yang penjualannya naik dengan risiko stok habis TINGGI. Dibaca dari endpoint yang sama dengan laporan
+ *    Maya (/stores/{store}/maya/status), supaya angka Doni dan Maya tidak pernah berbeda sumber.
  *  - Citra: lebih dari 40% nilai stok tertahan di SKU overstock/deadstock (komponen stabilitas kas < 60).
- * Aksi resolusinya juga aksi asli: reset breaker oleh manajer, menugaskan Agent Rexa, atau membuka laporan Citra.
- * Hasil pemeriksaan terakhir disimpan per toko (hasilTerakhir) supaya panel Doni bisa dibuka lagi tanpa memeriksa ulang.
+ *
+ * Setiap krisis berstatus BARU (alarm: tombol Doni Hub merah, Doni mendatangi pemain, klaxon) atau DITANGANI (pending
+ * resolution: agent sudah ditugaskan atau manajer sudah meninjaunya untuk tanggal data ini, atau semua SKU kritis sudah
+ * punya draf PO yang tinggal disetujui). Hasil pemeriksaan disimpan per toko (hasilTerakhir) dan menjadi satu sumber
+ * untuk tombol header, sprite Doni, dan panel Crisis Hub; setiap perubahan diumumkan lewat event 'doni-status'.
  */
 
 import { EventBus } from './EventBus';
@@ -27,21 +33,63 @@ const KUNCI_KE_NPC = {
 const AMBANG_HEALTH = 65;
 const AMBANG_STABILITAS_KAS = 60;
 
-const hasilPerToko = new Map(); // toko (atau 'jaringan') -> {krisis, ringkas, tanggal}
+const hasilPerToko = new Map(); // toko (atau 'jaringan') -> {krisis, ringkas, tanggal, perTanggal}
+// Krisis yang sudah ditangani untuk tanggal data tertentu: `${kunci}|${perTanggal}|${crisisId}` -> {oleh, pukul}.
+// Krisis yang sama tidak membunyikan alarm lagi sampai tanggal simulasi berganti.
+const ditangani = new Map();
+const sedangMemeriksa = new Map(); // kunci -> Promise pemeriksaan yang sedang berjalan
+// Toko (atau 'jaringan') yang sedang diawasi, diberikan App lewat pantauKrisis(kunci). Tidak dibaca dari
+// window.CURRENT_STORE karena itu diisi efek StoreProvider, yang berjalan setelah efek App.
+let kunciDiawasi = null;
+
+const kunciDitangani = (kunci, perTanggal, crisisId) => `${kunci}|${perTanggal}|${crisisId}`;
+const kunciAktif = () => kunciDiawasi
+    ?? (window.CURRENT_MODE === 'jaringan' ? 'jaringan' : window.CURRENT_STORE?.id || 74);
 
 /** Hasil pemeriksaan terakhir untuk toko ini (atau 'jaringan'), atau null kalau belum pernah diperiksa. */
 export const hasilTerakhir = (kunci) => hasilPerToko.get(kunci) || null;
 
 /**
- * Memeriksa data toko. Mengembalikan {krisis: [...], ringkas, tanggal}; krisis kosong berarti tidak ada kondisi darurat.
- * Melempar ApiError kalau API tidak terjangkau.
+ * Status krisis per tanggal data: BARU, kecuali sudah ditugaskan/ditinjau dari panel Doni, agent sedang bekerja untuk
+ * toko ini (dari mana pun dijalankan), atau semua SKU-nya tinggal menunggu persetujuan manajer.
+ */
+function beriStatus(kunci, hasil) {
+    for (const k of hasil.krisis) {
+        const catatan = ditangani.get(kunciDitangani(kunci, hasil.perTanggal, k.crisisId));
+        k.penanganan = catatan || null;
+        k.agentBekerja = Boolean(hasil.agentBekerja) && k.action?.jenis === 'agent';
+        k.status = catatan || k.agentBekerja || k.menungguApproval ? 'DITANGANI' : 'BARU';
+    }
+    // Yang butuh tindakan tampil lebih dulu; urutan keparahan dipertahankan di dalam kelompoknya.
+    hasil.krisis.sort((a, b) => (a.status === 'BARU' ? 0 : 1) - (b.status === 'BARU' ? 0 : 1));
+    return hasil;
+}
+
+const statusRingkas = (hasil) => (hasil.krisis.some((k) => k.status === 'BARU') ? 'KRISIS'
+    : hasil.krisis.length ? 'DITANGANI' : 'NORMAL');
+
+/** SKU kritis dari laporan Maya; cadangan ke list_prioritas kalau API lama belum punya /maya/status. */
+async function skuKritisMaya(s) {
+    try {
+        return (await api.mayaStatus(s)).sku_kritis || [];
+    } catch {
+        const p = await api.prioritas(s, { limit_naik: 10, limit_turun: 0 });
+        return p.naik.filter((x) => x.level_risiko === 'TINGGI').sort((a, b) => (b.skor_risiko ?? 0) - (a.skor_risiko ?? 0));
+    }
+}
+
+/**
+ * Memeriksa data toko. Mengembalikan {krisis: [...], ringkas, tanggal, perTanggal}; krisis kosong berarti tidak ada
+ * kondisi darurat. Melempar ApiError kalau API tidak terjangkau.
  */
 export async function deteksiKrisis(store) {
     const s = store?.id || 74;
-    const [r, g, p] = await Promise.all([
+    const [r, g, kritis, draf, agentAktif] = await Promise.all([
         api.ringkasan(s),
         api.statusGuardrail(s),
-        api.prioritas(s, { limit_naik: 10, limit_turun: 0 }),
+        skuKritisMaya(s),
+        api.daftarPo({ store: s, status: 'DRAFT' }).catch(() => []),
+        api.agentAktif().catch(() => null),
     ]);
     const krisis = [];
 
@@ -78,37 +126,47 @@ export async function deteksiKrisis(store) {
                 label: '🤖 Tugaskan Agent Rexa meninjau toko ini',
                 store_id: s,
                 crisis_type: 'CRISIS_STORE_HEALTH_CRASH',
-                tugas: `Audit menyeluruh Toko ${s}: Health Score rendah (${r.health_score}/100)`,
+                tugas: `Krisis dari Doni: Health Score Toko ${s} ${r.health_score}/100, di bawah batas zona merah ` +
+                    `${AMBANG_HEALTH}. Tinjau toko ${s} sesuai prosedur dan tangani penyebab terbesarnya.`,
             },
         });
     }
 
-    const kritis = p.naik.filter((x) => x.level_risiko === 'TINGGI').sort((a, b) => (b.skor_risiko ?? 0) - (a.skor_risiko ?? 0));
     if (kritis.length) {
-        const x = kritis[0];
-        const skuIds = kritis.map((item) => item.inventory_id);
+        // SKU yang sudah punya draf PO tinggal menunggu persetujuan manajer; agent hanya perlu menangani sisanya.
+        const adaDraf = new Set(draf.map((po) => po.inventory_id));
+        const daftar = kritis.map((x) => ({ ...x, adaDraf: adaDraf.has(x.inventory_id) }));
+        const tanpaDraf = daftar.filter((x) => !x.adaDraf);
+        const jumlahDraf = daftar.length - tanpaDraf.length;
+        const x = tanpaDraf[0] || daftar[0];
         krisis.push({
             crisisId: 'CRISIS_STOCKOUT_FAST_MOVING',
             sourceNPC: 'maya',
             sourceName: 'Maya (Auditor Stok & Gudang)',
             sourceLocation: 'Meja Hot-Desk & Ruang Arsip',
             title: `STOK KRITIS: ${(x.deskripsi || x.inventory_id).toUpperCase()}`,
-            headline: `${kritis.length} SKU yang penjualannya naik berisiko tinggi kehabisan stok`,
+            headline: `${daftar.length} SKU yang penjualannya naik berisiko tinggi kehabisan stok` +
+                (jumlahDraf ? `; ${jumlahDraf} sudah punya draf PO menunggu persetujuan` : ''),
             description: `${x.deskripsi}: stok ${angka(x.stok_akhir)} unit di bawah reorder point ${angka(x.reorder_point)}, ` +
                 `skor risiko ${x.skor_risiko}. Saran PO ${angka(x.saran_qty_po)} unit (${rupiah(x.nilai_saran_po_idr)}); ` +
                 'agent menyusun drafnya, manajer yang menyetujui.',
             metrics: { label: 'Stok tersisa', currentValue: `${angka(x.stok_akhir)} unit`, thresholdValue: `Reorder point ${angka(x.reorder_point)} unit`, badgeColor: '#f97316' },
             store_id: s,
-            sku_ids: skuIds,
-            sku_list: kritis,
-            action: {
+            sku_ids: daftar.map((item) => item.inventory_id),
+            sku_list: daftar,
+            jumlahDraf,
+            menungguApproval: tanpaDraf.length === 0, // semua sudah ada drafnya: tinggal keputusan manajer
+            action: tanpaDraf.length ? {
                 jenis: 'agent',
-                label: '🤖 Tugaskan Agent Rexa menyusun draf PO',
+                label: `🤖 Tugaskan Agent Rexa menyusun draf PO (${tanpaDraf.length} SKU)`,
                 store_id: s,
-                sku_ids: skuIds,
+                sku_ids: tanpaDraf.map((item) => item.inventory_id),
                 crisis_type: 'CRISIS_STOCKOUT_FAST_MOVING',
-                tugas: `Susun draf PO untuk ${kritis.length} SKU berisiko kehabisan stok di Toko ${s} (stok kritis terdeteksi oleh Maya)`,
-            },
+                tugas: `Krisis stok dari Doni (Toko ${s}): ${tanpaDraf.length} SKU yang penjualannya naik berisiko tinggi ` +
+                    `kehabisan stok dan belum punya draf PO: ` +
+                    tanpaDraf.map((item) => `${item.inventory_id} (${item.deskripsi})`).join(', ') +
+                    '. Periksa SKU-SKU ini dan susun draf PO untuk yang memenuhi syarat, sesuai prosedur dan guardrail.',
+            } : { jenis: 'approval', label: `📝 Buka Meja Approval (${jumlahDraf} draf PO)` },
         });
     }
 
@@ -131,11 +189,13 @@ export async function deteksiKrisis(store) {
 
     const ringkas = `Health Score ${r.health_score}/100, circuit breaker ${g.circuit_breaker_terbuka ? 'terbuka' : 'tertutup'}, ` +
         `${angka(r.jumlah_status.REORDER ?? 0)} SKU perlu reorder, modal tertahan ${persenTertahan}% nilai stok.`;
-    const hasil = {
-        krisis: krisis.map((k) => ({ ...k, isCrisis: true, severity: 'CRITICAL', store: s })),
+    const hasil = beriStatus(s, {
+        krisis: krisis.map((k) => ({ ...k, isCrisis: true, severity: 'CRITICAL', store: s, perTanggal: r.per_tanggal })),
         ringkas,
         tanggal: formatIndonesianDate(r.per_tanggal),
-    };
+        perTanggal: r.per_tanggal,
+        agentBekerja: Number(agentAktif?.store) === Number(s),
+    });
     hasilPerToko.set(s, hasil);
     return hasil;
 }
@@ -178,12 +238,13 @@ export async function deteksiKrisisJaringan() {
             action: { jenis: 'agent', label: '🤖 Jalankan Agent Jaringan' },
         });
     }
-    const hasil = {
-        krisis: krisis.map((k) => ({ ...k, isCrisis: true, severity: 'CRITICAL', store: 'jaringan' })),
+    const hasil = beriStatus('jaringan', {
+        krisis: krisis.map((k) => ({ ...k, isCrisis: true, severity: 'CRITICAL', store: 'jaringan', perTanggal: j.per_tanggal })),
         ringkas: `Health rata-rata ${angka(j.health_rata)}, ${merah.length} toko merah, circuit breaker ` +
             `${g.circuit_breaker_terbuka ? 'terbuka' : 'tertutup'}, ${angka(j.po_menunggu)} draf PO menunggu persetujuan.`,
         tanggal: formatIndonesianDate(j.per_tanggal),
-    };
+        perTanggal: j.per_tanggal,
+    });
     hasilPerToko.set('jaringan', hasil);
     return hasil;
 }
@@ -191,6 +252,7 @@ export async function deteksiKrisisJaringan() {
 // Inisialisasi Default State
 export const defaultCrisisState = {
     isCrisis: false,
+    statusDoni: 'NORMAL',
     crisisId: null,
     severity: 'NORMAL',
     sourceNPC: null,
@@ -203,6 +265,84 @@ export const defaultCrisisState = {
     action: null,
     timestamp: Date.now(),
 };
+
+/**
+ * Satu-satunya pintu yang mengubah window.StoreCrisisState. Mengumumkan 'doni-status' setiap kali, dan
+ * 'store-crisis-triggered' (klaxon) hanya kalau `bunyi`; Doni mendatangi pemain selama isCrisis.
+ */
+function terbitkan(state, { bunyi = false } = {}) {
+    const lama = window.StoreCrisisState || defaultCrisisState;
+    window.StoreCrisisState = { ...state, timestamp: Date.now() };
+    const baru = window.StoreCrisisState;
+    // Hanya lewat EventBus: MainScene mendengarkan EventBus dan window, jadi mengirim keduanya membunyikan klaxon dua kali.
+    if (baru.isCrisis && bunyi) {
+        EventBus.emit('store-crisis-triggered', baru);
+    } else if (!baru.isCrisis && lama.isCrisis) {
+        EventBus.emit('store-crisis-resolved', baru);
+    }
+    EventBus.emit('doni-status', baru);
+    return baru;
+}
+
+// Krisis yang sudah diumumkan dengan klaxon (`${kunci}|${perTanggal}|${crisisId}`): pemantauan tiap menit dan
+// pergantian krisis utama (misalnya setelah krisis Maya ditugaskan) tidak membunyikan alarm yang sama lagi.
+const diumumkan = new Set();
+
+/** Terapkan hasil pemeriksaan ke status global (header, sprite Doni, panel), hanya untuk toko yang sedang diawasi. */
+function terapkan(kunci, hasil) {
+    if (kunci !== kunciAktif()) return window.StoreCrisisState;
+    const status = statusRingkas(hasil);
+    const utama = hasil.krisis[0];
+    const alarm = hasil.krisis.filter((k) => k.status === 'BARU').map((k) => kunciDitangani(kunci, hasil.perTanggal, k.crisisId));
+    const bunyi = alarm.some((a) => !diumumkan.has(a));
+    alarm.forEach((a) => diumumkan.add(a));
+    return terbitkan(utama
+        ? { ...utama, isCrisis: status === 'KRISIS', statusDoni: status, kunci }
+        : { ...defaultCrisisState, statusDoni: 'NORMAL', kunci }, { bunyi });
+}
+
+/**
+ * Pemeriksaan Doni untuk toko (atau 'jaringan') yang diawasi, lalu terapkan ke status global. Tanpa argumen: toko yang
+ * terakhir diawasi. Pemeriksaan yang sama tidak dijalankan dua kali bersamaan. Mengembalikan hasilnya; melempar
+ * ApiError kalau gagal.
+ */
+export function pantauKrisis(kunci = kunciAktif()) {
+    if (kunci !== kunciDiawasi) {
+        // Ganti toko: status toko lama tidak boleh tertinggal di header selama toko baru diperiksa.
+        kunciDiawasi = kunci;
+        const tersimpan = hasilPerToko.get(kunci);
+        if (tersimpan) terapkan(kunci, tersimpan);
+        else terbitkan({ ...defaultCrisisState, kunci });
+    }
+    if (!sedangMemeriksa.has(kunci)) {
+        const periksa = (kunci === 'jaringan' ? deteksiKrisisJaringan() : deteksiKrisis({ id: kunci }))
+            .then((hasil) => {
+                // Cheat U+R mematikan alarm otomatis: hasil tetap tersimpan untuk panel, status global tidak diubah.
+                if (window.DONI_ALARM_OTOMATIS !== false) terapkan(kunci, hasil);
+                return hasil;
+            })
+            .finally(() => sedangMemeriksa.delete(kunci));
+        sedangMemeriksa.set(kunci, periksa);
+    }
+    return sedangMemeriksa.get(kunci);
+}
+
+/**
+ * Pending resolution: manajer menugaskan agent (oleh 'agent') atau meninjau laporan staf (oleh 'manajer') untuk krisis
+ * ini. Krisis yang sama tidak membunyikan alarm lagi sampai tanggal simulasi berganti.
+ */
+export function tandaiDitangani(krisis, oleh) {
+    const kunci = krisis.kunci ?? krisis.store ?? kunciAktif();
+    const hasil = hasilPerToko.get(kunci);
+    if (!hasil) return;
+    const pukul = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    ditangani.set(kunciDitangani(kunci, hasil.perTanggal, krisis.crisisId), { oleh, pukul });
+    beriStatus(kunci, hasil);
+    terapkan(kunci, hasil);
+}
+
+/** Status Doni untuk tampilan: KRISIS (alarm), DITANGANI (pending resolution), atau NORMAL. */
+export const statusDoni = () => window.StoreCrisisState?.statusDoni || 'NORMAL';
 
 /**
  * Pemicu SFX Klaxon / Alarm Sintetis Web Audio API (Zero External Asset)
@@ -256,32 +396,22 @@ if (typeof window !== 'undefined') {
     if (!window.StoreCrisisState) {
         window.StoreCrisisState = { ...defaultCrisisState };
     }
+    if (window.DONI_ALARM_OTOMATIS === undefined) window.DONI_ALARM_OTOMATIS = true;
 
     /**
-     * Memeriksa data toko yang diawasi lalu mengaktifkan krisis teratas (atau krisis NPC tertentu untuk kunci cheat).
-     * Mengembalikan krisis yang diaktifkan, atau null kalau datanya tidak menunjukkan krisis. Klaxon dibunyikan
-     * MainScene saat menerima event store-crisis-triggered.
+     * Cheat U+R+1..4: periksa data lalu bunyikan alarm untuk krisis NPC tertentu (atau krisis teratas), walaupun sudah
+     * ditangani. Mengembalikan krisis yang diaktifkan, atau null kalau datanya tidak menunjukkan krisis itu.
      */
-    window.triggerStoreCrisis = async (kunci) => {
-        const npc = KUNCI_KE_NPC[kunci];
-        const { krisis } = window.CURRENT_MODE === 'jaringan' ? await deteksiKrisisJaringan() : await deteksiKrisis(window.CURRENT_STORE);
+    window.triggerStoreCrisis = async (kunciCheat) => {
+        const npc = KUNCI_KE_NPC[kunciCheat];
+        const kunci = kunciAktif();
+        const { krisis } = kunci === 'jaringan' ? await deteksiKrisisJaringan() : await deteksiKrisis({ id: kunci });
         const pilihan = npc ? krisis.find((k) => k.sourceNPC === npc) : krisis[0];
         if (!pilihan) return null;
-        window.StoreCrisisState = { ...pilihan, timestamp: Date.now() };
-        EventBus.emit('store-crisis-triggered', window.StoreCrisisState);
-        window.dispatchEvent(new CustomEvent('store-crisis-triggered', { detail: window.StoreCrisisState }));
-        return window.StoreCrisisState;
+        return terbitkan({ ...pilihan, isCrisis: true, statusDoni: 'KRISIS', kunci }, { bunyi: true });
     };
 
-    window.resolveStoreCrisis = () => {
-        window.StoreCrisisState = {
-            ...defaultCrisisState,
-            timestamp: Date.now(),
-        };
-        EventBus.emit('store-crisis-resolved', window.StoreCrisisState);
-        window.dispatchEvent(new CustomEvent('store-crisis-resolved', { detail: window.StoreCrisisState }));
-        return window.StoreCrisisState;
-    };
+    window.resolveStoreCrisis = () => terbitkan({ ...defaultCrisisState, kunci: kunciAktif() });
 
     window.playEmergencyKlaxonSFX = playEmergencyKlaxonSFX;
 }

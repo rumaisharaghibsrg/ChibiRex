@@ -11,8 +11,8 @@ masing-masing mewakili satu bagian dashboard. Semua angka dibaca dari API Rexa y
 | Pak Budi | Health Score, komponennya, dan peringkat di jaringan | `GET /stores/{s}/ringkasan`, `GET /jaringan/ringkasan` |
 | Citra | Modal tertahan, modal diselamatkan Hold Reorder, saran realokasi | `GET /stores/{s}/ringkasan`, `GET /stores/{s}/reallocation` |
 | Rian | Circuit breaker, batas PO harian, ambang lonjakan 3σ | `GET /guardrails/status?store=` |
-| Maya | Hitung fisik yang menunggu audit dan Data Confidence | `GET /stores/{s}/stok-fisik`, `GET /guardrails/status` |
-| Doni (Crisis Hub) | Krisis yang benar-benar ada di data: breaker terbuka, Health < 65, SKU naik berisiko tinggi stok habis, modal tertahan > 40% nilai stok. Aksinya asli: reset breaker, tugaskan Agent Rexa, buka laporan Citra | gabungan di atas, `POST /guardrails/circuit-breaker/reset` |
+| Maya | SKU kritis yang butuh draf PO, hitung fisik yang menunggu audit, dan Data Confidence | `GET /stores/{s}/maya/status` |
+| Doni (Crisis Hub) | Pengawas proaktif: memeriksa data saat game dibuka, saat toko/mode/tanggal berganti, setiap data berubah, dan tiap menit. Krisis yang benar-benar ada di data (breaker terbuka, Health < 65, SKU naik berisiko tinggi stok habis dari sumber yang sama dengan Maya, modal tertahan > 40% nilai stok) membuat tombol Doni Hub merah, Doni mendatangi pemain, dan klaxon berbunyi sekali. Semua temuan lintas divisi ada di satu panel dengan tabel SKU kritis. Aksinya asli: reset breaker, tugaskan Agent Rexa dengan daftar SKU yang belum punya draf PO, buka Meja Approval, atau buka laporan Citra. Setelah ditugaskan, krisis berstatus **DITANGANI** (tombol kuning) sampai datanya pulih | gabungan di atas, `GET /purchase-orders?status=DRAFT`, `GET /agent-runs/aktif`, `POST /guardrails/circuit-breaker/reset` |
 | Smart TV | Health toko dan rata-rata jaringan, toko dengan Health terendah, status SKU, worker agent, audit, breaker | ringkasan toko, `/jaringan/ringkasan`, guardrail, `/agent-runs/worker`, stok fisik |
 | Ganti cabang | 80 toko dengan Health Score per tanggal simulasi; filter Sehat/Perhatian/Kritis memakai ambang dashboard | `GET /jaringan/ringkasan` (cadangan: `GET /stores`) |
 | Tanggal di header | Jam simulasi bersama dashboard: +1/+7, -1/-7, kembali ke 31 Des 2016 | `GET /simulasi`, `POST /simulasi/maju`, `/mundur`, `/kembali` |
@@ -23,8 +23,9 @@ hasil pengganti.
 
 Panel laporan (bubble agent Rexa, Maya, Citra, Rian, Pak Budi, Doni, Smart TV) tidak membekukan pemain dan tidak
 tertutup sendiri. Panel tertutup saat pemain pergi (bergeser dari posisinya saat panel dibuka), menekan ✕, atau Esc;
-isinya tetap tersimpan per toko dan muncul lagi saat dibuka. Data baru hanya diambil lewat **Muat Ulang** (Doni:
-**Periksa Ulang**), dan agent hanya dijalankan lagi lewat **Jalankan Ulang**. Kalau tanggal simulasi sudah berubah sejak
+isinya tetap tersimpan per toko dan muncul lagi saat dibuka. Data baru hanya diambil lewat **Muat Ulang**, dan agent
+hanya dijalankan lagi lewat **Jalankan Ulang**. Pengecualiannya Doni: tugasnya memantau, jadi datanya diperiksa ulang
+sendiri (panel yang terbuka ikut diperbarui; **Periksa Ulang** memeriksa saat itu juga). Kalau tanggal simulasi sudah berubah sejak
 laporan dibaca, panel menampilkan peringatan. Meja Approval, Ganti Cabang, Simulasi Waktu, dan Panduan tetap modal.
 
 ## Mode Semua Toko
@@ -63,8 +64,8 @@ Laporan Agent Jaringan terakhir disimpan di localStorage dengan kunci yang sama 
 Online, game ini ikut `deploy\deploy_dashboard.ps1`: di-build dengan alamat API dan Copilot yang sama dengan dashboard lalu dipasang di `/hq/` pada domain Amplify dashboard (origin sama, jadi CORS tidak perlu diubah). Build memakai path relatif, jadi buka lewat `/hq/index.html` atau `/hq/` (dengan garis miring di akhir).
 
 Cheat demo (tahan U+R): U+R+1..4 meminta Doni memeriksa krisis Maya, Citra, Rian, atau Pak Budi di data toko yang
-diawasi; kalau datanya normal, cheat hanya memberi tahu. U+R saja menyalakan atau mematikan pemeriksaan otomatis tiap
-30 menit.
+diawasi dan membunyikan alarmnya walaupun sudah ditangani; kalau datanya normal, cheat hanya memberi tahu. U+R saja
+mematikan atau menyalakan alarm otomatis Doni (pemeriksaan tetap jalan untuk panelnya).
 
 ---
 

@@ -29,10 +29,13 @@ import MobileRexaCallButton from './components/MobileRexaCallButton';
 import MobileDrawerMenu from './components/MobileDrawerMenu';
 import { useStore } from './context/StoreContext';
 import { useTimeSimulation } from './context/TimeSimulationContext';
-import { api, beritahuDataBerubah, COPILOT_URL, urlDashboard, urlDashboardJaringan } from './lib/api';
+import { api, beritahuDataBerubah, COPILOT_URL, DATA_BERUBAH, urlDashboard, urlDashboardJaringan } from './lib/api';
 import { laporanNpc, laporanNpcJaringan } from './lib/npc';
 import { bacaLaporanJaringan, simpanLaporanJaringan } from './lib/laporanJaringan';
-import './game/StoreCrisisState';
+import { pantauKrisis } from './game/StoreCrisisState';
+
+// Doni memeriksa ulang data toko secara berkala, selain saat dibuka dan setiap data berubah.
+const INTERVAL_PANTAU_DONI_MS = 60_000;
 
 function App() {
     const phaserRef = useRef();
@@ -74,7 +77,10 @@ function App() {
 
     // ── Status Emergency Crisis Hub Modal (Koordinator Doni) ──────────────────
     const [isCrisisModalOpen, setIsCrisisModalOpen] = useState(false);
-    const [isCrisisActive, setIsCrisisActive]       = useState(false);
+    // KRISIS (alarm), DITANGANI (agent ditugaskan / menunggu persetujuan manajer), atau NORMAL; dari pantauKrisis().
+    const [statusDoni, setStatusDoni] = useState('NORMAL');
+    const isCrisisActive = statusDoni === 'KRISIS';
+    const krisisDitangani = statusDoni === 'DITANGANI';
 
     // ── Panel laporan staf (Maya, Citra, Rian, Pak Budi) ─────────────────────
     // Laporan disimpan per (staf, toko) setelah dibaca dan ditampilkan lagi setiap panel dibuka; data baru hanya
@@ -657,15 +663,11 @@ function App() {
         window.addEventListener('close-smartphone-chat', handleCloseChat);
 
         // Emergency Crisis Hub Listeners (Doni)
-        const onCrisisTriggered = () => setIsCrisisActive(true);
-        const onCrisisResolved = () => setIsCrisisActive(false);
+        const onDoniStatus = (s) => setStatusDoni(s?.statusDoni || 'NORMAL');
 
         EventBus.on('open-crisis-hub-modal', handleOpenCrisisModal);
         window.addEventListener('open-crisis-hub-modal', handleOpenCrisisModal);
-        EventBus.on('store-crisis-triggered', onCrisisTriggered);
-        window.addEventListener('store-crisis-triggered', onCrisisTriggered);
-        EventBus.on('store-crisis-resolved', onCrisisResolved);
-        window.addEventListener('store-crisis-resolved', onCrisisResolved);
+        EventBus.on('doni-status', onDoniStatus);
 
         // NPC Quick Dialog Listeners (Maya, Citra, Rian, Pak Budi)
         const handleOpenStockModal = () => handleOpenNpcModal({ npcId: 'maya' });
@@ -783,10 +785,7 @@ function App() {
 
             EventBus.removeListener('open-crisis-hub-modal', handleOpenCrisisModal);
             window.removeEventListener('open-crisis-hub-modal', handleOpenCrisisModal);
-            EventBus.removeListener('store-crisis-triggered', onCrisisTriggered);
-            window.removeEventListener('store-crisis-triggered', onCrisisTriggered);
-            EventBus.removeListener('store-crisis-resolved', onCrisisResolved);
-            window.removeEventListener('store-crisis-resolved', onCrisisResolved);
+            EventBus.removeListener('doni-status', onDoniStatus);
 
             EventBus.removeListener('open-stock-modal', handleOpenStockModal);
             EventBus.removeListener('open-reallocation-modal', handleOpenReallocModal);
@@ -809,6 +808,26 @@ function App() {
             window.removeEventListener('trigger-smart-action', triggerProximityAction);
         };
     }, [handleTriggerAgent, handleRexa, tutupPanel, handleOpenApprovalModal, handleTVProximity, handleOpenTVInspect, handleToggleChat, handleOpenChat, handleCloseChat, handleOpenCrisisModal, handleOpenRegionalModal, handleOpenTimeModal, handleOpenNpcModal, triggerProximityAction]);
+
+    // ── Doni sebagai pengawas proaktif: periksa data saat dibuka, saat toko/mode/tanggal berganti, setiap data berubah
+    // (agent selesai, PO diputuskan, breaker direset), dan tiap menit selama tab terlihat. Kalau ada krisis baru, tombol
+    // Doni Hub menjadi merah, Doni mendatangi pemain, dan klaxon berbunyi (lewat event dari pantauKrisis).
+    const kunciDoni = modeJaringan ? 'jaringan' : storeIdAktif;
+    useEffect(() => {
+        const pantau = () => {
+            if (document.hidden) return;
+            pantauKrisis(kunciDoni).catch((err) => console.warn('[Doni] Data toko tidak bisa dibaca:', err));
+        };
+        pantau();
+        const timer = setInterval(pantau, INTERVAL_PANTAU_DONI_MS);
+        EventBus.on(DATA_BERUBAH, pantau);
+        document.addEventListener('visibilitychange', pantau);
+        return () => {
+            clearInterval(timer);
+            EventBus.removeListener(DATA_BERUBAH, pantau);
+            document.removeEventListener('visibilitychange', pantau);
+        };
+    }, [kunciDoni, isoDate]);
 
     // Timer agent (polling dan hitung mundur pencairan pemain) hanya dibersihkan saat App dilepas. Kalau ikut cleanup
     // efek listener di atas, timer terhapus setiap handler berganti identitas (misalnya data toko dimuat ulang saat
@@ -1334,9 +1353,9 @@ function App() {
                             gap: '6px',
                             padding: '4px 12px',
                             borderRadius: '9999px',
-                            backgroundColor: isCrisisActive ? '#ef4444' : 'rgba(30, 41, 59, 0.85)',
-                            border: isCrisisActive ? '1px solid #f87171' : '1px solid rgba(148, 163, 184, 0.3)',
-                            color: isCrisisActive ? '#ffffff' : '#fb923c',
+                            backgroundColor: isCrisisActive ? '#ef4444' : krisisDitangani ? 'rgba(245, 158, 11, 0.2)' : 'rgba(30, 41, 59, 0.85)',
+                            border: isCrisisActive ? '1px solid #f87171' : krisisDitangani ? '1px solid #f59e0b' : '1px solid rgba(148, 163, 184, 0.3)',
+                            color: isCrisisActive ? '#ffffff' : krisisDitangani ? '#fbbf24' : '#fb923c',
                             fontSize: '11px',
                             fontFamily: 'monospace',
                             fontWeight: '700',
@@ -1345,9 +1364,11 @@ function App() {
                             animation: isCrisisActive ? 'pulse-glow 1s infinite alternate' : 'none',
                             boxShadow: isCrisisActive ? '0 0 16px rgba(239, 68, 68, 0.7)' : 'none',
                         }}
-                        title={isCrisisActive ? '🚨 KRISIS AKTIF! Klik untuk buka Crisis Command Hub' : 'Buka Crisis Command Hub Doni (Koordinator)'}
+                        title={isCrisisActive ? '🚨 KRISIS AKTIF! Klik untuk buka Crisis Command Hub'
+                            : krisisDitangani ? 'Krisis sedang ditangani (agent ditugaskan atau draf PO menunggu persetujuan)'
+                            : 'Buka Crisis Command Hub Doni (Koordinator)'}
                     >
-                        <span>{isCrisisActive ? '🚨 KRISIS AKTIF' : '🏃 Doni Hub'}</span>
+                        <span>{isCrisisActive ? '🚨 KRISIS AKTIF' : krisisDitangani ? '⏳ KRISIS DITANGANI' : '🏃 Doni Hub'}</span>
                     </button>
                 </div>
                 </>
@@ -1597,6 +1618,7 @@ function App() {
                 onOpenHelpModal={handleToggleHelpModal}
                 isChatOpen={isChatOpen}
                 isCrisisActive={isCrisisActive}
+                krisisDitangani={krisisDitangani}
                 agentRunning={agentRunning}
                 formattedDate={formattedDate}
                 daysOffset={daysOffset}

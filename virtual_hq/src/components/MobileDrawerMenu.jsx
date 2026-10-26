@@ -16,6 +16,7 @@ export default function MobileDrawerMenu({
     onOpenHelpModal,
     isChatOpen,
     isCrisisActive,
+    krisisDitangani = false,
     agentRunning,
     formattedDate,
     daysOffset,
@@ -188,7 +189,7 @@ export default function MobileDrawerMenu({
                         }}
                     >
                         <span style={{ fontSize: '18px' }}>🚨</span>
-                        <span>{isCrisisActive ? 'Crisis Hub (KRISIS AKTIF!)' : 'Doni Crisis Command Hub'}</span>
+                        <span>{isCrisisActive ? 'Crisis Hub (KRISIS AKTIF!)' : krisisDitangani ? 'Crisis Hub (krisis sedang ditangani)' : 'Doni Crisis Command Hub'}</span>
                     </button>
 
                     {/* Simulasi Waktu */}
