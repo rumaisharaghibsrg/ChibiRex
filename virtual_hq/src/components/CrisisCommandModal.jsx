@@ -36,7 +36,7 @@ function keteranganPenanganan(k) {
     return '';
 }
 
-const IKON_TAHAP = { AGENT: '🤖', SAP: '📤', SELESAI: '✅', GAGAL: '⚠️' };
+const IKON_TAHAP = { ANTRE: '⏳', AGENT: '🤖', SAP: '📤', SELESAI: '✅', GAGAL: '⚠️' };
 
 // Kemajuan dan hasil tombol Selesaikan: tahap, ringkasan, nomor PO SAP, PO yang ditahan guardrail.
 function KotakPenyelesaian({ p }) {
@@ -384,6 +384,7 @@ export function CrisisCommandModal({ isOpen, onClose }) {
                                     <>
                                         <span className="status-dot pulse-amber" />
                                         <span>{crisisData.action?.jenis === 'reset-breaker' ? 'MERESET BREAKER...'
+                                            : proses?.tahap === 'ANTRE' ? 'MENUNGGU GILIRAN REXA...'
                                             : proses?.tahap === 'SAP' ? 'MENGIRIM PO KE SAP...' : 'REXA SEDANG MENYELESAIKAN...'}</span>
                                     </>
                                 ) : pesanSelesai ? (

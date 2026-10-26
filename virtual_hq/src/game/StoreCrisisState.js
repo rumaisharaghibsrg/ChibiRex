@@ -375,26 +375,38 @@ export function tandaiDitangani(krisis, oleh) {
     terapkan(kunci, hasil);
 }
 
+// Rexa hanya mengerjakan satu tugas sekaligus (API menolak run kedua), jadi penyelesaian dari Doni bergiliran.
+let antreanRexa = Promise.resolve();
+
 /**
- * Minta App menjalankan Agent Rexa (bubble Rexa menampilkan langkahnya), lalu tunggu run untuk toko ini selesai.
- * Mengembalikan run akhirnya (GET /agent-runs/{id}).
+ * Minta App menjalankan Agent Rexa (bubble Rexa menampilkan langkahnya) untuk tugas ini, lalu tunggu run-nya selesai.
+ * Kalau Rexa masih mengerjakan tugas lain (krisis lain, dashboard, atau tombol Rexa), tunggu dulu: `onMulai` dipanggil
+ * saat tugas ini benar-benar mulai. Hanya run dengan tugas yang sama yang diikuti. Mengembalikan run akhirnya.
  */
-async function jalankanAgentDanTunggu(store, tugas) {
-    EventBus.emit('jalankan-agent', { store: String(store), tugas });
-    const mulai = Date.now();
-    let runId = null;
-    while (Date.now() - mulai < 300_000) {
-        await jeda(2500);
-        const aktif = await api.agentAktif().catch(() => null);
-        if (aktif && Number(aktif.store) === Number(store)) {
-            runId = aktif.run_id;
-        } else if (runId) {
-            return api.statusAgent(runId);
-        } else if (Date.now() - mulai > 90_000) {
-            throw new Error('Agent Rexa tidak mulai bekerja dalam 90 detik (cek worker/AgentCore).');
+function jalankanAgentDanTunggu(store, tugas, onMulai) {
+    const kerja = async () => {
+        const batas = Date.now() + 360_000;
+        let runId = null;
+        let terakhirKirim = 0;
+        while (Date.now() < batas) {
+            const aktif = await api.agentAktif().catch(() => null);
+            if (aktif && aktif.tugas === tugas) {
+                if (!runId) onMulai?.();
+                runId = aktif.run_id;
+            } else if (runId) {
+                return api.statusAgent(runId);
+            } else if (!aktif && Date.now() - terakhirKirim > 10_000) {
+                // Kirim (ulang) permintaan: App mengabaikannya kalau baru saja selesai memantau run sebelumnya.
+                EventBus.emit('jalankan-agent', { store: String(store), tugas });
+                terakhirKirim = Date.now();
+            }
+            await jeda(2500);
         }
-    }
-    throw new Error('Agent Rexa belum selesai setelah 5 menit.');
+        throw new Error('Agent Rexa belum selesai mengerjakan tugas ini setelah 6 menit.');
+    };
+    const giliran = antreanRexa.then(kerja);
+    antreanRexa = giliran.catch(() => {});
+    return giliran;
 }
 
 /**
@@ -419,13 +431,15 @@ export async function selesaikanKrisis(krisis) {
 
     ditangani.set(kunciK, { oleh: 'doni', pukul: pukulSekarang() });
     catat({
-        berjalan: true, tahap: aksi.agent ? 'AGENT' : 'SAP', mulai: pukulSekarang(), disetujui: [], ditahan: [], gagal: [],
-        pesan: aksi.agent ? 'Rexa sedang mengerjakan krisis ini; langkahnya tampil di bubble Rexa.' : 'Mengirim PO ke SAP...',
+        berjalan: true, tahap: aksi.agent ? 'ANTRE' : 'SAP', mulai: pukulSekarang(), disetujui: [], ditahan: [], gagal: [],
+        pesan: aksi.agent ? 'Menunggu giliran Rexa (Rexa mengerjakan satu tugas sekaligus)...' : 'Mengirim PO ke SAP...',
     });
     try {
         let langkah = [];
         if (aksi.agent) {
-            const run = await jalankanAgentDanTunggu(s, aksi.tugas);
+            const run = await jalankanAgentDanTunggu(s, aksi.tugas, () => catat({
+                tahap: 'AGENT', pesan: 'Rexa sedang mengerjakan krisis ini; langkahnya tampil di bubble Rexa.',
+            }));
             if (run.status !== 'SELESAI') throw new Error(run.pesan || 'Agent Rexa gagal menyelesaikan tugasnya.');
             langkah = run.langkah || [];
         }
@@ -455,8 +469,11 @@ export async function selesaikanKrisis(krisis) {
         if (holdRun.length) bagian.push(`reorder ${holdRun.length} SKU yang turun ditahan, modal diselamatkan ${rupiahRingkas(modal)}`);
         if (ditahan.length) bagian.push(`${ditahan.length} PO ditahan guardrail`);
         if (gagal.length) bagian.push(`${gagal.length} PO gagal dikirim`);
-        const pesan = bagian.length ? `${bagian.join('; ')}.` : 'Rexa tidak menemukan tindakan yang bisa diambil untuk krisis ini.';
-        catat({ berjalan: false, tahap: disetujui.length || holdRun.length ? 'SELESAI' : 'GAGAL', pesan, disetujui, ditahan, gagal, selesai: pukulSekarang() });
+        // Tanpa tindakan baru bukan kegagalan: misalnya semua SKU yang turun sudah ditahan sebelumnya, atau jenisnya
+        // komplementer. Ringkasan Rexa di bubble menjelaskan alasannya.
+        const pesan = bagian.length ? `${bagian.join('; ')}.`
+            : 'Rexa sudah memeriksa; tidak ada tindakan baru yang perlu diambil (alasannya di ringkasan bubble Rexa).';
+        catat({ berjalan: false, tahap: gagal.length && !disetujui.length ? 'GAGAL' : 'SELESAI', pesan, disetujui, ditahan, gagal, selesai: pukulSekarang() });
         if (disetujui.length || holdRun.length) terakhirSelesai.set(kunci, { judul: krisis.title, pesan, pukul: pukulSekarang(), disetujui });
     } catch (e) {
         catat({ berjalan: false, tahap: 'GAGAL', pesan: e.message });
